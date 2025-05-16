@@ -1,59 +1,57 @@
-from fastapi import FastAPI, Response
+import os
+import time
+import requests
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
-import time
-import os
 
-app = FastAPI()
+def download_page_6_image(date_str, save_path):
+    options = Options()
+    options.add_argument("--headless")  # Run in headless mode
+    options.add_argument("--disable-gpu")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--window-size=1920,1080")
 
-def get_today_url():
-    # Put your actual URL here, e.g., today's epaper page
-    return "https://epaper.suprabhaatham.com/"
+    driver = webdriver.Chrome(options=options)
 
-def get_driver():
-    chrome_options = Options()
-    chrome_options.add_argument("--headless=new")  # Use new headless mode
-    chrome_options.add_argument("--disable-gpu")
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument("--window-size=1920,1080")
-    # Add user-agent if needed
-    # chrome_options.add_argument("user-agent=Mozilla/5.0 ...")
-
-    driver = webdriver.Chrome(options=chrome_options)
-    return driver
-
-def save_page6_screenshot(driver, filename="page6.png"):
-    driver.get(get_today_url())
-
-    time.sleep(5)  # wait for page load - increase if slow
-
-    # The page uses a flipbook. Locate page 6 canvas or container
-    # For example purposes, wait and scroll to page 6
-
-    # You may need to interact with flipbook controls, e.g. clicking "Next" 5 times:
-    for _ in range(5):  # page 1 -> 6
-        next_btn = driver.find_element(By.CSS_SELECTOR, ".flipbook-next")  # Adjust selector
-        next_btn.click()
-        time.sleep(2)  # wait for page animation
-
-    # Now capture screenshot of the visible page area
-    screenshot = driver.get_screenshot_as_png()
-    with open(filename, "wb") as f:
-        f.write(screenshot)
-
-    return filename
-
-@app.get("/prayertime")
-def serve_prayer_time_image():
-    driver = get_driver()
     try:
-        image_path = save_page6_screenshot(driver)
-        with open(image_path, "rb") as f:
-            img_data = f.read()
-        return Response(content=img_data, media_type="image/png")
+        url = f"https://epaper.suprabhaatham.com/details/Kozhikode/{date_str}/1"
+        print(f"Loading page 1 URL: {url}")
+        driver.get(url)
+        time.sleep(5)  # Wait for page 1 to load completely
+
+        # Flip to page 6 by executing JavaScript
+        print("Flipping to page 6...")
+        driver.execute_script("window.Book.goToPage(6);")
+        time.sleep(5)  # Wait for page 6 to load
+
+        # Attempt to locate page 6 image
+        print("Locating page 6 image...")
+        # Inspected page has div.page elements, each with an <img> for the page
+        # Using nth-child(6) to get page 6
+        img_element = driver.find_element(By.CSS_SELECTOR, "div.page:nth-child(6) img")
+        img_url = img_element.get_attribute("src")
+        print(f"Found image URL: {img_url}")
+
+        # Download image
+        print(f"Downloading image to {save_path}...")
+        response = requests.get(img_url)
+        response.raise_for_status()
+        with open(save_path, "wb") as f:
+            f.write(response.content)
+
+        print("Download completed!")
+
+    except Exception as e:
+        print(f"Error: {e}")
+        print("Could not get page 6 image, saving screenshot instead.")
+        driver.save_screenshot(save_path)
+
     finally:
         driver.quit()
-        if os.path.exists(image_path):
-            os.remove(image_path)
+
+if __name__ == "__main__":
+    date = "2025-05-16"
+    os.makedirs("downloads", exist_ok=True)
+    save_file = f"downloads/suprabhaatham_kozhikode_{date}_page6.jpg"
+    download_page_6_image(date, save_file)
