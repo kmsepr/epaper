@@ -49,7 +49,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy script
-COPY scrape_page6.py .
+COPY main.py .
 
 # Run script on container start
-CMD ["python", "scrape_page6.py"]
+CMD ["python", "main.py"]
