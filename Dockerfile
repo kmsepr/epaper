@@ -1,27 +1,42 @@
 FROM python:3.10-slim
 
-# Install Chrome & dependencies
-RUN apt-get update && apt-get install -y \
-    wget unzip curl gnupg2 fonts-liberation libappindicator3-1 libasound2 libatk-bridge2.0-0 \
-    libatk1.0-0 libcups2 libdbus-1-3 libgdk-pixbuf2.0-0 libnspr4 libnss3 libx11-xcb1 \
-    libxcomposite1 libxdamage1 libxrandr2 xdg-utils libgbm1 libu2f-udev libvulkan1 \
-    chromium chromium-driver && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
-
-# Set environment variables for Chrome
-ENV CHROME_BIN="/usr/bin/chromium" \
-    CHROMEDRIVER_PATH="/usr/bin/chromedriver"
-
-# Create app directory
 WORKDIR /app
-COPY . .
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+COPY main.py .
 
-# Expose FastAPI port
-EXPOSE 8000
+RUN apt-get update && apt-get install -y \
+    curl \
+    wget \
+    gnupg \
+    unzip \
+    fonts-liberation \
+    libnss3 \
+    libatk-bridge2.0-0 \
+    libgtk-3-0 \
+    libxss1 \
+    libasound2 \
+    libgbm1 \
+    libx11-xcb1 \
+    xdg-utils \
+    poppler-utils \
+    libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
 
-# Run FastAPI app
+# Install Chrome
+RUN curl -fsSL https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /usr/share/keyrings/google.gpg && \
+    echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google.gpg] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list && \
+    apt-get update && apt-get install -y google-chrome-stable
+
+# Install ChromeDriver
+RUN CHROME_VERSION=$(google-chrome --version | grep -oP '\d+\.\d+\.\d+') && \
+    DRIVER_VERSION=$(curl -s "https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions-with-downloads.json" | \
+    python3 -c "import sys, json; print(json.load(sys.stdin)['channels']['Stable']['version'])") && \
+    curl -Lo chromedriver_linux64.zip https://edgedl.me.gvt1.com/edgedl/chrome/chrome-for-testing/$DRIVER_VERSION/linux64/chromedriver-linux64.zip && \
+    unzip chromedriver_linux64.zip && \
+    mv chromedriver-linux64/chromedriver /usr/bin/chromedriver && \
+    chmod +x /usr/bin/chromedriver && \
+    rm -rf chromedriver-linux64*
+
+RUN pip install fastapi uvicorn selenium pdf2image pillow requests
+
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
