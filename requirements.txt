@@ -1,7 +1,6 @@
 fastapi
 uvicorn
-requests
-pillow
-PyMuPDF
-beautifulsoup4
 selenium
+pdf2image
+pillow
+requests
