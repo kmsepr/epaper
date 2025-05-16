@@ -1,83 +1,59 @@
-import os
-import time
-import datetime
-import requests
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, Response
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
-from pdf2image import convert_from_path
-from PIL import Image
+import time
+import os
 
 app = FastAPI()
 
-CACHE_PDF = "cached_page6.pdf"
-CROPPED_IMG = "cropped_prayer_times.png"
-CACHE_DURATION = 12 * 60 * 60  # 12 hours
-
+def get_today_url():
+    # Put your actual URL here, e.g., today's epaper page
+    return "https://epaper.suprabhaatham.com/"
 
 def get_driver():
     chrome_options = Options()
-    chrome_options.add_argument("--headless=new")
+    chrome_options.add_argument("--headless=new")  # Use new headless mode
+    chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
-    return webdriver.Chrome(options=chrome_options)
+    chrome_options.add_argument("--window-size=1920,1080")
+    # Add user-agent if needed
+    # chrome_options.add_argument("user-agent=Mozilla/5.0 ...")
 
+    driver = webdriver.Chrome(options=chrome_options)
+    return driver
 
-def get_today_url():
-    today = datetime.date.today().strftime("%Y-%m-%d")
-    return f"https://epaper.suprabhaatham.com/details/Kozhikode/{today}/1"
-
-
-def download_page6_pdf():
-    if os.path.exists(CACHE_PDF):
-        if time.time() - os.path.getmtime(CACHE_PDF) < CACHE_DURATION:
-            return CACHE_PDF
-
-    driver = get_driver()
+def save_page6_screenshot(driver, filename="page6.png"):
     driver.get(get_today_url())
-    try:
-        link = driver.find_element(By.XPATH, '//a[contains(@href, "page6.pdf")]').get_attribute("href")
-        driver.quit()
-        if not link:
-            return None
 
-        response = requests.get(link)
-        with open(CACHE_PDF, "wb") as f:
-            f.write(response.content)
-        return CACHE_PDF
-    except Exception as e:
-        driver.quit()
-        print(f"Error finding or downloading PDF: {e}")
-        return None
+    time.sleep(5)  # wait for page load - increase if slow
 
+    # The page uses a flipbook. Locate page 6 canvas or container
+    # For example purposes, wait and scroll to page 6
 
-def crop_prayer_time_from_pdf(pdf_path):
-    if os.path.exists(CROPPED_IMG):
-        if time.time() - os.path.getmtime(CROPPED_IMG) < CACHE_DURATION:
-            return CROPPED_IMG
+    # You may need to interact with flipbook controls, e.g. clicking "Next" 5 times:
+    for _ in range(5):  # page 1 -> 6
+        next_btn = driver.find_element(By.CSS_SELECTOR, ".flipbook-next")  # Adjust selector
+        next_btn.click()
+        time.sleep(2)  # wait for page animation
 
-    pages = convert_from_path(pdf_path, dpi=300)
-    if len(pages) < 1:
-        return None
+    # Now capture screenshot of the visible page area
+    screenshot = driver.get_screenshot_as_png()
+    with open(filename, "wb") as f:
+        f.write(screenshot)
 
-    page6 = pages[0]  # Assuming single-page page6.pdf
-    # Define the cropping box: (left, upper, right, lower)
-    crop_box = (1400, 2650, 1950, 2800)
-    cropped = page6.crop(crop_box)
-    cropped.save(CROPPED_IMG)
-    return CROPPED_IMG
+    return filename
 
-
-@app.get("/", response_class=FileResponse)
+@app.get("/prayertime")
 def serve_prayer_time_image():
-    pdf_path = download_page6_pdf()
-    if not pdf_path:
-        raise HTTPException(status_code=404, detail="Today's Page 6 PDF not found.")
-
-    img_path = crop_prayer_time_from_pdf(pdf_path)
-    if not img_path:
-        raise HTTPException(status_code=500, detail="Failed to process image.")
-
-    return FileResponse(img_path, media_type="image/png")
+    driver = get_driver()
+    try:
+        image_path = save_page6_screenshot(driver)
+        with open(image_path, "rb") as f:
+            img_data = f.read()
+        return Response(content=img_data, media_type="image/png")
+    finally:
+        driver.quit()
+        if os.path.exists(image_path):
+            os.remove(image_path)
