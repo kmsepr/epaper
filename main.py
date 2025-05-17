@@ -1,12 +1,13 @@
 import asyncio
 from aiohttp import web
 from playwright.async_api import async_playwright
+from datetime import datetime
 
-EPAPER_URL = "https://epaper.suprabhaatham.com/details/Kozhikode/2025-05-17/1"
 scraped_data = []
 
-async def scrape():
+async def scrape(date_str):
     global scraped_data
+    EPAPER_URL = f"https://epaper.suprabhaatham.com/details/Kozhikode/{date_str}/1"
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         page = await browser.new_page()
@@ -14,19 +15,23 @@ async def scrape():
         data = await page.evaluate("window.magazineData")
         pages = data.get("pages", [])
         scraped_data = [page.get("src") for page in pages if "src" in page]
-        print("Scraped URLs:", scraped_data)
         await browser.close()
 
 async def handle_root(request):
-    return web.Response(text="Scraper is running!")
+    # get today's date as yyyy-mm-dd
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    await scrape(today_str)
 
-async def handle_data(request):
-    return web.json_response({"image_urls": scraped_data})
+    # Build HTML with all images
+    html = "<html><body>"
+    for img_url in scraped_data:
+        html += f'<img src="{img_url}" style="width:100%;margin-bottom:10px;"><br>'
+    html += "</body></html>"
+    return web.Response(text=html, content_type='text/html')
 
 async def start_web_server():
     app = web.Application()
     app.router.add_get("/", handle_root)
-    app.router.add_get("/data", handle_data)
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, host="0.0.0.0", port=8000)
@@ -36,10 +41,7 @@ async def start_web_server():
         await asyncio.sleep(3600)
 
 async def main():
-    await asyncio.gather(
-        scrape(),
-        start_web_server()
-    )
+    await start_web_server()
 
 if __name__ == "__main__":
     asyncio.run(main())
