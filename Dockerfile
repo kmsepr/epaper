@@ -1,5 +1,6 @@
 FROM python:3.11-slim
 
+# Install dependencies required by Playwright Chromium
 RUN apt-get update && apt-get install -y \
     wget \
     libnss3 \
@@ -22,9 +23,18 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-COPY main.py .
+# Copy your application files
+COPY main.py requirements.txt ./
 
-RUN pip install --no-cache-dir playwright && \
+# Install Python dependencies and Playwright browsers
+RUN pip install --no-cache-dir -r requirements.txt && \
     playwright install --with-deps chromium
 
+# Create directory for PDFs
+RUN mkdir -p pdfs
+
+# Expose port 8000 for Flask
+EXPOSE 8000
+
+# Run the Flask app
 CMD ["python", "main.py"]
