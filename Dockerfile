@@ -1,24 +1,23 @@
-# Use the latest Playwright image with Python
-FROM mcr.microsoft.com/playwright/python:latest
+# Use the Playwright base image
+FROM mcr.microsoft.com/playwright:v1.48.0-focal
 
-# Set environment variables
-ENV PYTHONUNBUFFERED=1
-
-# Set working directory
+# Set the working directory inside the container
 WORKDIR /app
 
-# Copy requirements and install dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Install Python and pip
+RUN apt-get update && \
+    apt-get install -y python3 python3-pip && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
-# Copy project files
-COPY . .
+# Copy application files
+COPY main.py requirements.txt ./
 
-# Install browsers (if not already pre-installed)
-RUN playwright install --with-deps
+# Install Python dependencies
+RUN pip3 install --no-cache-dir -r requirements.txt
 
-# Expose port for Koyeb health checks
-EXPOSE 8000
+# Create a directory for cache or temporary files if needed
+RUN mkdir -p /app/cache
 
-# Start the application
-CMD ["python", "main.py"]
+# Set the default command to run your script
+CMD ["python3", "main.py"]
