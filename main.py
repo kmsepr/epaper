@@ -4,73 +4,61 @@ import threading
 from datetime import datetime, timedelta
 from flask import Flask, send_from_directory, abort
 from playwright.async_api import async_playwright
-from PIL import Image
 
 app = Flask(__name__)
-PDF_DIR = "./pdfs"
+IMG_DIR = "./pdfs"  # still using /pdf path for convenience
 
-if not os.path.exists(PDF_DIR):
-    os.makedirs(PDF_DIR)
+if not os.path.exists(IMG_DIR):
+    os.makedirs(IMG_DIR)
 
-async def save_page_as_pdf(url, output_path):
-    print(f"[{datetime.now()}] Starting screenshot-based PDF generation: {url}")
+async def save_page_as_image(url, output_path):
+    print(f"[{datetime.now()}] Starting screenshot-based image generation: {url}")
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True, args=["--no-sandbox"])
-        context = await browser.new_context(viewport={"width": 1280, "height": 900})
-        page = await context.new_page()
-        await page.goto(url, wait_until="networkidle")
-
+        page = await browser.new_page()
+        await page.goto(url)
         try:
-            await page.wait_for_selector("canvas", timeout=10000)
-        except:
-            print(f"[{datetime.now()}] Warning: Canvas not found — proceeding with screenshot anyway.")
-
-        screenshot_path = output_path.replace(".pdf", ".png")
-        await page.screenshot(path=screenshot_path, full_page=True)
-
-        # Convert to PDF
-        image = Image.open(screenshot_path).convert("RGB")
-        image.save(output_path, "PDF", resolution=100.0)
-        os.remove(screenshot_path)
-
+            await page.wait_for_selector("img", timeout=15000)  # Adjust selector as needed
+        except Exception as e:
+            print(f"[{datetime.now()}] Warning: Image selector not found: {e}")
+        await page.screenshot(path=output_path, full_page=True)
         await browser.close()
-        print(f"[{datetime.now()}] Saved screenshot as PDF to {output_path}")
+    print(f"[{datetime.now()}] Saved screenshot to {output_path}")
 
-async def generate_pdf_for_date(date_str):
+async def generate_image_for_date(date_str):
     url = f"https://epaper.suprabhaatham.com/details/Kozhikode/{date_str}/1"
-    output_path = os.path.join(PDF_DIR, f"Suprabhaatham_{date_str}_page1.pdf")
+    output_path = os.path.join(IMG_DIR, f"Suprabhaatham_{date_str}_page1.png")
     if not os.path.exists(output_path):
         try:
-            await save_page_as_pdf(url, output_path)
+            await save_page_as_image(url, output_path)
         except Exception as e:
-            print(f"[{datetime.now()}] Error generating PDF for {date_str}: {e}")
+            print(f"[{datetime.now()}] Error generating screenshot for {date_str}: {e}")
 
-async def daily_pdf_scheduler():
+async def daily_scheduler():
     while True:
         today_str = datetime.now().strftime("%Y-%m-%d")
-        await generate_pdf_for_date(today_str)
+        await generate_image_for_date(today_str)
 
-        # Wait until next day
         now = datetime.now()
         next_day = (now + timedelta(days=1)).replace(hour=0, minute=1, second=0, microsecond=0)
         wait_seconds = (next_day - now).total_seconds()
-        print(f"[{datetime.now()}] Sleeping for {int(wait_seconds)} seconds until next run.")
+        print(f"[{datetime.now()}] Screenshot complete. Sleeping {int(wait_seconds)}s until next run.")
         await asyncio.sleep(wait_seconds)
 
 @app.route("/")
 def index():
     date_str = datetime.now().strftime("%Y-%m-%d")
-    filename = f"Suprabhaatham_{date_str}_page1.pdf"
-    filepath = os.path.join(PDF_DIR, filename)
+    filename = f"Suprabhaatham_{date_str}_page1.png"
+    filepath = os.path.join(IMG_DIR, filename)
     if os.path.exists(filepath):
-        return f'<h2>PDF for {date_str}</h2><a href="/pdf/{filename}">Download PDF</a>'
+        return f'<h2>Front Page for {date_str}</h2><a href="/pdf/{filename}">Download Image</a><br><img src="/pdf/{filename}" width="600">'
     else:
-        return "<h2>No cached PDFs available yet. Please wait for generation.</h2>"
+        return "<h2>No cached image available yet. Please wait for generation.</h2>"
 
 @app.route("/pdf/<path:filename>")
-def serve_pdf(filename):
-    if os.path.exists(os.path.join(PDF_DIR, filename)):
-        return send_from_directory(PDF_DIR, filename)
+def serve_file(filename):
+    if os.path.exists(os.path.join(IMG_DIR, filename)):
+        return send_from_directory(IMG_DIR, filename)
     else:
         abort(404)
 
@@ -80,7 +68,7 @@ def health():
 
 def start_background_loop(loop):
     asyncio.set_event_loop(loop)
-    loop.run_until_complete(daily_pdf_scheduler())
+    loop.run_until_complete(daily_scheduler())
 
 if __name__ == "__main__":
     loop = asyncio.new_event_loop()
