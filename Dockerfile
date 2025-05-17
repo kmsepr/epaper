@@ -1,7 +1,7 @@
 # Use official Python slim image
 FROM python:3.11-slim
 
-# Install required OS dependencies for Playwright and Chromium
+# Install OS dependencies required for Chromium and Playwright
 RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
     ca-certificates \
@@ -22,27 +22,26 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxss1 \
     libxext6 \
     libxrender1 \
-    libjpeg-dev \
-    zlib1g-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /app
 
-# Copy your application code
+# Copy project files
 COPY main.py .
+COPY requirements.txt .
 
 # Install Python dependencies
-RUN pip install --no-cache-dir flask playwright pillow
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Install Chromium for Playwright
+# Install Playwright browsers (Chromium)
 RUN playwright install chromium
-
-# Prevent Python from buffering stdout/stderr
-ENV PYTHONUNBUFFERED=1
 
 # Expose port
 EXPOSE 8000
 
-# Run the app
+# Prevent Python from buffering logs
+ENV PYTHONUNBUFFERED=1
+
+# Run the Flask app
 CMD ["python", "main.py"]
