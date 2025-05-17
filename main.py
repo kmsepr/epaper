@@ -1,59 +1,35 @@
 import os
 import asyncio
 import threading
-from datetime import datetime, timedelta
 from flask import Flask, send_from_directory, abort
 from playwright.async_api import async_playwright
 
 app = Flask(__name__)
-IMG_DIR = "./pdfs"  # still using /pdf path for convenience
+IMG_DIR = "./pdfs"
+IMG_NAME = "frontpage.png"
+IMG_PATH = os.path.join(IMG_DIR, IMG_NAME)
 
 if not os.path.exists(IMG_DIR):
     os.makedirs(IMG_DIR)
 
-async def save_page_as_image(url, output_path):
-    print(f"[{datetime.now()}] Starting screenshot-based image generation: {url}")
+async def save_frontpage_image():
+    url = "https://epaper.suprabhaatham.com"
+    print(f"Starting screenshot for: {url}")
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True, args=["--no-sandbox"])
-        page = await browser.new_page()
+        page = await browser.new_page(viewport={"width": 1400, "height": 2000})
         await page.goto(url)
-        try:
-            await page.wait_for_selector("img", timeout=15000)  # Adjust selector as needed
-        except Exception as e:
-            print(f"[{datetime.now()}] Warning: Image selector not found: {e}")
-        await page.screenshot(path=output_path, full_page=True)
+        await page.wait_for_timeout(8000)
+        await page.screenshot(path=IMG_PATH, full_page=True)
         await browser.close()
-    print(f"[{datetime.now()}] Saved screenshot to {output_path}")
-
-async def generate_image_for_date(date_str):
-    url = f"https://epaper.suprabhaatham.com/details/Kozhikode/{date_str}/1"
-    output_path = os.path.join(IMG_DIR, f"Suprabhaatham_{date_str}_page1.png")
-    if not os.path.exists(output_path):
-        try:
-            await save_page_as_image(url, output_path)
-        except Exception as e:
-            print(f"[{datetime.now()}] Error generating screenshot for {date_str}: {e}")
-
-async def daily_scheduler():
-    while True:
-        today_str = datetime.now().strftime("%Y-%m-%d")
-        await generate_image_for_date(today_str)
-
-        now = datetime.now()
-        next_day = (now + timedelta(days=1)).replace(hour=0, minute=1, second=0, microsecond=0)
-        wait_seconds = (next_day - now).total_seconds()
-        print(f"[{datetime.now()}] Screenshot complete. Sleeping {int(wait_seconds)}s until next run.")
-        await asyncio.sleep(wait_seconds)
+    print(f"Screenshot saved to {IMG_PATH}")
 
 @app.route("/")
 def index():
-    date_str = datetime.now().strftime("%Y-%m-%d")
-    filename = f"Suprabhaatham_{date_str}_page1.png"
-    filepath = os.path.join(IMG_DIR, filename)
-    if os.path.exists(filepath):
-        return f'<h2>Front Page for {date_str}</h2><a href="/pdf/{filename}">Download Image</a><br><img src="/pdf/{filename}" width="600">'
+    if os.path.exists(IMG_PATH):
+        return f'<h2>Suprabhaatham Front Page</h2><a href="/pdf/{IMG_NAME}">Download Image</a><br><img src="/pdf/{IMG_NAME}" width="600">'
     else:
-        return "<h2>No cached image available yet. Please wait for generation.</h2>"
+        return "<h2>No screenshot available yet. Please wait for generation.</h2>"
 
 @app.route("/pdf/<path:filename>")
 def serve_file(filename):
@@ -62,9 +38,13 @@ def serve_file(filename):
     else:
         abort(404)
 
-@app.route("/health")
-def health():
-    return "OK", 200
+async def daily_scheduler():
+    while True:
+        try:
+            await save_frontpage_image()
+        except Exception as e:
+            print(f"Error: {e}")
+        await asyncio.sleep(24 * 60 * 60)
 
 def start_background_loop(loop):
     asyncio.set_event_loop(loop)
