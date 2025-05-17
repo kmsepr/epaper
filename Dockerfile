@@ -1,17 +1,23 @@
-# Use official Playwright Python image with browsers preinstalled
-FROM mcr.microsoft.com/playwright/python:1.43.1
+# Use official Playwright image from Docker Hub
+FROM mcr.microsoft.com/playwright:v1.43.1-focal
+
+# Install Python and pip
+RUN apt update && apt install -y python3 python3-pip
 
 # Set working directory
 WORKDIR /app
 
-# Copy script
-COPY main.py /app/main.py
+# Copy app files
+COPY main.py requirements.txt /app/
 
-# Create persistent cache directory
+# Install Python dependencies
+RUN pip3 install --no-cache-dir -r requirements.txt
+
+# Create cache directory
 RUN mkdir -p /app/cache
 
-# Expose server port
+# Expose web server port
 EXPOSE 8000
 
-# Run the script
-CMD ["python", "main.py"]
+# Run the application
+CMD ["python3", "main.py"]
