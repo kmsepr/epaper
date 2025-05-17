@@ -1,6 +1,7 @@
+# Use official Python slim image
 FROM python:3.11-slim
 
-# Install dependencies required by Playwright Chromium
+# Install dependencies for Playwright and Chromium
 RUN apt-get update && apt-get install -y \
     wget \
     libnss3 \
@@ -15,26 +16,41 @@ RUN apt-get update && apt-get install -y \
     libgbm1 \
     libpango-1.0-0 \
     libpangocairo-1.0-0 \
+    libxcb1 \
+    libx11-xcb1 \
+    libxcb-dri3-0 \
+    libxss1 \
+    libasound2 \
     libxshmfence1 \
     fonts-liberation \
-    libasound2 \
+    libappindicator3-1 \
+    libatk-bridge2.0-0 \
+    libatspi2.0-0 \
+    libwayland-client0 \
+    libwayland-cursor0 \
+    libwayland-egl1 \
+    libdbus-glib-1-2 \
+    ca-certificates \
     --no-install-recommends && \
     rm -rf /var/lib/apt/lists/*
 
+# Set working directory
 WORKDIR /app
 
-# Copy your application files
-COPY main.py requirements.txt ./
+# Copy your app code
+COPY . /app
 
-# Install Python dependencies and Playwright browsers
-RUN pip install --no-cache-dir -r requirements.txt && \
-    playwright install --with-deps chromium
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Create directory for PDFs
-RUN mkdir -p pdfs
+# Install Playwright browsers
+RUN playwright install --with-deps
 
-# Expose port 8000 for Flask
+# Expose port 8000
 EXPOSE 8000
 
-# Run the Flask app
+# Create pdfs folder
+RUN mkdir -p /app/pdfs
+
+# Run the app
 CMD ["python", "main.py"]
