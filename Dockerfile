@@ -14,8 +14,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy project files
 COPY . .
 
-# Install browsers (if not already pre-installed in image)
+# Install browsers (if not already pre-installed)
 RUN playwright install --with-deps
 
-# Default command
+# Expose port for Koyeb health checks
+EXPOSE 8000
+
+# Start the application
 CMD ["python", "main.py"]
