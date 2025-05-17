@@ -1,17 +1,17 @@
-# Use official Playwright Python image with dependencies installed
-FROM mcr.microsoft.com/playwright/python:v1.43.1-jammy
+# Use official Playwright Python image (Ubuntu 20.04 - focal)
+FROM mcr.microsoft.com/playwright/python:1.43.1-focal
 
-# Set working directory inside container
+# Set working directory inside the container
 WORKDIR /app
 
-# Copy your app code into the container
+# Copy your application code
 COPY main.py /app/main.py
 
-# Create cache directory (optional since volume mount will override)
+# Create cache directory for persistent storage (optional if mounted)
 RUN mkdir -p /app/cache
 
-# Expose port 8000 for aiohttp server
+# Expose port 8000 for the web server
 EXPOSE 8000
 
-# Run your app
+# Run the Python script
 CMD ["python", "main.py"]
