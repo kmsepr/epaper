@@ -1,12 +1,19 @@
 import asyncio
+import json
+import os
 from aiohttp import web
 from playwright.async_api import async_playwright
 from datetime import datetime
 
-scraped_data = []
+CACHE_DIR = "cache"
+
+if not os.path.exists(CACHE_DIR):
+    os.makedirs(CACHE_DIR)
+
+def cache_file_path(date_str):
+    return os.path.join(CACHE_DIR, f"cache_{date_str}.json")
 
 async def scrape(date_str):
-    global scraped_data
     EPAPER_URL = f"https://epaper.suprabhaatham.com/details/Kozhikode/{date_str}/1"
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
@@ -16,17 +23,39 @@ async def scrape(date_str):
         pages = data.get("pages", [])
         scraped_data = [page.get("src") for page in pages if "src" in page]
         await browser.close()
+        return scraped_data
+
+def load_cache(date_str):
+    path = cache_file_path(date_str)
+    if os.path.exists(path):
+        with open(path, "r") as f:
+            print(f"Loading cache from {path}")
+            return json.load(f)
+    return None
+
+def save_cache(date_str, data):
+    path = cache_file_path(date_str)
+    with open(path, "w") as f:
+        json.dump(data, f)
+    print(f"Saved cache to {path}")
 
 async def handle_root(request):
-    # get today's date as yyyy-mm-dd
     today_str = datetime.now().strftime("%Y-%m-%d")
-    await scrape(today_str)
 
-    # Build HTML with all images
+    cached_data = load_cache(today_str)
+    if cached_data is None:
+        print(f"Cache miss for {today_str}, scraping...")
+        cached_data = await scrape(today_str)
+        save_cache(today_str, cached_data)
+    else:
+        print(f"Cache hit for {today_str}")
+
+    # Build HTML from cached data
     html = "<html><body>"
-    for img_url in scraped_data:
+    for img_url in cached_data:
         html += f'<img src="{img_url}" style="width:100%;margin-bottom:10px;"><br>'
     html += "</body></html>"
+
     return web.Response(text=html, content_type='text/html')
 
 async def start_web_server():
