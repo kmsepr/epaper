@@ -1,17 +1,21 @@
-# Use the official Playwright base image with Python
-FROM mcr.microsoft.com/playwright/python:v1.43.1-jammy
+# Use the latest official Playwright image with Python
+FROM mcr.microsoft.com/playwright/python:latest
 
-# Set environment
+# Set environment variables
 ENV PYTHONUNBUFFERED=1
 
 # Set working directory
 WORKDIR /app
 
-# Copy your code
-COPY main.py /app/
+# Copy requirements and install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Install any additional dependencies (if needed)
-# RUN pip install -r requirements.txt
+# Copy project files
+COPY . .
 
-# Command to run the scraper
+# Install browsers (if not already pre-installed in image)
+RUN playwright install --with-deps
+
+# Default command
 CMD ["python", "main.py"]
