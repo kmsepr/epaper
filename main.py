@@ -58,9 +58,21 @@ async def handle_root(request):
 
     return web.Response(text=html, content_type='text/html')
 
+async def handle_data(request):
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    cached_data = load_cache(today_str)
+    if cached_data is None:
+        print(f"Cache miss for {today_str}, scraping...")
+        cached_data = await scrape(today_str)
+        save_cache(today_str, cached_data)
+    else:
+        print(f"Cache hit for {today_str}")
+    return web.json_response({"image_urls": cached_data})
+
 async def start_web_server():
     app = web.Application()
     app.router.add_get("/", handle_root)
+    app.router.add_get("/data", handle_data)
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, host="0.0.0.0", port=8000)
