@@ -36,4 +36,4 @@ RUN mkdir -p /app/cache
 EXPOSE 8000
 
 # Run your script (replace with your script name if different)
-CMD ["python", "your_script.py"]
+CMD ["python", "main.py"]
