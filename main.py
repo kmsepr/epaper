@@ -5,9 +5,8 @@ from aiohttp import web
 from playwright.async_api import async_playwright
 from datetime import datetime
 
-CACHE_DIR = "/app/cache"  # Persistent path
+CACHE_DIR = "/app/cache"
 
-# Ensure cache directory exists
 if not os.path.exists(CACHE_DIR):
     os.makedirs(CACHE_DIR)
 
@@ -17,15 +16,27 @@ def cache_file_path(date_str):
 async def scrape(date_str):
     EPAPER_URL = f"https://epaper.suprabhaatham.com/details/Kozhikode/{date_str}/1"
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-        page = await browser.new_page()
-        print(f"Scraping: {EPAPER_URL}")
-        await page.goto(EPAPER_URL, wait_until="networkidle")
-        data = await page.evaluate("window.magazineData")
-        pages = data.get("pages", [])
-        image_urls = [page.get("src") for page in pages if "src" in page]
-        await browser.close()
-        return image_urls
+        browser = None
+        try:
+            browser = await p.chromium.launch(headless=True, args=[
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-gpu"
+            ])
+            page = await browser.new_page()
+            print(f"Scraping: {EPAPER_URL}")
+            await page.goto(EPAPER_URL, wait_until="networkidle")
+            data = await page.evaluate("window.magazineData")
+            pages = data.get("pages", [])
+            image_urls = [page.get("src") for page in pages if "src" in page]
+            return image_urls
+        except Exception as e:
+            print(f"Error during scrape: {e}")
+            return []
+        finally:
+            if browser:
+                await browser.close()
 
 def load_cache(date_str):
     path = cache_file_path(date_str)
@@ -53,8 +64,7 @@ async def handle_root(request):
     else:
         print("Cache hit.")
 
-    # Build HTML with images
-    html = "<html><body>"
+    html = "<html><head><title>Suprabhaatham ePaper</title></head><body style='text-align:center;'>"
     for img_url in cached_data:
         html += f'<img src="{img_url}" style="width:100%; margin-bottom:10px;"><br>'
     html += "</body></html>"
@@ -67,10 +77,8 @@ async def start_web_server():
 
     runner = web.AppRunner(app)
     await runner.setup()
-
     site = web.TCPSite(runner, host="0.0.0.0", port=8000)
     await site.start()
-
     print("Web server running on port 8000...")
     while True:
         await asyncio.sleep(3600)
