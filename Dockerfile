@@ -1,23 +1,29 @@
-# Use the Playwright base image
-FROM mcr.microsoft.com/playwright:v1.48.0-focal
+FROM python:3.10-slim
 
-# Set the working directory inside the container
-WORKDIR /app
-
-# Install Python and pip
-RUN apt-get update && \
-    apt-get install -y python3 python3-pip && \
+# Install dependencies
+RUN apt-get update && apt-get install -y \
+    wget gnupg curl ca-certificates fonts-liberation libnss3 libatk-bridge2.0-0 \
+    libxss1 libasound2 libxcomposite1 libxdamage1 libxrandr2 libgtk-3-0 \
+    libgbm-dev libx11-xcb1 libxcb1 libx11-6 libxext6 libxfixes3 libegl1 \
+    --no-install-recommends && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Copy application files
-COPY main.py requirements.txt ./
+# Set working directory
+WORKDIR /app
 
-# Install Python dependencies
-RUN pip3 install --no-cache-dir -r requirements.txt
+# Copy files
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Create a directory for cache or temporary files if needed
+# Install Playwright and its dependencies
+RUN playwright install --with-deps
+
+COPY main.py .
+
+# Cache directory
 RUN mkdir -p /app/cache
 
-# Set the default command to run your script
-CMD ["python3", "main.py"]
+EXPOSE 8000
+
+CMD ["python", "main.py"]
