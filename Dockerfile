@@ -1,44 +1,30 @@
-FROM python:3.10-slim
+FROM python:3.11-slim
 
-# Install system dependencies
 RUN apt-get update && apt-get install -y \
     wget \
-    gnupg \
-    ca-certificates \
-    fonts-liberation \
-    libappindicator3-1 \
-    libasound2 \
-    libatk-bridge2.0-0 \
-    libatk1.0-0 \
-    libcups2 \
-    libdbus-1-3 \
-    libgdk-pixbuf2.0-0 \
-    libnspr4 \
     libnss3 \
-    libx11-xcb1 \
+    libatk1.0-0 \
+    libatk-bridge2.0-0 \
+    libcups2 \
+    libdrm2 \
+    libxkbcommon0 \
     libxcomposite1 \
     libxdamage1 \
     libxrandr2 \
-    xdg-utils \
-    chromium \
-    && rm -rf /var/lib/apt/lists/*
+    libgbm1 \
+    libpango-1.0-0 \
+    libpangocairo-1.0-0 \
+    libxshmfence1 \
+    fonts-liberation \
+    libasound2 \
+    --no-install-recommends && \
+    rm -rf /var/lib/apt/lists/*
 
-# Set environment variables required by Playwright
-ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
-
-# Install Python dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Install Playwright and skip browser download
-RUN playwright install --with-deps chromium
-
-# Add source code
-COPY . /app
 WORKDIR /app
 
-# Expose port
-EXPOSE 8000
+COPY main.py .
 
-# Run the web server
+RUN pip install --no-cache-dir playwright && \
+    playwright install --with-deps chromium
+
 CMD ["python", "main.py"]
