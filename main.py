@@ -13,22 +13,31 @@ if not os.path.exists(PDF_DIR):
 
 async def save_page_as_pdf(url, output_path):
     print(f"[{datetime.now()}] Starting PDF generation: {url}")
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True, args=["--no-sandbox"])
-        page = await browser.new_page()
-        await page.goto(url, wait_until="networkidle")
-        await page.pdf(path=output_path, format="A4")
-        await browser.close()
-    print(f"[{datetime.now()}] Saved PDF to {output_path}")
+    try:
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True, args=[
+                "--no-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-gpu"
+            ])
+            page = await browser.new_page()
+            await page.goto(url, wait_until="networkidle", timeout=60000)
+
+            # Save screenshot for debugging
+            debug_path = os.path.join(PDF_DIR, "debug.png")
+            await page.screenshot(path=debug_path, full_page=True)
+
+            await page.pdf(path=output_path, format="A4", print_background=True)
+            await browser.close()
+        print(f"[{datetime.now()}] Saved PDF to {output_path}")
+    except Exception as e:
+        print(f"[{datetime.now()}] Failed to generate PDF: {e}")
 
 async def generate_pdf_for_date(date_str):
     url = f"https://epaper.suprabhaatham.com/details/Kozhikode/{date_str}/1"
     output_path = os.path.join(PDF_DIR, f"Suprabhaatham_{date_str}_page1.pdf")
     if not os.path.exists(output_path):
-        try:
-            await save_page_as_pdf(url, output_path)
-        except Exception as e:
-            print(f"[{datetime.now()}] Error generating PDF for {date_str}: {e}")
+        await save_page_as_pdf(url, output_path)
 
 async def daily_pdf_scheduler():
     while True:
@@ -39,7 +48,7 @@ async def daily_pdf_scheduler():
         now = datetime.now()
         next_day = (now + timedelta(days=1)).replace(hour=0, minute=1, second=0, microsecond=0)
         wait_seconds = (next_day - now).total_seconds()
-        print(f"[{datetime.now()}] PDF generation complete, sleeping for {int(wait_seconds)} seconds until next run.")
+        print(f"[{datetime.now()}] PDF generation complete, sleeping for {int(wait_seconds)} seconds.")
         await asyncio.sleep(wait_seconds)
 
 @app.route("/")
@@ -48,7 +57,11 @@ def index():
     filename = f"Suprabhaatham_{date_str}_page1.pdf"
     filepath = os.path.join(PDF_DIR, filename)
     if os.path.exists(filepath):
-        return f'<h2>PDF for {date_str}</h2><a href="/pdf/{filename}">Download PDF</a>'
+        return f'''
+        <h2>PDF for {date_str}</h2>
+        <a href="/pdf/{filename}">Download PDF</a><br><br>
+        <a href="/debug.png">View Debug Screenshot</a>
+        '''
     else:
         return "<h2>No cached PDFs available yet. Please wait for generation.</h2>"
 
@@ -58,6 +71,14 @@ def serve_pdf(filename):
         return send_from_directory(PDF_DIR, filename)
     else:
         abort(404)
+
+@app.route("/debug.png")
+def debug_screenshot():
+    path = os.path.join(PDF_DIR, "debug.png")
+    if os.path.exists(path):
+        return send_from_directory(PDF_DIR, "debug.png")
+    else:
+        return "Screenshot not available yet.", 404
 
 @app.route("/health")
 def health():
