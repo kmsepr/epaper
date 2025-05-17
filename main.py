@@ -24,7 +24,15 @@ async def scrape(date_str):
             page = await browser.new_page()
             await page.goto(url, wait_until="networkidle")
 
+            # Evaluate window.magazineData safely
             data = await page.evaluate("window.magazineData")
+            if not data:
+                print("window.magazineData is None or empty!")
+                await browser.close()
+                return []
+
+            print("Scraped data keys:", list(data.keys()))
+
             pages = data.get("pages", [])
             image_urls = [page.get("src") for page in pages if "src" in page]
 
