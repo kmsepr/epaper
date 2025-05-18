@@ -143,12 +143,69 @@ def show_njayar_archive():
     return render_template_string(html)
 
 @app.route('/prayer')
-def show_prayer_image():
-    path = "/mnt/data/prayer_today.jpg"
-    if os.path.exists(path):
-        return send_file(path, mimetype='image/jpeg')
-    else:
-        return "Prayer time image not available yet.", 404
+def show_prayer_table():
+    times = [
+        ("കാസർകോട്",  "4:43", "12:30", "3:49", "6:51", "8:07", "6:05"),
+        ("കോഴിക്കോട്", "4:42", "12:26", "3:46", "6:46", "8:01", "6:04"),
+        ("മലപ്പുറം",   "4:42", "12:25", "3:46", "6:45", "8:00", "6:03"),
+        ("പാലക്കാട്",  "4:40", "12:23", "3:44", "6:42", "7:57", "6:01"),
+        ("കൊച്ചി",    "4:43", "12:24", "3:45", "6:42", "7:57", "6:04"),
+        ("പത്തനംതിട്ട", "4:43", "12:22", "3:44", "6:39", "7:54", "6:03"),
+        ("തിരുവനന്തപുരം", "4:43", "12:22", "3:43", "6:37", "7:51", "6:03"),
+        ("ഗൂഡല്ലൂർ",   "4:40", "12:24", "3:44", "6:44", "7:59", "6:01"),
+    ]
+
+    headers = ["സ്ഥലം", "സുബ്ഹ്", "ലൂഹർ", "അസർ", "മഗ്‌രിബ്", "ഇശാഅ്", "ഉദയം"]
+
+    table_rows = ""
+    for row in times:
+        table_rows += "<tr>" + "".join(f"<td>{col}</td>" for col in row) + "</tr>"
+
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>പ്രാർത്ഥന സമയം</title>
+        <style>
+            body {{
+                font-family: 'Noto Sans Malayalam', sans-serif;
+                text-align: center;
+                margin: 50px;
+                background: #f9f9f9;
+            }}
+            table {{
+                margin: auto;
+                border-collapse: collapse;
+                width: 90%;
+                max-width: 800px;
+                background: white;
+                box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            }}
+            th, td {{
+                border: 1px solid #ccc;
+                padding: 12px;
+                font-size: 18px;
+            }}
+            th {{
+                background: #4CAF50;
+                color: white;
+            }}
+            tr:nth-child(even) {{
+                background: #f2f2f2;
+            }}
+        </style>
+    </head>
+    <body>
+        <h1>ഇന്ന് നമസ്കാര സമയങ്ങൾ</h1>
+        <table>
+            <tr>{"".join(f"<th>{h}</th>" for h in headers)}</tr>
+            {table_rows}
+        </table>
+        <p style="margin-top:40px;"><a href="/">Back to Home</a></p>
+    </body>
+    </html>
+    """
+    return render_template_string(html)
 
 if __name__ == '__main__':
     ensure_fresh_prayer_image()
