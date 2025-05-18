@@ -33,7 +33,7 @@ def get_url_for_location(location, date=None):
     date_str = date.strftime('%Y-%m-%d')
     return f"https://epaper.suprabhaatham.com/details/{location}/{date_str}/1"
 
-def wrap_grid_page(title, items_html):
+def wrap_grid_page(title, items_html, show_back=True):
     return f"""
     <!DOCTYPE html>
     <html>
@@ -79,7 +79,7 @@ def wrap_grid_page(title, items_html):
       <div class="grid">
         {items_html}
       </div>
-      <p><a class="back" href="/">Back to Home</a></p>
+      {('<p><a class="back" href=\'/\'>Back to Home</a></p>' if show_back else '')}
     </body>
     </html>
     """
@@ -88,10 +88,10 @@ def wrap_grid_page(title, items_html):
 def homepage():
     cards = ""
     links = [
-    ("Today's Editions", "/today"),
-    ("Njayar Prabhadham Archive", "/njayar"),
-    ("Namaz Times", "/prayer")
-]
+        ("Today's Editions", "/today"),
+        ("Njayar Prabhadham Archive", "/njayar"),
+        ("Namaz Times", "/prayer")
+    ]
     for i, (label, link) in enumerate(links):
         color = RGB_COLORS[i % len(RGB_COLORS)]
         cards += f'''
@@ -99,7 +99,7 @@ def homepage():
             <a href="{link}">{label}</a>
         </div>
         '''
-    return render_template_string(wrap_grid_page("Suprabhaatham ePaper", cards))
+    return render_template_string(wrap_grid_page("Suprabhaatham ePaper", cards, show_back=False))
 
 @app.route('/today')
 def show_today_links():
@@ -130,14 +130,14 @@ def fetch_prayer_data(city="Malappuram"):
 
         from datetime import datetime, timedelta
 
- OFFSETS = {
-    "Fajr": -18,
-    "Sunrise": 0,
-    "Dhuhr": 3,
-    "Asr": 2,
-    "Maghrib": 3,
-    "Isha": 16
-}
+        OFFSETS = {
+            "Fajr": -18,
+            "Sunrise": 0,
+            "Dhuhr": 3,
+            "Asr": 2,
+            "Maghrib": 3,
+            "Isha": 16
+        }
 
         selected = ["Fajr", "Sunrise", "Dhuhr", "Asr", "Maghrib", "Isha"]
         adjusted_timings = {}
@@ -154,7 +154,7 @@ def fetch_prayer_data(city="Malappuram"):
 
 @app.route('/prayer')
 def prayer_times():
-    timings, hijri, gregorian = fetch_prayer_data()  # Removed offset_minutes
+    timings, hijri, gregorian = fetch_prayer_data()
     cards = ""
     for name, time in timings.items():
         cards += f'''
