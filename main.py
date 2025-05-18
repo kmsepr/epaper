@@ -136,9 +136,9 @@ def fetch_prayer_data(city="Malappuram"):
             "Fajr": -18,
             "Sunrise": 0,
             "Dhuhr": 3,
-            "Asr": 2,
+            "Asr": 1,
             "Maghrib": 3,
-            "Isha": 16
+            "Isha": 15
         }
 
         selected = ["Fajr", "Sunrise", "Dhuhr", "Asr", "Maghrib", "Isha"]
