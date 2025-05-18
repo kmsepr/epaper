@@ -131,13 +131,13 @@ def fetch_prayer_data(city="Malappuram"):
         from datetime import datetime, timedelta
 
         OFFSETS = {
-            "Fajr": -20,
-            "Sunrise": -2,
-            "Dhuhr": 1,
-            "Asr": 0,
-            "Maghrib": 1,
-            "Isha": 14
-        }
+    "Fajr": -18,
+    "Sunrise": 0,
+    "Dhuhr": 3,
+    "Asr": 2,
+    "Maghrib": 3,
+    "Isha": 16
+}
 
         selected = ["Fajr", "Sunrise", "Dhuhr", "Asr", "Maghrib", "Isha"]
         adjusted_timings = {}
