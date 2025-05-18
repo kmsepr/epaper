@@ -20,12 +20,16 @@ def get_url_for_location(location, date=None):
 def crop_prayer_time_section():
     today = datetime.datetime.now().strftime('%Y-%m-%d')
     image_url = f"https://epaper.suprabhaatham.com/wp-content/uploads/epaper/{today}/6.jpg"
+    headers = {
+        "Referer": f"https://epaper.suprabhaatham.com/details/Kozhikode/{today}/6",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+    }
     os.makedirs("/mnt/data", exist_ok=True)
     image_path = "/mnt/data/page_6.jpg"
     cropped_path = "/mnt/data/prayer_today.jpg"
 
     try:
-        r = requests.get(image_url, timeout=10)
+        r = requests.get(image_url, headers=headers, timeout=10)
         r.raise_for_status()
         with open(image_path, "wb") as f:
             f.write(r.content)
@@ -35,7 +39,7 @@ def crop_prayer_time_section():
 
     try:
         with Image.open(image_path) as img:
-            # Adjust crop box (left, upper, right, lower) as per layout
+            # Crop box (left, upper, right, lower) - adjust if needed
             cropped = img.crop((1200, 200, 1775, 950))
             cropped.save(cropped_path)
         return True
