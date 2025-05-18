@@ -34,7 +34,8 @@ def get_url_for_location(location, date=None):
     return f"https://epaper.suprabhaatham.com/details/{location}/{date_str}/1"
 
 def wrap_grid_page(title, items_html, show_back=True):
-    return f"""
+    back_html = '<p><a class="back" href="/">Back to Home</a></p>' if show_back else ''
+    html_template = """
     <!DOCTYPE html>
     <html>
     <head>
@@ -79,10 +80,11 @@ def wrap_grid_page(title, items_html, show_back=True):
       <div class="grid">
         {items_html}
       </div>
-      {('<p><a class="back" href=\'/\'>Back to Home</a></p>' if show_back else '')}
+      {back_html}
     </body>
     </html>
     """
+    return html_template.format(title=title, items_html=items_html, back_html=back_html)
 
 @app.route('/')
 def homepage():
@@ -169,10 +171,12 @@ def prayer_times():
 def show_njayar_archive():
     start_date = datetime.date(2019, 1, 6)
     today = datetime.date.today()
+    cutoff = datetime.date(2024, 6, 30)
     sundays = []
     current = start_date
     while current <= today:
-        sundays.append(current)
+        if current >= cutoff:
+            sundays.append(current)
         current += datetime.timedelta(days=7)
 
     cards = ""
