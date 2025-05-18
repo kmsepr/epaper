@@ -53,12 +53,46 @@ def homepage():
     <html>
     <head>
         <title>Suprabhaatham ePaper</title>
+        <style>
+            body {
+                font-family: sans-serif;
+                text-align: center;
+                margin: 50px;
+                background: #f9f9f9;
+            }
+            .grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+                gap: 30px;
+                max-width: 800px;
+                margin: 40px auto;
+            }
+            .card {
+                background: white;
+                border-radius: 12px;
+                padding: 30px 20px;
+                box-shadow: 0 0 10px rgba(0,0,0,0.1);
+                transition: transform 0.2s;
+            }
+            .card:hover {
+                transform: scale(1.03);
+            }
+            .card a {
+                text-decoration: none;
+                color: #333;
+                font-size: 20px;
+                font-weight: bold;
+                display: block;
+            }
+        </style>
     </head>
-    <body style="font-family:sans-serif; text-align:center; margin-top:80px;">
+    <body>
         <h1>Suprabhaatham ePaper</h1>
-        <p style="font-size:20px;"><a href="/today">Today's Editions</a></p>
-        <p style="font-size:20px;"><a href="/njayar">Njayar Prabhadham Archive</a></p>
-        <p style="font-size:20px;"><a href="/prayer">Namaz Time</a></p>
+        <div class="grid">
+            <div class="card"><a href="/today">Today's Editions</a></div>
+            <div class="card"><a href="/njayar">Njayar Prabhadham Archive</a></div>
+            <div class="card"><a href="/prayer">Namaz Time</a></div>
+        </div>
     </body>
     </html>
     """
