@@ -40,22 +40,31 @@ def homepage():
 
 @app.route('/today')
 def show_today_links():
-    html_links = ""
-    for loc in LOCATIONS:
+    date = datetime.datetime.now().strftime('%Y-%m-%d')
+    colors = ['#e3f2fd', '#fce4ec', '#e8f5e9', '#fff3e0', '#ede7f6', '#f3e5f5', '#e0f7fa', '#f9fbe7']
+    html_blocks = ""
+
+    for i, loc in enumerate(LOCATIONS):
         url = get_url_for_location(loc)
-        html_links += f'<li><a href="{url}" target="_blank" style="font-size:22px;">{loc}</a></li>'
+        bg = colors[i % len(colors)]
+        html_blocks += f"""
+        <div style="background:{bg}; padding:20px; border-radius:12px; text-align:center;">
+            <a href="{url}" target="_blank" style="font-size:20px; font-weight:bold; color:#000; text-decoration:none;">{loc}</a>
+        </div>
+        """
+
     html = f"""
     <!DOCTYPE html>
     <html>
     <head>
-      <title>Today's Suprabhaatham Links</title>
+      <title>Today's Suprabhaatham Editions</title>
     </head>
-    <body style="font-family:sans-serif; text-align:center; margin-top:50px;">
-      <h1>Today's Suprabhaatham ePaper Links</h1>
-      <ul style="list-style:none; padding:0;">
-        {html_links}
-      </ul>
-      <p><a href="/">Back to Home</a></p>
+    <body style="font-family:sans-serif; text-align:center; margin:40px;">
+      <h1>Today's Suprabhaatham ePaper ({date})</h1>
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:20px; max-width:800px; margin:0 auto;">
+        {html_blocks}
+      </div>
+      <p style="margin-top:40px;"><a href="/">Back to Home</a></p>
     </body>
     </html>
     """
@@ -63,7 +72,7 @@ def show_today_links():
 
 @app.route('/njayar')
 def show_njayar_archive():
-    start_date = datetime.date(2024, 6, 30)  # First available edition
+    start_date = datetime.date(2024, 6, 30)
     today = datetime.date.today()
     sundays = []
     current = start_date
@@ -71,11 +80,19 @@ def show_njayar_archive():
         sundays.append(current)
         current += datetime.timedelta(days=7)
 
-    html_links = ""
-    for date in reversed(sundays):
+    colors = ['#e3f2fd', '#fce4ec', '#e8f5e9', '#fff3e0', '#ede7f6', '#f3e5f5', '#e0f7fa', '#f9fbe7']
+    html_blocks = ""
+    for i, date in enumerate(reversed(sundays)):
         url = get_url_for_location("Njayar Prabhadham", date)
-        label = date.strftime('%Y %B %d')  # Format: 2024 June 30
-        html_links += f'<li><a href="{url}" target="_blank" style="font-size:20px;">{label}</a></li>'
+        label = date.strftime('%Y %B %d')
+        bg = colors[i % len(colors)]
+        if date == today:
+            label += " (Today)"
+        html_blocks += f"""
+        <div style="background:{bg}; padding:20px; border-radius:12px; text-align:center;">
+            <a href="{url}" target="_blank" style="font-size:18px; font-weight:bold; color:#000; text-decoration:none;">{label}</a>
+        </div>
+        """
 
     html = f"""
     <!DOCTYPE html>
@@ -83,12 +100,12 @@ def show_njayar_archive():
     <head>
       <title>Njayar Prabhadham Archive</title>
     </head>
-    <body style="font-family:sans-serif; text-align:center; margin-top:50px;">
+    <body style="font-family:sans-serif; text-align:center; margin:40px;">
       <h1>Njayar Prabhadham - Sunday Editions</h1>
-      <ul style="list-style:none; padding:0;">
-        {html_links}
-      </ul>
-      <p><a href="/">Back to Home</a></p>
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:20px; max-width:900px; margin:0 auto;">
+        {html_blocks}
+      </div>
+      <p style="margin-top:40px;"><a href="/">Back to Home</a></p>
     </body>
     </html>
     """
