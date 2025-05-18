@@ -1,6 +1,7 @@
 import os
 import requests
 import datetime
+from datetime import datetime, timedelta
 from flask import Flask, render_template_string
 
 app = Flask(__name__)
@@ -84,27 +85,32 @@ def wrap_grid_page(title, items_html):
     </html>
     """
 
+
 @app.route('/')
 def homepage():
-    # Use coordinates for Kozhikode as example (you can change this)
-    params = {
-        'latitude': 11.2588,
-        'longitude': 75.7804,
-        'method': 2  # Islamic Society of North America (ISNA)
-    }
+    # Call Aladhan API
     try:
         response = requests.get("https://api.aladhan.com/v1/timingsByAddress", params={
             'address': 'Kozhikode, Kerala, India',
             'method': 2
         })
         timings = response.json()['data']['timings']
+
+        # Parse and apply offset
+        def adjust(prayer_name, offset_minutes):
+            time_str = timings[prayer_name]
+            dt = datetime.strptime(time_str, '%H:%M')
+            dt += timedelta(minutes=offset_minutes)
+            return dt.strftime('%I:%M %p')
+
         namaz_times = {
-            "Fajr": timings["Fajr"],
-            "Dhuhr": timings["Dhuhr"],
-            "Asr": timings["Asr"],
-            "Maghrib": timings["Maghrib"],
-            "Isha": timings["Isha"]
+            "Fajr": adjust("Fajr", -19),
+            "Dhuhr": adjust("Dhuhr", 3),
+            "Asr": adjust("Asr", 1),
+            "Maghrib": adjust("Maghrib", 3),
+            "Isha": adjust("Isha", 15)
         }
+
     except Exception as e:
         namaz_times = {
             "Fajr": "N/A",
