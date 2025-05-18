@@ -1,8 +1,7 @@
-import os
+from datetime import datetime, timedelta, date
 import requests
-import datetime
-from datetime import datetime, timedelta
 from flask import Flask, render_template_string
+import os
 
 app = Flask(__name__)
 
