@@ -1,65 +1,98 @@
 import os
 import datetime
-import threading
 from flask import Flask, render_template_string
-from telegram import Bot, Update
-from telegram.ext import Application, CommandHandler, ContextTypes
-
-# === CONFIGURATION ===
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-CHANNEL_ID = '@YOUR_CHANNEL_USERNAME'  # Replace with your channel username
 
 app = Flask(__name__)
 
-def get_today_url():
-    date_str = datetime.datetime.now().strftime('%Y-%m-%d')
-    return f"https://epaper.suprabhaatham.com/details/Kozhikode/{date_str}/1"
+LOCATIONS = [
+    "Kozhikode",
+    "Malappuram",
+    "Kannur",
+    "Thrissur",
+    "Kochi",
+    "Thiruvananthapuram",
+    "Palakkad",
+    "Gulf"
+]
 
-def send_epaper_link():
-    epaper_url = get_today_url()
-    bot = Bot(token=BOT_TOKEN)
-    date_str = datetime.datetime.now().strftime('%Y-%m-%d')
-    message = f"📰 *Suprabhaatham ePaper - Page 1*\nDate: {date_str}\n[Click to View]({epaper_url})"
-    bot.send_message(chat_id=CHANNEL_ID, text=message, parse_mode='Markdown')
+def get_url_for_location(location, date=None):
+    if date is None:
+        date = datetime.datetime.now()
+    date_str = date.strftime('%Y-%m-%d')
+    return f"https://epaper.suprabhaatham.com/details/{location}/{date_str}/1"
 
 @app.route('/')
-def home():
-    return "Suprabhaatham ePaper Bot is running."
-
-@app.route('/send')
-def trigger_send():
-    send_epaper_link()
-    return "Message sent to Telegram."
-
-@app.route('/today')
-def show_today_link():
-    url = get_today_url()
-    html = f"""
+def homepage():
+    html = """
     <!DOCTYPE html>
     <html>
-    <head><title>Suprabhaatham ePaper Today</title></head>
-    <body style="font-family:sans-serif; text-align:center; margin-top:50px;">
-      <h1>Suprabhaatham ePaper - Today's Link</h1>
-      <p><a href="{url}" target="_blank" style="font-size:20px;">{url}</a></p>
+    <head>
+        <title>Suprabhaatham ePaper</title>
+    </head>
+    <body style="font-family:sans-serif; text-align:center; margin-top:80px;">
+        <h1>Suprabhaatham ePaper</h1>
+        <p style="font-size:20px;"><a href="/today">Today's Editions</a></p>
+        <p style="font-size:20px;"><a href="/njayar">Njayar Prabhadham Archive</a></p>
     </body>
     </html>
     """
     return render_template_string(html)
 
-# Telegram bot /start handler
-async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    epaper_url = get_today_url()
-    date_str = datetime.datetime.now().strftime('%Y-%m-%d')
-    message = f"📰 *Suprabhaatham ePaper - Page 1*\nDate: {date_str}\n[Click to View]({epaper_url})"
-    await context.bot.send_message(chat_id=update.effective_chat.id, text=message, parse_mode='Markdown')
+@app.route('/today')
+def show_today_links():
+    html_links = ""
+    for loc in LOCATIONS:
+        url = get_url_for_location(loc)
+        html_links += f'<li><a href="{url}" target="_blank" style="font-size:22px;">{loc}</a></li>'
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Today's Suprabhaatham Links</title>
+    </head>
+    <body style="font-family:sans-serif; text-align:center; margin-top:50px;">
+      <h1>Today's Suprabhaatham ePaper Links</h1>
+      <ul style="list-style:none; padding:0;">
+        {html_links}
+      </ul>
+      <p><a href="/">Back to Home</a></p>
+    </body>
+    </html>
+    """
+    return render_template_string(html)
 
-def run_telegram_bot():
-    application = Application.builder().token(BOT_TOKEN).build()
-    application.add_handler(CommandHandler("start", start_command))
-    application.run_polling()
+@app.route('/njayar')
+def show_njayar_archive():
+    start_date = datetime.date(2019, 1, 6)
+    today = datetime.date.today()
+    sundays = []
+    current = start_date
+    while current <= today:
+        sundays.append(current)
+        current += datetime.timedelta(days=7)
+
+    html_links = ""
+    for date in reversed(sundays):
+        url = get_url_for_location("Njayar Prabhadham", date)
+        date_str = date.strftime('%Y-%m-%d')
+        html_links += f'<li><a href="{url}" target="_blank" style="font-size:18px;">{date_str}</a></li>'
+
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Njayar Prabhadham Archive</title>
+    </head>
+    <body style="font-family:sans-serif; text-align:center; margin-top:50px;">
+      <h1>Njayar Prabhadham - Sunday Editions</h1>
+      <ul style="list-style:none; padding:0;">
+        {html_links}
+      </ul>
+      <p><a href="/">Back to Home</a></p>
+    </body>
+    </html>
+    """
+    return render_template_string(html)
 
 if __name__ == '__main__':
-    # Run telegram bot in a separate thread
-    threading.Thread(target=run_telegram_bot, daemon=True).start()
-    # Run flask app
     app.run(host='0.0.0.0', port=8000)
