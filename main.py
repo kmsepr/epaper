@@ -1,10 +1,11 @@
+import os
 import datetime
 from flask import Flask
 from telegram import Bot
 
 # === CONFIGURATION ===
-BOT_TOKEN = '7881893598:AAGgCDjKRaLMmsnglQsnXOzkwb3OpoEvb_M'  # Replace with your bot token
-CHANNEL_ID = '@malayalam_news1'  # Replace with your Telegram channel username
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+CHANNEL_ID = '@YOUR_CHANNEL_USERNAME'  # Still hardcoded; update as needed
 
 app = Flask(__name__)
 
