@@ -1,7 +1,6 @@
-from datetime import datetime, timedelta, date
-import requests
-from flask import Flask, render_template_string
 import os
+import datetime
+from flask import Flask, render_template_string
 
 app = Flask(__name__)
 
@@ -84,102 +83,18 @@ def wrap_grid_page(title, items_html):
     </html>
     """
 
-
 @app.route('/')
 def homepage():
-    # Call Aladhan API
-    try:
-        response = requests.get("https://api.aladhan.com/v1/timingsByAddress", params={
-            'address': 'Kozhikode, Kerala, India',
-            'method': 2
-        })
-        timings = response.json()['data']['timings']
-
-        # Parse and apply offset
-        def adjust(prayer_name, offset_minutes):
-            time_str = timings[prayer_name]
-            dt = datetime.strptime(time_str, '%H:%M')
-            dt += timedelta(minutes=offset_minutes)
-            return dt.strftime('%I:%M %p')
-
-        namaz_times = {
-            "Fajr": adjust("Fajr", -19),
-            "Dhuhr": adjust("Dhuhr", 3),
-            "Asr": adjust("Asr", 1),
-            "Maghrib": adjust("Maghrib", 3),
-            "Isha": adjust("Isha", 15)
-        }
-
-    except Exception as e:
-        namaz_times = {
-            "Fajr": "N/A",
-            "Dhuhr": "N/A",
-            "Asr": "N/A",
-            "Maghrib": "N/A",
-            "Isha": "N/A"
-        }
-
-    namaz_html = ""
-    for prayer, time in namaz_times.items():
-        namaz_html += f'''
-        <div class="card" style="background-color:#D1C4E9;">
-            <strong>{prayer}</strong><br>{time}
+    cards = ""
+    links = [("Today's Editions", "/today"), ("Njayar Prabhadham Archive", "/njayar")]
+    for i, (label, link) in enumerate(links):
+        color = RGB_COLORS[i % len(RGB_COLORS)]
+        cards += f'''
+        <div class="card" style="background-color:{color};">
+            <a href="{link}">{label}</a>
         </div>
         '''
-
-    html = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Suprabhaatham ePaper</title>
-        <style>
-            body {{
-                font-family: sans-serif;
-                text-align: center;
-                padding: 40px;
-                background-color: #f0f0f0;
-            }}
-            h1 {{
-                margin-bottom: 30px;
-            }}
-            .grid {{
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-                gap: 20px;
-                max-width: 900px;
-                margin: auto;
-            }}
-            .card {{
-                padding: 20px;
-                border-radius: 10px;
-                box-shadow: 2px 2px 8px rgba(0,0,0,0.1);
-                background-color: #81D4FA;
-                color: #000;
-                font-size: 18px;
-            }}
-            .card a {{
-                text-decoration: none;
-                color: white;
-                font-weight: bold;
-                font-size: 20px;
-            }}
-        </style>
-    </head>
-    <body>
-        <h1>Suprabhaatham ePaper</h1>
-        <div class="grid">
-            <div class="card" style="background-color:#4DB6AC;"><a href="/today">Today's Editions</a></div>
-            <div class="card" style="background-color:#BA68C8;"><a href="/njayar">Njayar Prabhadham Archive</a></div>
-        </div>
-
-        <h2 style="margin-top:50px;">Namaz Times - Kozhikode</h2>
-        <div class="grid">
-            {namaz_html}
-        </div>
-    </body>
-    </html>
-    """
-    return render_template_string(html)
+    return render_template_string(wrap_grid_page("Suprabhaatham ePaper", cards))
 
 @app.route('/today')
 def show_today_links():
