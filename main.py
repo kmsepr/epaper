@@ -1,57 +1,36 @@
-import os
-import asyncio
-import threading
-from flask import Flask, send_from_directory, abort
-from playwright.async_api import async_playwright
+import datetime
+from flask import Flask
+from telegram import Bot
+
+# === CONFIGURATION ===
+BOT_TOKEN = 'YOUR_BOT_TOKEN'  # Replace with your bot token
+CHANNEL_ID = '@YOUR_CHANNEL_USERNAME'  # Replace with your Telegram channel username
 
 app = Flask(__name__)
-IMG_DIR = "./pdfs"
-IMG_NAME = "frontpage.png"
-IMG_PATH = os.path.join(IMG_DIR, IMG_NAME)
 
-if not os.path.exists(IMG_DIR):
-    os.makedirs(IMG_DIR)
+def get_today_url():
+    date_str = datetime.datetime.now().strftime('%Y-%m-%d')
+    return f"https://epaper.suprabhaatham.com/details/Kozhikode/{date_str}/1"
 
-async def save_frontpage_image():
-    url = "https://epaper.suprabhaatham.com"
-    print(f"Starting screenshot for: {url}")
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True, args=["--no-sandbox"])
-        page = await browser.new_page(viewport={"width": 1400, "height": 2000})
-        await page.goto(url)
-        await page.wait_for_timeout(8000)
-        await page.screenshot(path=IMG_PATH, full_page=True)
-        await browser.close()
-    print(f"Screenshot saved to {IMG_PATH}")
+def send_epaper_link():
+    epaper_url = get_today_url()
+    bot = Bot(token=BOT_TOKEN)
+    date_str = datetime.datetime.now().strftime('%Y-%m-%d')
+    message = f"📰 *Suprabhaatham ePaper - Page 1*\nDate: {date_str}\n[Click to View]({epaper_url})"
+    bot.send_message(chat_id=CHANNEL_ID, text=message, parse_mode='Markdown')
 
-@app.route("/")
-def index():
-    if os.path.exists(IMG_PATH):
-        return f'<h2>Suprabhaatham Front Page</h2><a href="/pdf/{IMG_NAME}">Download Image</a><br><img src="/pdf/{IMG_NAME}" width="600">'
-    else:
-        return "<h2>No screenshot available yet. Please wait for generation.</h2>"
+@app.route('/')
+def home():
+    return "Suprabhaatham ePaper Bot is running."
 
-@app.route("/pdf/<path:filename>")
-def serve_file(filename):
-    if os.path.exists(os.path.join(IMG_DIR, filename)):
-        return send_from_directory(IMG_DIR, filename)
-    else:
-        abort(404)
+@app.route('/send')
+def trigger_send():
+    send_epaper_link()
+    return "Message sent to Telegram."
 
-async def daily_scheduler():
-    while True:
-        try:
-            await save_frontpage_image()
-        except Exception as e:
-            print(f"Error: {e}")
-        await asyncio.sleep(24 * 60 * 60)
+@app.route('/today')
+def show_today_link():
+    return get_today_url(), 200, {'Content-Type': 'text/plain'}
 
-def start_background_loop(loop):
-    asyncio.set_event_loop(loop)
-    loop.run_until_complete(daily_scheduler())
-
-if __name__ == "__main__":
-    loop = asyncio.new_event_loop()
-    t = threading.Thread(target=start_background_loop, args=(loop,), daemon=True)
-    t.start()
-    app.run(host="0.0.0.0", port=8000)
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=8000)
