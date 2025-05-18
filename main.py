@@ -128,16 +128,27 @@ def fetch_prayer_data(city="Malappuram", offset_minutes=0):
         hijri_date = data["data"]["date"]["hijri"]["date"]
         gregorian_date = data["data"]["date"]["gregorian"]["date"]
 
-        # Apply time offset
         from datetime import datetime, timedelta
+
+        # Custom offsets for each prayer (in minutes)
+        OFFSETS = {
+            "Fajr": -20,
+            "Dhuhr": 1,
+            "Asr": 0,
+            "Maghrib": 1,
+            "Isha": 14,
+            "Sunrise": -2
+        }
+
         adjusted_timings = {}
         for name, time_str in timings.items():
             try:
                 dt = datetime.strptime(time_str, "%H:%M")
-                dt += timedelta(minutes=offset_minutes)
+                offset = OFFSETS.get(name, offset_minutes)
+                dt += timedelta(minutes=offset)
                 adjusted_timings[name] = dt.strftime("%H:%M")
             except:
-                adjusted_timings[name] = time_str  # Leave unchanged if format fails
+                adjusted_timings[name] = time_str  # If parsing fails, leave it unchanged
 
         return adjusted_timings, hijri_date, gregorian_date
     return {}, "", ""
