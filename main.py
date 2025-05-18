@@ -154,7 +154,7 @@ def fetch_prayer_data(city="Malappuram"):
 
 @app.route('/prayer')
 def prayer_times():
-    timings, hijri, gregorian = fetch_prayer_data(offset_minutes=2)
+    timings, hijri, gregorian = fetch_prayer_data()  # Removed offset_minutes
     cards = ""
     for name, time in timings.items():
         cards += f'''
@@ -164,7 +164,6 @@ def prayer_times():
         '''
     header = f"Namaz Times - Malappuram<br><small>{gregorian} | Hijri: {hijri}</small>"
     return render_template_string(wrap_grid_page(header, cards))
-
 
 @app.route('/njayar')
 def show_njayar_archive():
