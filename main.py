@@ -114,7 +114,7 @@ def show_today_links():
         '''
     return render_template_string(wrap_grid_page("Today's Suprabhaatham ePaper Links", cards))
 
-def fetch_prayer_data(city="Malappuram", offset_minutes=0):
+def fetch_prayer_data(city="Malappuram"):
     url = "http://api.aladhan.com/v1/timingsByCity"
     params = {
         "city": city,
@@ -130,25 +130,24 @@ def fetch_prayer_data(city="Malappuram", offset_minutes=0):
 
         from datetime import datetime, timedelta
 
-        # Custom offsets for each prayer (in minutes)
         OFFSETS = {
             "Fajr": -20,
+            "Sunrise": -2,
             "Dhuhr": 1,
             "Asr": 0,
             "Maghrib": 1,
-            "Isha": 14,
-            "Sunrise": -2
+            "Isha": 14
         }
 
+        selected = ["Fajr", "Sunrise", "Dhuhr", "Asr", "Maghrib", "Isha"]
         adjusted_timings = {}
-        for name, time_str in timings.items():
+        for name in selected:
             try:
-                dt = datetime.strptime(time_str, "%H:%M")
-                offset = OFFSETS.get(name, offset_minutes)
-                dt += timedelta(minutes=offset)
+                dt = datetime.strptime(timings[name], "%H:%M")
+                dt += timedelta(minutes=OFFSETS.get(name, 0))
                 adjusted_timings[name] = dt.strftime("%H:%M")
             except:
-                adjusted_timings[name] = time_str  # If parsing fails, leave it unchanged
+                adjusted_timings[name] = timings[name]
 
         return adjusted_timings, hijri_date, gregorian_date
     return {}, "", ""
