@@ -130,7 +130,7 @@ def fetch_prayer_data(city="Malappuram"):
 
         from datetime import datetime, timedelta
 
-        OFFSETS = {
+ OFFSETS = {
     "Fajr": -18,
     "Sunrise": 0,
     "Dhuhr": 3,
