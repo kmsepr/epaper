@@ -1,6 +1,10 @@
+import os
 import datetime
 import requests
 from flask import Flask, render_template_string
+from PIL import Image
+import pytesseract
+from playwright.sync_api import sync_playwright
 
 app = Flask(__name__)
 
