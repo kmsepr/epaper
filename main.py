@@ -99,84 +99,77 @@ def homepage():
     return render_template_string(html)
 
 @app.route('/prayer')
-def show_prayer_table():
-    date = datetime.datetime.now().strftime("%Y-%m-%d")
-    prayer_data = []
-    for loc in LOCATIONS:
-        coords = LOCATION_COORDS.get(loc)
-        if coords:
-            times = get_prayer_times(coords[0], coords[1])
-            if times:
-                prayer_data.append((loc, times))
-            else:
-                prayer_data.append((loc, {
-                    "Fajr": "N/A", "Dhuhr": "N/A", "Asr": "N/A",
-                    "Maghrib": "N/A", "Isha": "N/A", "Sunrise": "N/A"
-                }))
+def prayer_from_canvas():
+    def fetch_prayer_screenshot():
+        today = datetime.datetime.now().strftime('%Y-%m-%d')
+        url = f"https://epaper.suprabhaatham.com/details/Kozhikode/{today}/6"
+        os.makedirs("/mnt/data", exist_ok=True)
+        page_image_path = "/mnt/data/full_page.jpg"
 
-    html = """
-    <!DOCTYPE html>
+        try:
+            with sync_playwright() as p:
+                browser = p.firefox.launch(headless=True)  # Use Firefox here
+                context = browser.new_context(viewport={"width": 1600, "height": 1200})
+                page = context.new_page()
+                page.goto(url)
+                page.wait_for_timeout(6000)  # wait for JS to render
+                page.screenshot(path=page_image_path, full_page=True)
+                browser.close()
+            return page_image_path
+        except Exception as e:
+            print(f"Screenshot error: {e}")
+            return None
+
+    def crop_and_ocr(image_path):
+        try:
+            with Image.open(image_path) as img:
+                cropped = img.crop((1200, 200, 1775, 950))  # Adjust cropping as needed
+                cropped.save(PRAYER_IMAGE_PATH)
+            text = pytesseract.image_to_string(Image.open(PRAYER_IMAGE_PATH), lang='mal')
+            return text.strip()
+        except Exception as e:
+            return f"OCR failed: {e}"
+
+    image_path = fetch_prayer_screenshot()
+    if not image_path:
+        return "Failed to capture image from flipbook."
+    text = crop_and_ocr(image_path)
+    return render_template_string(f"""
     <html>
     <head>
-        <title>Prayer Times</title>
+        <title>Prayer Times (OCR)</title>
         <style>
-            body {
-                font-family: Arial, sans-serif;
+            body {{
+                font-family: sans-serif;
                 text-align: center;
                 margin: 50px;
-                background: #f9f9f9;
-            }
-            table {
-                margin: auto;
-                border-collapse: collapse;
-                width: 90%;
+                background: #f4f4f4;
+            }}
+            pre {{
+                background: #fff;
+                padding: 20px;
+                margin: 30px auto;
                 max-width: 800px;
-                background: white;
+                white-space: pre-wrap;
+                border-radius: 8px;
                 box-shadow: 0 0 10px rgba(0,0,0,0.1);
-            }
-            th, td {
-                border: 1px solid #ccc;
-                padding: 12px;
                 font-size: 18px;
-            }
-            th {
-                background: #4CAF50;
-                color: white;
-            }
-            tr:nth-child(even) {
-                background: #f2f2f2;
-            }
+                line-height: 1.6;
+            }}
+            a {{
+                color: #007BFF;
+                text-decoration: none;
+                font-weight: bold;
+            }}
         </style>
     </head>
     <body>
-        <h1>Prayer Times for Kerala Locations on {{date}}</h1>
-        <table>
-            <tr>
-                <th>Location</th>
-                <th>Fajr</th>
-                <th>Sunrise</th>
-                <th>Dhuhr</th>
-                <th>Asr</th>
-                <th>Maghrib</th>
-                <th>Isha</th>
-            </tr>
-            {% for loc, times in prayer_data %}
-            <tr>
-                <td>{{loc}}</td>
-                <td>{{times.Fajr}}</td>
-                <td>{{times.Sunrise}}</td>
-                <td>{{times.Dhuhr}}</td>
-                <td>{{times.Asr}}</td>
-                <td>{{times.Maghrib}}</td>
-                <td>{{times.Isha}}</td>
-            </tr>
-            {% endfor %}
-        </table>
-        <p style="margin-top:40px;"><a href="/">Back to Home</a></p>
+        <h1>ഇന്ന് നമസ്കാര സമയം</h1>
+        <pre>{text}</pre>
+        <p><a href="/">Back to Home</a></p>
     </body>
     </html>
-    """
-    return render_template_string(html, prayer_data=prayer_data, date=date)
+    """)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8000)
