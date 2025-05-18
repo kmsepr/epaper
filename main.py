@@ -63,7 +63,7 @@ def show_today_links():
 
 @app.route('/njayar')
 def show_njayar_archive():
-    start_date = datetime.date(2019, 1, 6)
+    start_date = datetime.date(2024, 6, 30)  # First available edition
     today = datetime.date.today()
     sundays = []
     current = start_date
@@ -74,8 +74,8 @@ def show_njayar_archive():
     html_links = ""
     for date in reversed(sundays):
         url = get_url_for_location("Njayar Prabhadham", date)
-        date_str = date.strftime('%Y-%m-%d')
-        html_links += f'<li><a href="{url}" target="_blank" style="font-size:18px;">{date_str}</a></li>'
+        label = date.strftime('%Y %B %d')  # Format: 2024 June 30
+        html_links += f'<li><a href="{url}" target="_blank" style="font-size:20px;">{label}</a></li>'
 
     html = f"""
     <!DOCTYPE html>
