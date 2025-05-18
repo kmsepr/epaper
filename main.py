@@ -1,4 +1,5 @@
 import os
+import requests
 import datetime
 from flask import Flask, render_template_string
 
@@ -86,7 +87,11 @@ def wrap_grid_page(title, items_html):
 @app.route('/')
 def homepage():
     cards = ""
-    links = [("Today's Editions", "/today"), ("Njayar Prabhadham Archive", "/njayar")]
+    links = [
+    ("Today's Editions", "/today"),
+    ("Njayar Prabhadham Archive", "/njayar"),
+    ("Namaz Times", "/prayer")
+]
     for i, (label, link) in enumerate(links):
         color = RGB_COLORS[i % len(RGB_COLORS)]
         cards += f'''
@@ -108,6 +113,48 @@ def show_today_links():
         </div>
         '''
     return render_template_string(wrap_grid_page("Today's Suprabhaatham ePaper Links", cards))
+
+def fetch_prayer_data(city="Malappuram", offset_minutes=0):
+    url = "http://api.aladhan.com/v1/timingsByCity"
+    params = {
+        "city": city,
+        "country": "India",
+        "method": 2
+    }
+    response = requests.get(url, params=params)
+    if response.status_code == 200:
+        data = response.json()
+        timings = data["data"]["timings"]
+        hijri_date = data["data"]["date"]["hijri"]["date"]
+        gregorian_date = data["data"]["date"]["gregorian"]["date"]
+
+        # Apply time offset
+        from datetime import datetime, timedelta
+        adjusted_timings = {}
+        for name, time_str in timings.items():
+            try:
+                dt = datetime.strptime(time_str, "%H:%M")
+                dt += timedelta(minutes=offset_minutes)
+                adjusted_timings[name] = dt.strftime("%H:%M")
+            except:
+                adjusted_timings[name] = time_str  # Leave unchanged if format fails
+
+        return adjusted_timings, hijri_date, gregorian_date
+    return {}, "", ""
+
+@app.route('/prayer')
+def prayer_times():
+    timings, hijri, gregorian = fetch_prayer_data(offset_minutes=2)
+    cards = ""
+    for name, time in timings.items():
+        cards += f'''
+        <div class="card" style="background-color:#6BCB77;">
+            <div style="color:white; font-size:18px;"><strong>{name}</strong><br>{time}</div>
+        </div>
+        '''
+    header = f"Namaz Times - Malappuram<br><small>{gregorian} | Hijri: {hijri}</small>"
+    return render_template_string(wrap_grid_page(header, cards))
+
 
 @app.route('/njayar')
 def show_njayar_archive():
