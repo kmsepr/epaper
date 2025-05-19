@@ -1,40 +1,30 @@
-# Use official Python runtime
+# Base image with Python
 FROM python:3.11-slim
-
-# Set environment variables
-ENV PYTHONDONTWRITEBYTECODE 1
-ENV PYTHONUNBUFFERED 1
-
-# Set working directory
-WORKDIR /app
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
-    wget \
-    unzip \
-    gnupg \
-    curl \
-    fonts-liberation \
-    libnss3 \
-    libxss1 \
-    libasound2 \
-    libatk-bridge2.0-0 \
-    libgtk-3-0 \
-    libgbm1 \
-    chromium \
-    chromium-driver \
+    wget unzip curl gnupg \
+    chromium chromium-driver \
+    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Set environment for Chrome
-ENV CHROME_BIN=/usr/bin/chromium
-ENV PATH="${PATH}:/usr/bin/chromium"
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
 
-# Install Python dependencies
+# Create app directory
+WORKDIR /app
+
+# Copy requirements and install Python dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --upgrade pip && pip install -r requirements.txt
 
-# Copy app code
+# Copy the rest of the app
 COPY . .
+
+# Make sure Chrome binary path is known to Selenium
+ENV CHROME_BIN=/usr/bin/chromium
+ENV PATH="/usr/lib/chromium/:$PATH"
 
 # Expose port
 EXPOSE 8000
