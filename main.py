@@ -122,7 +122,7 @@ def editorial():
         current_time += step
 
     if not found_url:
-        fallback_time = "00-05-11-116"
+        fallback_time = "01-05-87-875"
         fallback_filename = f"{filename_prefix}-{fallback_time}-epaper-page-{page_num}-{edition}.jpeg"
         found_url = f"{base_url}/{folder_str}/{edition}/{fallback_filename}"
 
