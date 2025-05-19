@@ -1,6 +1,8 @@
 import datetime
 from flask import Flask, render_template_string, redirect, request
 import requests
+import threading
+import time
 from datetime import datetime as dt, timedelta, date
 
 app = Flask(__name__)
@@ -156,6 +158,47 @@ def show_njayar_archive():
     return render_template_string(wrap_grid_page("Njayar Prabhadham - Sunday Editions", cards))
 
 
+def update_editorial_url_periodically():
+    global editorial_cache
+
+    while True:
+        today_date = date.today()
+        folder_str = today_date.strftime('%d-%m-%Y')
+        filename_prefix = today_date.strftime('%Y-%m-%d')
+        base_url = "https://e-files.suprabhaatham.com"
+        edition = "Malappuram"
+        page_num = 5
+
+        start_time = dt.strptime("00:05:00.000", "%H:%M:%S.%f")
+        end_time = dt.strptime("00:05:20.000", "%H:%M:%S.%f")
+        step = timedelta(milliseconds=100)
+
+        current_time = start_time
+        found_url = None
+
+        while current_time <= end_time:
+            time_str = current_time.strftime("%H-%M-%S-%f")[:-3]
+            filename = f"{filename_prefix}-{time_str}-epaper-page-{page_num}-{edition}.jpeg"
+            url = f"{base_url}/{folder_str}/{edition}/{filename}"
+            if check_url(url):
+                found_url = url
+                break
+            current_time += step
+
+        if not found_url:
+            fallback_time = "00-05-35-356"
+            fallback_filename = f"{filename_prefix}-{fallback_time}-epaper-page-{page_num}-{edition}.jpeg"
+            found_url = f"{base_url}/{folder_str}/{edition}/{fallback_filename}"
+
+        editorial_cache["date"] = today_date
+        editorial_cache["url"] = found_url
+
+        time.sleep(3600)  # Sleep for 1 hour
+
 
 if __name__ == '__main__':
+    # Start the background thread
+    t = threading.Thread(target=update_editorial_url_periodically, daemon=True)
+    t.start()
+
     app.run(host='0.0.0.0', port=8000)
