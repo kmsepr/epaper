@@ -1,11 +1,5 @@
 import datetime
-import time
-import tempfile
 from flask import Flask, render_template_string, redirect
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
-from selenium.common.exceptions import WebDriverException
 
 app = Flask(__name__)
 
@@ -20,14 +14,14 @@ RGB_COLORS = [
 ]
 
 def get_url_for_location(location, date=None):
-    if not date:
-        date = datetime.date.today().strftime('%Y-%m-%d')
-    # For Njayar Prabhadham, the URL pattern might be different, consider adjusting if needed
-    return f"https://epaper.suprabhaatham.com/details/{location}/{date}/1"
+    if date is None:
+        date = datetime.datetime.now()
+    date_str = date.strftime('%Y-%m-%d')
+    return f"https://epaper.suprabhaatham.com/details/{location}/{date_str}/1"
 
 def wrap_grid_page(title, items_html, show_back=True):
     back_html = '<p><a class="back" href="/">Back to Home</a></p>' if show_back else ''
-    return f"""
+    html_template = f"""
     <!DOCTYPE html>
     <html>
     <head>
@@ -50,15 +44,16 @@ def wrap_grid_page(title, items_html, show_back=True):
     </body>
     </html>
     """
+    return html_template
 
 @app.route('/')
 def homepage():
+    cards = ""
     links = [
         ("Today's Editions", "/today"),
         ("Njayar Prabhadham Archive", "/njayar"),
         ("Editorial", "/editorial")
     ]
-    cards = ""
     for i, (label, link) in enumerate(links):
         color = RGB_COLORS[i % len(RGB_COLORS)]
         cards += f'''
@@ -70,10 +65,9 @@ def homepage():
 
 @app.route('/today')
 def show_today_links():
-    today = datetime.date.today().strftime('%Y-%m-%d')
     cards = ""
     for i, loc in enumerate(LOCATIONS):
-        url = get_url_for_location(loc, today)
+        url = get_url_for_location(loc)
         color = RGB_COLORS[i % len(RGB_COLORS)]
         cards += f'''
         <div class="card" style="background-color:{color};">
@@ -84,35 +78,9 @@ def show_today_links():
 
 @app.route('/editorial')
 def editorial():
-    try:
-        chrome_options = Options()
-        chrome_options.binary_location = "/usr/bin/chromium"
-        chrome_options.add_argument("--headless=new")
-        chrome_options.add_argument("--no-sandbox")
-        chrome_options.add_argument("--disable-dev-shm-usage")
-        chrome_options.add_argument("--disable-gpu")
-        chrome_options.add_argument("--window-size=1920,1080")
-
-        user_data_dir = tempfile.mkdtemp()
-        chrome_options.add_argument(f"--user-data-dir={user_data_dir}")
-
-        service = Service("/usr/local/bin/chromedriver")
-
-        with webdriver.Chrome(service=service, options=chrome_options) as driver:
-            driver.get("https://epaper.suprabhaatham.com")
-            time.sleep(7)  # wait for page load
-
-            img_elements = driver.find_elements("tag name", "img")
-            for img in img_elements:
-                src = img.get_attribute("src")
-                if src and "epaper-page-5" in src and "Kozhikode" in src:
-                    return redirect(src)
-
-        return "Editorial image not found", 404
-
-    except WebDriverException as e:
-        print("WebDriver Error:", e)
-        return "Unable to load headless browser.", 500
+    today = datetime.datetime.now().strftime('%d-%m-%Y')
+    img_url = f"https://e-files.suprabhaatham.com/{today}/Malappuram/{today}-00-05-35-356-epaper-page-5-Malappuram.jpeg"
+    return redirect(img_url)
 
 @app.route('/njayar')
 def show_njayar_archive():
@@ -128,13 +96,12 @@ def show_njayar_archive():
 
     cards = ""
     for i, date in enumerate(reversed(sundays)):
-        url = get_url_for_location("Njayar Prabhadham", date.strftime('%Y-%m-%d'))
+        url = get_url_for_location("Njayar Prabhadham", date)
         date_str = date.strftime('%Y-%m-%d')
         color = RGB_COLORS[i % len(RGB_COLORS)]
-        label = "Today" if date == today else date_str
         cards += f'''
         <div class="card" style="background-color:{color};">
-            <a href="{url}" target="_blank">{label}</a>
+            <a href="{url}" target="_blank">{date_str}</a>
         </div>
         '''
     return render_template_string(wrap_grid_page("Njayar Prabhadham - Sunday Editions", cards))
