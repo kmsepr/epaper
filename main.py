@@ -1,9 +1,4 @@
-import datetime
 from flask import Flask, render_template_string, redirect
-import requests
-from PIL import Image
-from io import BytesIO
-import pytesseract
 
 app = Flask(__name__)
 
@@ -17,11 +12,8 @@ RGB_COLORS = [
     "#FF6EC7", "#00C2CB", "#FFA41B", "#845EC2"
 ]
 
-def get_url_for_location(location, date=None):
-    if date is None:
-        date = datetime.datetime.now()
-    date_str = date.strftime('%Y-%m-%d')
-    return f"https://epaper.suprabhaatham.com/details/{location}/{date_str}/1"
+def get_url_for_location(location, date="2025-05-19"):
+    return f"https://epaper.suprabhaatham.com/details/{location}/{date}/1"
 
 def wrap_grid_page(title, items_html, show_back=True):
     back_html = '<p><a class="back" href="/">Back to Home</a></p>' if show_back else ''
@@ -52,12 +44,12 @@ def wrap_grid_page(title, items_html, show_back=True):
 
 @app.route('/')
 def homepage():
-    cards = ""
     links = [
         ("Today's Editions", "/today"),
         ("Njayar Prabhadham Archive", "/njayar"),
         ("Editorial", "/editorial")
     ]
+    cards = ""
     for i, (label, link) in enumerate(links):
         color = RGB_COLORS[i % len(RGB_COLORS)]
         cards += f'''
@@ -82,36 +74,13 @@ def show_today_links():
 
 @app.route('/editorial')
 def editorial():
+    # Hardcoded image link
     img_url = "https://e-files.suprabhaatham.com/19-05-2025/Malappuram/2025-05-19-00-05-35-356-epaper-page-5-Malappuram.jpeg"
-    try:
-        response = requests.get(img_url)
-        img = Image.open(BytesIO(response.content))
-        text = pytesseract.image_to_string(img, lang='eng+mal')  # Add 'mal' for Malayalam if supported
-    except Exception as e:
-        text = f"Failed to process image: {e}"
-
-    html = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Editorial OCR</title>
-        <style>
-            body {{ font-family: sans-serif; padding: 40px; background-color: #f9f9f9; }}
-            pre {{ background-color: #fff; padding: 20px; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.1); white-space: pre-wrap; }}
-            a {{ display: inline-block; margin-top: 30px; text-decoration: none; color: #333; }}
-        </style>
-    </head>
-    <body>
-        <h1>Extracted Editorial Text</h1>
-        <pre>{text}</pre>
-        <p><a href="/">Back to Home</a></p>
-    </body>
-    </html>
-    """
-    return render_template_string(html)
+    return redirect(img_url)
 
 @app.route('/njayar')
 def show_njayar_archive():
+    import datetime
     start_date = datetime.date(2019, 1, 6)
     today = datetime.date.today()
     cutoff = datetime.date(2024, 6, 30)
@@ -124,7 +93,7 @@ def show_njayar_archive():
 
     cards = ""
     for i, date in enumerate(reversed(sundays)):
-        url = get_url_for_location("Njayar Prabhadham", date)
+        url = get_url_for_location("Njayar Prabhadham", date.strftime('%Y-%m-%d'))
         date_str = date.strftime('%Y-%m-%d')
         color = RGB_COLORS[i % len(RGB_COLORS)]
         cards += f'''
