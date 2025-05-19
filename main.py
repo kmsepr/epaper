@@ -1,8 +1,10 @@
 import datetime
+import time
 from flask import Flask, render_template_string, redirect
 from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
-import time
+from selenium.common.exceptions import WebDriverException
 
 app = Flask(__name__)
 
@@ -16,7 +18,9 @@ RGB_COLORS = [
     "#FF6EC7", "#00C2CB", "#FFA41B", "#845EC2"
 ]
 
-def get_url_for_location(location, date="2025-05-19"):
+def get_url_for_location(location, date=None):
+    if not date:
+        date = datetime.date.today().strftime('%Y-%m-%d')
     return f"https://epaper.suprabhaatham.com/details/{location}/{date}/1"
 
 def wrap_grid_page(title, items_html, show_back=True):
@@ -64,9 +68,10 @@ def homepage():
 
 @app.route('/today')
 def show_today_links():
+    today = datetime.date.today().strftime('%Y-%m-%d')
     cards = ""
     for i, loc in enumerate(LOCATIONS):
-        url = get_url_for_location(loc)
+        url = get_url_for_location(loc, today)
         color = RGB_COLORS[i % len(RGB_COLORS)]
         cards += f'''
         <div class="card" style="background-color:{color};">
@@ -77,23 +82,28 @@ def show_today_links():
 
 @app.route('/editorial')
 def editorial():
-    date = datetime.datetime.now().strftime('%d-%m-%Y')
-    chrome_options = Options()
-    chrome_options.add_argument("--headless")
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
+    try:
+        chrome_options = Options()
+        chrome_options.add_argument("--headless=new")
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
+        chrome_options.add_argument("--disable-gpu")
+        chrome_options.add_argument("--window-size=1920,1080")
 
-    with webdriver.Chrome(options=chrome_options) as driver:
-        driver.get("https://epaper.suprabhaatham.com")
-        time.sleep(5)
+        service = Service("/usr/bin/chromedriver")  # adjust path if needed
 
-        img_elements = driver.find_elements("tag name", "img")
-        for img in img_elements:
-            src = img.get_attribute("src")
-            if src and "epaper-page-5" in src and "Kozhikode" in src:
-                return redirect(src)
-
-    return "Editorial image not found", 404
+        with webdriver.Chrome(service=service, options=chrome_options) as driver:
+            driver.get("https://epaper.suprabhaatham.com")
+            time.sleep(7)
+            img_elements = driver.find_elements("tag name", "img")
+            for img in img_elements:
+                src = img.get_attribute("src")
+                if src and "epaper-page-5" in src and "Kozhikode" in src:
+                    return redirect(src)
+        return "Editorial image not found", 404
+    except WebDriverException as e:
+        print("WebDriver Error:", e)
+        return "Unable to load headless browser.", 500
 
 @app.route('/njayar')
 def show_njayar_archive():
@@ -112,9 +122,10 @@ def show_njayar_archive():
         url = get_url_for_location("Njayar Prabhadham", date.strftime('%Y-%m-%d'))
         date_str = date.strftime('%Y-%m-%d')
         color = RGB_COLORS[i % len(RGB_COLORS)]
+        label = "Today" if date == today else date_str
         cards += f'''
         <div class="card" style="background-color:{color};">
-            <a href="{url}" target="_blank">{date_str}</a>
+            <a href="{url}" target="_blank">{label}</a>
         </div>
         '''
     return render_template_string(wrap_grid_page("Njayar Prabhadham - Sunday Editions", cards))
