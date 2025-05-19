@@ -1,51 +1,22 @@
-FROM debian:bookworm
+# Use official Python runtime
+FROM python:3.11-slim
 
-# Install required packages
-RUN apt-get update && apt-get install -y \
-    wget \
-    unzip \
-    curl \
-    gnupg \
-    ca-certificates \
-    jq \
-    chromium \
-    chromium-driver \
-    fonts-liberation \
-    libasound2 \
-    libatk-bridge2.0-0 \
-    libatk1.0-0 \
-    libcups2 \
-    libdbus-1-3 \
-    libgdk-pixbuf2.0-0 \
-    libnspr4 \
-    libnss3 \
-    libx11-xcb1 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxrandr2 \
-    xdg-utils \
-    --no-install-recommends && \
-    apt-get clean && rm -rf /var/lib/apt/lists/*
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
 
-# Define environment variables
-ENV CHROMEDRIVER_PATH=/usr/local/bin/chromedriver
+# Set working directory
+WORKDIR /app
 
-# Get Chromium version
-RUN CHROMIUM_VERSION=$(chromium --version | grep -oP '\d+\.\d+\.\d+') && \
-    echo "Detected Chromium version: $CHROMIUM_VERSION" && \
-    MAJOR_VERSION=$(echo $CHROMIUM_VERSION | cut -d '.' -f1) && \
-    DRIVER_VERSION=$(curl -s "https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions-with-downloads.json" | \
-      jq -r --arg ver "$CHROMIUM_VERSION" '.versions[] | select(.version == $ver) | .version' | head -1) && \
-    echo "Installing ChromeDriver version: $DRIVER_VERSION" && \
-    wget -q "https://edgedl.me.gvt1.com/edgedl/chrome/chrome-for-testing/${DRIVER_VERSION}/linux64/chromedriver-linux64.zip" -O chromedriver.zip && \
-    unzip chromedriver.zip && \
-    mv chromedriver-linux64/chromedriver ${CHROMEDRIVER_PATH} && \
-    chmod +x ${CHROMEDRIVER_PATH} && \
-    rm -rf chromedriver.zip chromedriver-linux64
+# Install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Optional: Add non-root user if needed
-# RUN useradd -m user
-# USER user
+# Copy application code
+COPY main.py .
 
-# Default command (can be changed based on your app)
-CMD ["chromium", "--headless", "--no-sandbox", "--disable-gpu"]
+# Expose the port Flask runs on
+EXPOSE 8000
+
+# Run the Flask app
+CMD ["python", "main.py"]
