@@ -1,5 +1,7 @@
 import datetime
 from flask import Flask, render_template_string, redirect
+import requests
+from datetime import datetime as dt, timedelta, date
 
 app = Flask(__name__)
 
@@ -13,11 +15,23 @@ RGB_COLORS = [
     "#FF6EC7", "#00C2CB", "#FFA41B", "#845EC2"
 ]
 
-def get_url_for_location(location, date=None):
-    if date is None:
-        date = datetime.datetime.now()
-    date_str = date.strftime('%Y-%m-%d')
+editorial_cache = {
+    "date": None,
+    "url": None
+}
+
+def get_url_for_location(location, dt_obj=None):
+    if dt_obj is None:
+        dt_obj = datetime.datetime.now()
+    date_str = dt_obj.strftime('%Y-%m-%d')
     return f"https://epaper.suprabhaatham.com/details/{location}/{date_str}/1"
+
+def check_url(url):
+    try:
+        r = requests.head(url, timeout=3)
+        return r.status_code == 200
+    except:
+        return False
 
 def wrap_grid_page(title, items_html, show_back=True):
     back_html = '<p><a class="back" href="/">Back to Home</a></p>' if show_back else ''
@@ -71,37 +85,70 @@ def show_today_links():
         color = RGB_COLORS[i % len(RGB_COLORS)]
         cards += f'''
         <div class="card" style="background-color:{color};">
-            <a href="{url}" target="_blank">{loc}</a>
+            <a href="{url}" target="_blank" rel="noopener noreferrer">{loc}</a>
         </div>
         '''
     return render_template_string(wrap_grid_page("Today's Suprabhaatham ePaper Links", cards))
 
 @app.route('/editorial')
 def editorial():
-    today = datetime.datetime.now().strftime('%d-%m-%Y')
-    img_url = f"https://e-files.suprabhaatham.com/{today}/Malappuram/{today}-00-05-35-356-epaper-page-5-Malappuram.jpeg"
-    return redirect(img_url)
+    global editorial_cache
+    
+    today_date = date.today()
+    today_str = today_date.strftime('%d-%m-%Y')
+    base_url = "https://e-files.suprabhaatham.com"
+    edition = "Malappuram"
+    page_num = 5
+
+    # Return cached URL if still valid
+    if editorial_cache["date"] == today_date and editorial_cache["url"]:
+        return redirect(editorial_cache["url"])
+
+    start_time = dt.strptime("00:05:30.000", "%H:%M:%S.%f")
+    end_time = dt.strptime("00:05:40.000", "%H:%M:%S.%f")
+    step = timedelta(milliseconds=100)
+
+    current_time = start_time
+    found_url = None
+
+    while current_time <= end_time:
+        time_str = current_time.strftime("%H-%M-%S-%f")[:-3]  # HH-MM-SS-ms
+        filename = f"{today_str}-{time_str}-epaper-page-{page_num}-{edition}.jpeg"
+        url = f"{base_url}/{today_str}/{edition}/{filename}"
+        if check_url(url):
+            found_url = url
+            break
+        current_time += step
+
+    if not found_url:
+        # fallback URL if none found in scan
+        found_url = f"{base_url}/{today_str}/{edition}/{today_str}-00-05-35-356-epaper-page-5-{edition}.jpeg"
+
+    editorial_cache["date"] = today_date
+    editorial_cache["url"] = found_url
+
+    return redirect(found_url)
 
 @app.route('/njayar')
 def show_njayar_archive():
-    start_date = datetime.date(2019, 1, 6)
-    today = datetime.date.today()
-    cutoff = datetime.date(2024, 6, 30)
+    start_date = date(2019, 1, 6)
+    today = date.today()
+    cutoff = date(2024, 6, 30)
     sundays = []
     current = start_date
     while current <= today:
         if current >= cutoff:
             sundays.append(current)
-        current += datetime.timedelta(days=7)
+        current += timedelta(days=7)
 
     cards = ""
-    for i, date in enumerate(reversed(sundays)):
-        url = get_url_for_location("Njayar Prabhadham", date)
-        date_str = date.strftime('%Y-%m-%d')
+    for i, d in enumerate(reversed(sundays)):
+        url = get_url_for_location("Njayar Prabhadham", d)
+        date_str = d.strftime('%Y-%m-%d')
         color = RGB_COLORS[i % len(RGB_COLORS)]
         cards += f'''
         <div class="card" style="background-color:{color};">
-            <a href="{url}" target="_blank">{date_str}</a>
+            <a href="{url}" target="_blank" rel="noopener noreferrer">{date_str}</a>
         </div>
         '''
     return render_template_string(wrap_grid_page("Njayar Prabhadham - Sunday Editions", cards))
