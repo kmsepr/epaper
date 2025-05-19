@@ -22,6 +22,7 @@ RGB_COLORS = [
 def get_url_for_location(location, date=None):
     if not date:
         date = datetime.date.today().strftime('%Y-%m-%d')
+    # For Njayar Prabhadham, the URL pattern might be different, consider adjusting if needed
     return f"https://epaper.suprabhaatham.com/details/{location}/{date}/1"
 
 def wrap_grid_page(title, items_html, show_back=True):
@@ -81,15 +82,6 @@ def show_today_links():
         '''
     return render_template_string(wrap_grid_page("Today's Suprabhaatham ePaper Links", cards))
 
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import WebDriverException
-from selenium.webdriver.chrome.service import Service
-from selenium import webdriver
-import time
-from flask import redirect
-
 @app.route('/editorial')
 def editorial():
     try:
@@ -100,15 +92,14 @@ def editorial():
         chrome_options.add_argument("--disable-gpu")
         chrome_options.add_argument("--window-size=1920,1080")
 
-        # Create a unique temp directory for user data
         user_data_dir = tempfile.mkdtemp()
         chrome_options.add_argument(f"--user-data-dir={user_data_dir}")
 
-        service = Service("/usr/bin/chromedriver")  # Adjust path if necessary
+        service = Service("/usr/bin/chromedriver")  # Make sure this path matches your setup
 
         with webdriver.Chrome(service=service, options=chrome_options) as driver:
             driver.get("https://epaper.suprabhaatham.com")
-            time.sleep(7)  # Wait for page load
+            time.sleep(7)  # Wait for full load (adjust if needed)
 
             img_elements = driver.find_elements("tag name", "img")
             for img in img_elements:
@@ -121,7 +112,6 @@ def editorial():
     except WebDriverException as e:
         print("WebDriver Error:", e)
         return "Unable to load headless browser.", 500
-
 
 @app.route('/njayar')
 def show_njayar_archive():
