@@ -80,27 +80,42 @@ def show_today_links():
         '''
     return render_template_string(wrap_grid_page("Today's Suprabhaatham ePaper Links", cards))
 
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import WebDriverException
+from selenium.webdriver.chrome.service import Service
+from selenium import webdriver
+import time
+from flask import redirect
+
 @app.route('/editorial')
 def editorial():
     try:
-        chrome_options = Options()
-        chrome_options.add_argument("--headless=new")
+        chrome_options = webdriver.ChromeOptions()
+        chrome_options.add_argument("--headless=chrome")
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--disable-gpu")
         chrome_options.add_argument("--window-size=1920,1080")
+        chrome_options.add_argument("--disable-extensions")
+        chrome_options.add_argument("--disable-background-networking")
+        chrome_options.add_argument("--single-process")
 
-        service = Service("/usr/bin/chromedriver")  # adjust path if needed
+        service = Service("/usr/bin/chromedriver")  # Adjust path if necessary
 
         with webdriver.Chrome(service=service, options=chrome_options) as driver:
             driver.get("https://epaper.suprabhaatham.com")
-            time.sleep(7)
-            img_elements = driver.find_elements("tag name", "img")
+            # Wait up to 15 seconds for at least one <img> element to be present
+            WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.TAG_NAME, "img")))
+            
+            img_elements = driver.find_elements(By.TAG_NAME, "img")
             for img in img_elements:
                 src = img.get_attribute("src")
                 if src and "epaper-page-5" in src and "Kozhikode" in src:
                     return redirect(src)
         return "Editorial image not found", 404
+
     except WebDriverException as e:
         print("WebDriver Error:", e)
         return "Unable to load headless browser.", 500
