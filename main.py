@@ -1,5 +1,5 @@
 import datetime
-from flask import Flask, render_template_string, redirect
+from flask import Flask, render_template_string, redirect, request
 import requests
 from datetime import datetime as dt, timedelta, date
 
@@ -66,7 +66,8 @@ def homepage():
     links = [
         ("Today's Editions", "/today"),
         ("Njayar Prabhadham Archive", "/njayar"),
-        ("Editorial", "/editorial")
+        ("Editorial", "/editorial"),
+        ("Select by Date", "/epaper-date")
     ]
     for i, (label, link) in enumerate(links):
         color = RGB_COLORS[i % len(RGB_COLORS)]
@@ -93,19 +94,17 @@ def show_today_links():
 @app.route('/editorial')
 def editorial():
     global editorial_cache
-    
+
     today_date = date.today()
-    folder_str = today_date.strftime('%d-%m-%Y')      # Folder path (DD-MM-YYYY)
-    filename_prefix = today_date.strftime('%Y-%m-%d')  # Filename prefix (YYYY-MM-DD)
+    folder_str = today_date.strftime('%d-%m-%Y')
+    filename_prefix = today_date.strftime('%Y-%m-%d')
     base_url = "https://e-files.suprabhaatham.com"
     edition = "Malappuram"
     page_num = 5
 
-    # Return cached URL if already resolved today
     if editorial_cache["date"] == today_date and editorial_cache["url"]:
         return redirect(editorial_cache["url"])
 
-    # Scan for a working image filename within a small time window
     start_time = dt.strptime("00:05:00.000", "%H:%M:%S.%f")
     end_time = dt.strptime("00:05:20.000", "%H:%M:%S.%f")
     step = timedelta(milliseconds=100)
@@ -114,7 +113,7 @@ def editorial():
     found_url = None
 
     while current_time <= end_time:
-        time_str = current_time.strftime("%H-%M-%S-%f")[:-3]  # e.g., 00-05-11-116
+        time_str = current_time.strftime("%H-%M-%S-%f")[:-3]
         filename = f"{filename_prefix}-{time_str}-epaper-page-{page_num}-{edition}.jpeg"
         url = f"{base_url}/{folder_str}/{edition}/{filename}"
         if check_url(url):
@@ -122,13 +121,11 @@ def editorial():
             break
         current_time += step
 
-    # Fallback to a known sample if none found
     if not found_url:
         fallback_time = "00-05-11-116"
         fallback_filename = f"{filename_prefix}-{fallback_time}-epaper-page-{page_num}-{edition}.jpeg"
         found_url = f"{base_url}/{folder_str}/{edition}/{fallback_filename}"
 
-    # Cache the result
     editorial_cache["date"] = today_date
     editorial_cache["url"] = found_url
 
@@ -157,6 +154,90 @@ def show_njayar_archive():
         </div>
         '''
     return render_template_string(wrap_grid_page("Njayar Prabhadham - Sunday Editions", cards))
+
+@app.route('/epaper-date', methods=['GET', 'POST'])
+def epaper_by_date():
+    html_template = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>ePaper by Date</title>
+        <style>
+            body { font-family: sans-serif; text-align: center; padding: 40px; background-color: #f4f4f4; }
+            h1 { margin-bottom: 20px; }
+            form { margin-bottom: 30px; }
+            input[type="date"] {
+                padding: 10px;
+                font-size: 16px;
+                border: 1px solid #ccc;
+                border-radius: 6px;
+            }
+            button {
+                padding: 10px 20px;
+                font-size: 16px;
+                background-color: #4D96FF;
+                color: white;
+                border: none;
+                border-radius: 6px;
+                cursor: pointer;
+            }
+            .grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+                gap: 20px;
+                max-width: 1000px;
+                margin: auto;
+            }
+            .card {
+                padding: 20px;
+                border-radius: 12px;
+                box-shadow: 2px 2px 10px rgba(0,0,0,0.1);
+            }
+            .card a {
+                text-decoration: none;
+                font-size: 18px;
+                color: white;
+                font-weight: bold;
+            }
+            a.back {
+                display: inline-block;
+                margin-top: 40px;
+                font-size: 16px;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>Select a Date</h1>
+        <form method="post">
+            <input type="date" name="picked_date" max="{today}" required>
+            <button type="submit">View Editions</button>
+        </form>
+        {cards_section}
+        <p><a class="back" href="/">Back to Home</a></p>
+    </body>
+    </html>
+    """
+
+    cards_html = ""
+    if request.method == 'POST':
+        picked_date_str = request.form.get("picked_date")
+        try:
+            picked_date = dt.strptime(picked_date_str, "%Y-%m-%d").date()
+            for i, loc in enumerate(LOCATIONS):
+                url = get_url_for_location(loc, picked_date)
+                color = RGB_COLORS[i % len(RGB_COLORS)]
+                cards_html += f'''
+                <div class="card" style="background-color:{color};">
+                    <a href="{url}" target="_blank" rel="noopener noreferrer">{loc}</a>
+                </div>
+                '''
+            cards_section = f'<div class="grid">{cards_html}</div>'
+        except Exception as e:
+            cards_section = f"<p>Error: {str(e)}</p>"
+    else:
+        cards_section = ""
+
+    return html_template.format(today=date.today().isoformat(), cards_section=cards_section)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8000)
