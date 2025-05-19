@@ -1,30 +1,20 @@
 import os
-import requests
 import datetime
+import requests
 from flask import Flask, render_template_string
+from PIL import Image
+from io import BytesIO
 
 app = Flask(__name__)
 
 LOCATIONS = [
-    "Kozhikode",
-    "Malappuram",
-    "Kannur",
-    "Thrissur",
-    "Kochi",
-    "Thiruvananthapuram",
-    "Palakkad",
-    "Gulf"
+    "Kozhikode", "Malappuram", "Kannur", "Thrissur",
+    "Kochi", "Thiruvananthapuram", "Palakkad", "Gulf"
 ]
 
 RGB_COLORS = [
-    "#FF6B6B",  # Red
-    "#6BCB77",  # Green
-    "#4D96FF",  # Blue
-    "#FFD93D",  # Yellow
-    "#FF6EC7",  # Pink
-    "#00C2CB",  # Cyan
-    "#FFA41B",  # Orange
-    "#845EC2"   # Purple
+    "#FF6B6B", "#6BCB77", "#4D96FF", "#FFD93D",
+    "#FF6EC7", "#00C2CB", "#FFA41B", "#845EC2"
 ]
 
 def get_url_for_location(location, date=None):
@@ -35,56 +25,56 @@ def get_url_for_location(location, date=None):
 
 def wrap_grid_page(title, items_html, show_back=True):
     back_html = '<p><a class="back" href="/">Back to Home</a></p>' if show_back else ''
-    html_template = """
+    html_template = f"""
     <!DOCTYPE html>
     <html>
     <head>
-      <title>{title}</title>
-      <style>
-        body {{
-          font-family: sans-serif;
-          text-align: center;
-          padding: 40px;
-          background-color: #f9f9f9;
-        }}
-        h1 {{
-          margin-bottom: 30px;
-        }}
-        .grid {{
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-          gap: 20px;
-          max-width: 1000px;
-          margin: auto;
-        }}
-        .card {{
-          padding: 20px;
-          border-radius: 12px;
-          box-shadow: 2px 2px 10px rgba(0,0,0,0.1);
-        }}
-        .card a {{
-          text-decoration: none;
-          font-size: 18px;
-          color: white;
-          font-weight: bold;
-        }}
-        a.back {{
-          display: inline-block;
-          margin-top: 40px;
-          font-size: 16px;
-        }}
-      </style>
+        <title>{title}</title>
+        <style>
+            body {{
+                font-family: sans-serif;
+                text-align: center;
+                padding: 40px;
+                background-color: #f9f9f9;
+            }}
+            h1 {{
+                margin-bottom: 30px;
+            }}
+            .grid {{
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+                gap: 20px;
+                max-width: 1000px;
+                margin: auto;
+            }}
+            .card {{
+                padding: 20px;
+                border-radius: 12px;
+                box-shadow: 2px 2px 10px rgba(0,0,0,0.1);
+            }}
+            .card a {{
+                text-decoration: none;
+                font-size: 18px;
+                color: white;
+                font-weight: bold;
+            }}
+            a.back {{
+                display: inline-block;
+                margin-top: 40px;
+                font-size: 16px;
+            }}
+        </style>
     </head>
     <body>
-      <h1>{title}</h1>
-      <div class="grid">
-        {items_html}
-      </div>
-      {back_html}
+        <h1>{title}</h1>
+        <div class="grid">
+            {items_html}
+        </div>
+        {back_html}
     </body>
     </html>
     """
-    return html_template.format(title=title, items_html=items_html, back_html=back_html)
+    return html_template
 
 @app.route('/')
 def homepage():
@@ -116,56 +106,49 @@ def show_today_links():
         '''
     return render_template_string(wrap_grid_page("Today's Suprabhaatham ePaper Links", cards))
 
-def fetch_prayer_data(city="Malappuram"):
-    url = "http://api.aladhan.com/v1/timingsByCity"
-    params = {
-        "city": city,
-        "country": "India",
-        "method": 2
-    }
-    response = requests.get(url, params=params)
-    if response.status_code == 200:
-        data = response.json()
-        timings = data["data"]["timings"]
-        hijri_date = data["data"]["date"]["hijri"]["date"]
-        gregorian_date = data["data"]["date"]["gregorian"]["date"]
-
-        from datetime import datetime, timedelta
-
-        OFFSETS = {
-            "Fajr": -18,
-            "Sunrise": 0,
-            "Dhuhr": 3,
-            "Asr": 2,
-            "Maghrib": 3,
-            "Isha": 16
-        }
-
-        selected = ["Fajr", "Sunrise", "Dhuhr", "Asr", "Maghrib", "Isha"]
-        adjusted_timings = {}
-        for name in selected:
-            try:
-                dt = datetime.strptime(timings[name], "%H:%M")
-                dt += timedelta(minutes=OFFSETS.get(name, 0))
-                adjusted_timings[name] = dt.strftime("%H:%M")
-            except:
-                adjusted_timings[name] = timings[name]
-
-        return adjusted_timings, hijri_date, gregorian_date
-    return {}, "", ""
+def crop_lower_left(image, width_ratio=0.4, height_ratio=0.25):
+    w, h = image.size
+    left = 0
+    upper = int(h * (1 - height_ratio))
+    right = int(w * width_ratio)
+    lower = h
+    return image.crop((left, upper, right, lower))
 
 @app.route('/prayer')
-def prayer_times():
-    timings, hijri, gregorian = fetch_prayer_data()
-    cards = ""
-    for name, time in timings.items():
-        cards += f'''
-        <div class="card" style="background-color:#6BCB77;">
-            <div style="color:white; font-size:18px;"><strong>{name}</strong><br>{time}</div>
-        </div>
-        '''
-    header = f"Namaz Times - Malappuram<br><small>{gregorian} | Hijri: {hijri}</small>"
-    return render_template_string(wrap_grid_page(header, cards))
+def show_prayer_crop():
+    today = datetime.datetime.now().strftime('%d-%m-%Y')
+    img_url = f"https://e-files.suprabhaatham.com/{today}/Malappuram/{today}-00-05-35-356-epaper-page-5-Malappuram.jpeg"
+    
+    try:
+        response = requests.get(img_url)
+        image = Image.open(BytesIO(response.content)).convert("RGB")
+        cropped = crop_lower_left(image)
+        
+        # Save to static file (you can clear/overwrite each day)
+        os.makedirs("static", exist_ok=True)
+        cropped_path = "static/cropped_namaz.jpg"
+        cropped.save(cropped_path)
+
+        return render_template_string(f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Namaz Times</title>
+            <style>
+                body {{ font-family: sans-serif; padding: 40px; background: #f5f5f5; text-align: center; }}
+                img {{ max-width: 100%; height: auto; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.2); }}
+                a {{ display: block; margin-top: 30px; }}
+            </style>
+        </head>
+        <body>
+            <h1>Namaz Times from Suprabhaatham</h1>
+            <img src="/static/cropped_namaz.jpg" alt="Cropped Namaz Times">
+            <a href="/">Back to Home</a>
+        </body>
+        </html>
+        """)
+    except Exception as e:
+        return f"Failed to load or process image: {str(e)}"
 
 @app.route('/njayar')
 def show_njayar_archive():
