@@ -95,35 +95,40 @@ def editorial():
     global editorial_cache
     
     today_date = date.today()
-    today_str = today_date.strftime('%d-%m-%Y')
+    folder_str = today_date.strftime('%d-%m-%Y')      # Folder path (DD-MM-YYYY)
+    filename_prefix = today_date.strftime('%Y-%m-%d')  # Filename prefix (YYYY-MM-DD)
     base_url = "https://e-files.suprabhaatham.com"
     edition = "Malappuram"
     page_num = 5
 
-    # Return cached URL if still valid
+    # Return cached URL if already resolved today
     if editorial_cache["date"] == today_date and editorial_cache["url"]:
         return redirect(editorial_cache["url"])
 
-    start_time = dt.strptime("00:05:30.000", "%H:%M:%S.%f")
-    end_time = dt.strptime("00:05:40.000", "%H:%M:%S.%f")
+    # Scan for a working image filename within a small time window
+    start_time = dt.strptime("00:05:00.000", "%H:%M:%S.%f")
+    end_time = dt.strptime("00:05:20.000", "%H:%M:%S.%f")
     step = timedelta(milliseconds=100)
 
     current_time = start_time
     found_url = None
 
     while current_time <= end_time:
-        time_str = current_time.strftime("%H-%M-%S-%f")[:-3]  # HH-MM-SS-ms
-        filename = f"{today_str}-{time_str}-epaper-page-{page_num}-{edition}.jpeg"
-        url = f"{base_url}/{today_str}/{edition}/{filename}"
+        time_str = current_time.strftime("%H-%M-%S-%f")[:-3]  # e.g., 00-05-11-116
+        filename = f"{filename_prefix}-{time_str}-epaper-page-{page_num}-{edition}.jpeg"
+        url = f"{base_url}/{folder_str}/{edition}/{filename}"
         if check_url(url):
             found_url = url
             break
         current_time += step
 
+    # Fallback to a known sample if none found
     if not found_url:
-        # fallback URL if none found in scan
-        found_url = f"{base_url}/{today_str}/{edition}/{today_str}-00-05-35-356-epaper-page-5-{edition}.jpeg"
+        fallback_time = "00-05-11-116"
+        fallback_filename = f"{filename_prefix}-{fallback_time}-epaper-page-{page_num}-{edition}.jpeg"
+        found_url = f"{base_url}/{folder_str}/{edition}/{fallback_filename}"
 
+    # Cache the result
     editorial_cache["date"] = today_date
     editorial_cache["url"] = found_url
 
