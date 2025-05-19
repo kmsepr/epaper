@@ -1,5 +1,5 @@
-import datetime
 from flask import Flask, render_template_string, redirect
+import datetime
 
 app = Flask(__name__)
 
@@ -78,8 +78,8 @@ def show_today_links():
 
 @app.route('/editorial')
 def editorial():
-    today = datetime.datetime.now().strftime('%d-%m-%Y')
-    img_url = f"https://e-files.suprabhaatham.com/{today}/Malappuram/{today}-00-05-35-356-epaper-page-5-Malappuram.jpeg"
+    # Hardcoded editorial image URL
+    img_url = "https://e-files.suprabhaatham.com/19-05-2025/Malappuram/19-05-2025-00-05-35-356-epaper-page-5-Malappuram.jpeg"
     return redirect(img_url)
 
 @app.route('/njayar')
