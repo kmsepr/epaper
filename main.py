@@ -86,6 +86,7 @@ def show_today_links():
 def editorial():
     try:
         chrome_options = Options()
+        chrome_options.binary_location = "/usr/bin/chromium"
         chrome_options.add_argument("--headless=new")
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
@@ -95,11 +96,11 @@ def editorial():
         user_data_dir = tempfile.mkdtemp()
         chrome_options.add_argument(f"--user-data-dir={user_data_dir}")
 
-        service = Service("/usr/bin/chromedriver")  # Make sure this path matches your setup
+        service = Service("/usr/local/bin/chromedriver")
 
         with webdriver.Chrome(service=service, options=chrome_options) as driver:
             driver.get("https://epaper.suprabhaatham.com")
-            time.sleep(7)  # Wait for full load (adjust if needed)
+            time.sleep(7)  # wait for page load
 
             img_elements = driver.find_elements("tag name", "img")
             for img in img_elements:
