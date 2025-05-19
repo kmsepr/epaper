@@ -1,4 +1,8 @@
+import datetime
 from flask import Flask, render_template_string, redirect
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+import time
 
 app = Flask(__name__)
 
@@ -17,7 +21,7 @@ def get_url_for_location(location, date="2025-05-19"):
 
 def wrap_grid_page(title, items_html, show_back=True):
     back_html = '<p><a class="back" href="/">Back to Home</a></p>' if show_back else ''
-    html_template = f"""
+    return f"""
     <!DOCTYPE html>
     <html>
     <head>
@@ -40,7 +44,6 @@ def wrap_grid_page(title, items_html, show_back=True):
     </body>
     </html>
     """
-    return html_template
 
 @app.route('/')
 def homepage():
@@ -74,13 +77,26 @@ def show_today_links():
 
 @app.route('/editorial')
 def editorial():
-    # Hardcoded image link
-    img_url = "https://e-files.suprabhaatham.com/19-05-2025/Malappuram/2025-05-19-00-05-35-356-epaper-page-5-Malappuram.jpeg"
-    return redirect(img_url)
+    date = datetime.datetime.now().strftime('%d-%m-%Y')
+    chrome_options = Options()
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+
+    with webdriver.Chrome(options=chrome_options) as driver:
+        driver.get("https://epaper.suprabhaatham.com")
+        time.sleep(5)
+
+        img_elements = driver.find_elements("tag name", "img")
+        for img in img_elements:
+            src = img.get_attribute("src")
+            if src and "epaper-page-5" in src and "Kozhikode" in src:
+                return redirect(src)
+
+    return "Editorial image not found", 404
 
 @app.route('/njayar')
 def show_njayar_archive():
-    import datetime
     start_date = datetime.date(2019, 1, 6)
     today = datetime.date.today()
     cutoff = datetime.date(2024, 6, 30)
