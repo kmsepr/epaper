@@ -67,7 +67,7 @@ def homepage():
         ("Today's Editions", "/today"),
         ("Njayar Prabhadham Archive", "/njayar"),
         ("Editorial", "/editorial"),
-        ("Select by Date", "/epaper-date")
+       
     ]
     for i, (label, link) in enumerate(links):
         color = RGB_COLORS[i % len(RGB_COLORS)]
@@ -155,89 +155,7 @@ def show_njayar_archive():
         '''
     return render_template_string(wrap_grid_page("Njayar Prabhadham - Sunday Editions", cards))
 
-@app.route('/epaper-date', methods=['GET', 'POST'])
-def epaper_by_date():
-    html_template = """
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>ePaper by Date</title>
-        <style>
-            body { font-family: sans-serif; text-align: center; padding: 40px; background-color: #f4f4f4; }
-            h1 { margin-bottom: 20px; }
-            form { margin-bottom: 30px; }
-            input[type="date"] {
-                padding: 10px;
-                font-size: 16px;
-                border: 1px solid #ccc;
-                border-radius: 6px;
-            }
-            button {
-                padding: 10px 20px;
-                font-size: 16px;
-                background-color: #4D96FF;
-                color: white;
-                border: none;
-                border-radius: 6px;
-                cursor: pointer;
-            }
-            .grid {
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-                gap: 20px;
-                max-width: 1000px;
-                margin: auto;
-            }
-            .card {
-                padding: 20px;
-                border-radius: 12px;
-                box-shadow: 2px 2px 10px rgba(0,0,0,0.1);
-            }
-            .card a {
-                text-decoration: none;
-                font-size: 18px;
-                color: white;
-                font-weight: bold;
-            }
-            a.back {
-                display: inline-block;
-                margin-top: 40px;
-                font-size: 16px;
-            }
-        </style>
-    </head>
-    <body>
-        <h1>Select a Date</h1>
-        <form method="post">
-            <input type="date" name="picked_date" max="{today}" required>
-            <button type="submit">View Editions</button>
-        </form>
-        {cards_section}
-        <p><a class="back" href="/">Back to Home</a></p>
-    </body>
-    </html>
-    """
 
-    cards_html = ""
-    if request.method == 'POST':
-        picked_date_str = request.form.get("picked_date")
-        try:
-            picked_date = dt.strptime(picked_date_str, "%Y-%m-%d").date()
-            for i, loc in enumerate(LOCATIONS):
-                url = get_url_for_location(loc, picked_date)
-                color = RGB_COLORS[i % len(RGB_COLORS)]
-                cards_html += f'''
-                <div class="card" style="background-color:{color};">
-                    <a href="{url}" target="_blank" rel="noopener noreferrer">{loc}</a>
-                </div>
-                '''
-            cards_section = f'<div class="grid">{cards_html}</div>'
-        except Exception as e:
-            cards_section = f"<p>Error: {str(e)}</p>"
-    else:
-        cards_section = ""
-
-    return html_template.format(today=date.today().isoformat(), cards_section=cards_section)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8000)
