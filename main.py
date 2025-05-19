@@ -1,5 +1,5 @@
 import datetime
-from flask import Flask, render_template_string
+from flask import Flask, render_template_string, redirect
 
 app = Flask(__name__)
 
@@ -21,7 +21,7 @@ def get_url_for_location(location, date=None):
 
 def wrap_grid_page(title, items_html, show_back=True):
     back_html = '<p><a class="back" href="/">Back to Home</a></p>' if show_back else ''
-    html_template = """
+    html_template = f"""
     <!DOCTYPE html>
     <html>
     <head>
@@ -44,7 +44,7 @@ def wrap_grid_page(title, items_html, show_back=True):
     </body>
     </html>
     """
-    return html_template.format(title=title, items_html=items_html, back_html=back_html)
+    return html_template
 
 @app.route('/')
 def homepage():
@@ -77,27 +77,10 @@ def show_today_links():
     return render_template_string(wrap_grid_page("Today's Suprabhaatham ePaper Links", cards))
 
 @app.route('/editorial')
-def show_editorial():
-    today = datetime.datetime.now().strftime('%Y-%m-%d')
+def editorial():
+    today = datetime.datetime.now().strftime('%d-%m-%Y')
     img_url = f"https://e-files.suprabhaatham.com/{today}/Malappuram/{today}-00-05-35-356-epaper-page-5-Malappuram.jpeg"
-    return render_template_string(f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Editorial Page</title>
-        <style>
-            body {{ font-family: sans-serif; text-align: center; padding: 40px; background: #f5f5f5; }}
-            img {{ max-width: 100%; height: auto; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
-            a {{ margin-top: 20px; display: inline-block; }}
-        </style>
-    </head>
-    <body>
-        <h1>Editorial Page (Page 5 - Malappuram)</h1>
-        <img src="{img_url}" alt="Editorial Page">
-        <br><a href="/">Back to Home</a>
-    </body>
-    </html>
-    """)
+    return redirect(img_url)
 
 @app.route('/njayar')
 def show_njayar_archive():
