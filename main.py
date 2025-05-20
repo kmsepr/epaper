@@ -1,11 +1,22 @@
+import os
 import datetime
-from flask import Flask, render_template_string, redirect, request
-import requests
 import threading
 import time
 from datetime import datetime as dt, timedelta, date
+from flask import Flask, render_template_string, redirect, request
+
+import requests
 
 app = Flask(__name__)
+
+# Upload & cache setup
+UPLOAD_FOLDER = 'static'
+EDITORIAL_IMAGE = 'editorial.jpg'
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 LOCATIONS = [
     "Kozhikode", "Malappuram", "Kannur", "Thrissur",
@@ -69,7 +80,7 @@ def homepage():
         ("Today's Editions", "/today"),
         ("Njayar Prabhadham Archive", "/njayar"),
         ("Editorial", "/editorial"),
-       
+        ("Upload Editorial", "/upload"),
     ]
     for i, (label, link) in enumerate(links):
         color = RGB_COLORS[i % len(RGB_COLORS)]
@@ -96,8 +107,16 @@ def show_today_links():
 @app.route('/editorial')
 def editorial():
     global editorial_cache
-
     today_date = date.today()
+
+    # Check for manually uploaded editorial
+    manual_path = os.path.join(app.config['UPLOAD_FOLDER'], EDITORIAL_IMAGE)
+    if os.path.exists(manual_path):
+        editorial_cache["date"] = today_date
+        editorial_cache["url"] = f"/static/{EDITORIAL_IMAGE}"
+        return redirect(editorial_cache["url"])
+
+    # Auto-fetch if not already cached
     folder_str = today_date.strftime('%d-%m-%Y')
     filename_prefix = today_date.strftime('%Y-%m-%d')
     base_url = "https://e-files.suprabhaatham.com"
@@ -133,6 +152,28 @@ def editorial():
 
     return redirect(found_url)
 
+@app.route('/upload', methods=['GET', 'POST'])
+def upload_editorial_image():
+    if request.method == 'POST':
+        file = request.files.get('file')
+        if file and allowed_file(file.filename):
+            file.save(os.path.join(app.config['UPLOAD_FOLDER'], EDITORIAL_IMAGE))
+            editorial_cache["date"] = date.today()
+            editorial_cache["url"] = f"/static/{EDITORIAL_IMAGE}"
+            return redirect('/editorial')
+        return "Invalid file format. Only PNG or JPG allowed."
+
+    return '''
+    <!doctype html>
+    <title>Upload Editorial</title>
+    <h1>Upload Editorial Image</h1>
+    <form method=post enctype=multipart/form-data>
+      <input type=file name=file accept="image/*">
+      <input type=submit value=Upload>
+    </form>
+    <p><a href="/">Back to Home</a></p>
+    '''
+
 @app.route('/njayar')
 def show_njayar_archive():
     start_date = date(2019, 1, 6)
@@ -157,12 +198,20 @@ def show_njayar_archive():
         '''
     return render_template_string(wrap_grid_page("Njayar Prabhadham - Sunday Editions", cards))
 
-
 def update_editorial_url_periodically():
     global editorial_cache
 
     while True:
         today_date = date.today()
+
+        # Skip updating if manual image exists
+        manual_path = os.path.join(app.config['UPLOAD_FOLDER'], EDITORIAL_IMAGE)
+        if os.path.exists(manual_path):
+            editorial_cache["date"] = today_date
+            editorial_cache["url"] = f"/static/{EDITORIAL_IMAGE}"
+            time.sleep(3600)
+            continue
+
         folder_str = today_date.strftime('%d-%m-%Y')
         filename_prefix = today_date.strftime('%Y-%m-%d')
         base_url = "https://e-files.suprabhaatham.com"
@@ -193,12 +242,9 @@ def update_editorial_url_periodically():
         editorial_cache["date"] = today_date
         editorial_cache["url"] = found_url
 
-        time.sleep(3600)  # Sleep for 1 hour
-
+        time.sleep(3600)  # Retry every hour
 
 if __name__ == '__main__':
-    # Start the background thread
-    t = threading.Thread(target=update_editorial_url_periodically, daemon=True)
-    t.start()
-
+    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+    threading.Thread(target=update_editorial_url_periodically, daemon=True).start()
     app.run(host='0.0.0.0', port=8000)
