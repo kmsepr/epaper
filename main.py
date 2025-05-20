@@ -1,10 +1,6 @@
 import os
 import datetime
-import threading
-import time
-from flask import Flask, render_template_string, redirect, request
-import requests
-from datetime import datetime as dt, timedelta, date
+from flask import Flask, render_template_string, request
 
 app = Flask(__name__)
 
@@ -20,18 +16,6 @@ RGB_COLORS = [
     "#FF6B6B", "#6BCB77", "#4D96FF", "#FFD93D",
     "#FF6EC7", "#00C2CB", "#FFA41B", "#845EC2"
 ]
-
-namaz_cache = {
-    "date": None,
-    "url": None
-}
-
-def check_url(url):
-    try:
-        r = requests.head(url, timeout=3)
-        return r.status_code == 200
-    except:
-        return False
 
 def get_url_for_location(location, dt_obj=None):
     if dt_obj is None:
@@ -87,57 +71,32 @@ def show_today_links():
 
 @app.route('/prayer')
 def show_prayer_image():
-    global namaz_cache
-
-    today_date = date.today()
-    folder_str = today_date.strftime('%d-%m-%Y')
-    filename_prefix = today_date.strftime('%Y-%m-%d')
-    base_url = "https://e-files.suprabhaatham.com"
-    edition = "Malappuram"
-    page_num = 5
-
-    if namaz_cache["date"] == today_date and namaz_cache["url"]:
-        return redirect(namaz_cache["url"])
-
-    start_time = dt.strptime("00:05:00.000", "%H:%M:%S.%f")
-    end_time = dt.strptime("00:05:20.000", "%H:%M:%S.%f")
-    step = timedelta(milliseconds=100)
-    current_time = start_time
-    found_url = None
-
-    while current_time <= end_time:
-        time_str = current_time.strftime("%H-%M-%S-%f")[:-3]
-        filename = f"{filename_prefix}-{time_str}-epaper-page-{page_num}-{edition}.jpeg"
-        url = f"{base_url}/{folder_str}/{edition}/{filename}"
-        if check_url(url):
-            found_url = url
-            break
-        current_time += step
-
-    if not found_url:
-        uploaded_path = os.path.join(app.config['UPLOAD_FOLDER'], NAMAZ_IMAGE)
-        if os.path.exists(uploaded_path):
-            found_url = f"/static/{NAMAZ_IMAGE}"
-        else:
-            fallback_time = "00-05-35-356"
-            fallback_filename = f"{filename_prefix}-{fallback_time}-epaper-page-{page_num}-{edition}.jpeg"
-            found_url = f"{base_url}/{folder_str}/{edition}/{fallback_filename}"
-
-    namaz_cache["date"] = today_date
-    namaz_cache["url"] = found_url
-    return redirect(found_url)
+    image_path = os.path.join(app.config['UPLOAD_FOLDER'], NAMAZ_IMAGE)
+    if os.path.exists(image_path):
+        return render_template_string('''
+            <!doctype html>
+            <html>
+            <head><title>Namaz Time</title></head>
+            <body style="text-align:center; padding:20px;">
+                <h2>Today's Namaz Time</h2>
+                <img src="/static/prayer.jpeg" style="width:100%; max-width:600px; border:1px solid #ccc;">
+            </body>
+            </html>
+        ''')
+    else:
+        return 'Namaz time image not found.', 404
 
 @app.route('/njayar')
 def show_njayar_archive():
-    start_date = date(2019, 1, 6)
-    today = date.today()
-    cutoff = date(2024, 6, 30)
+    start_date = datetime.date(2019, 1, 6)
+    today = datetime.date.today()
+    cutoff = datetime.date(2024, 6, 30)
     sundays = []
     current = start_date
     while current <= today:
         if current >= cutoff:
             sundays.append(current)
-        current += timedelta(days=7)
+        current += datetime.timedelta(days=7)
 
     cards = ""
     for i, d in enumerate(reversed(sundays)):
@@ -151,9 +110,6 @@ def show_njayar_archive():
         '''
     return render_template_string(wrap_grid_page("Njayar Prabhadham - Sunday Editions", cards))
 
-import os
-from flask import request
-
 @app.route('/upload', methods=['GET', 'POST'])
 def upload_prayer_image():
     if request.method == 'POST':
@@ -163,14 +119,14 @@ def upload_prayer_image():
         if file.filename == '':
             return 'No selected file'
         if file and file.filename.lower().endswith(('.jpg', '.jpeg', '.png')):
-            os.makedirs('static', exist_ok=True)
-            file.save('static/prayer.jpeg')
+            os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+            file.save(os.path.join(app.config['UPLOAD_FOLDER'], NAMAZ_IMAGE))
             return 'Upload successful'
         else:
             return 'Invalid file format'
     return '''
         <form method="post" enctype="multipart/form-data">
-            <input type="file" name="image">
+            <input type="file" name="image" required>
             <input type="submit" value="Upload">
         </form>
     '''
