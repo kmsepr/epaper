@@ -1,5 +1,6 @@
 import os
 import time
+import json
 import threading
 import datetime
 import requests
@@ -256,6 +257,41 @@ def update_epaper_json():
             print(f"[Error updating epaper.txt] {e}")
 
         time.sleep(86400)  # Wait for 24 hours
+
+
+@app.route('/malappuram/pages')
+def show_malappuram_pages():
+    if not os.path.exists(EPAPER_TXT):
+        return "epaper.txt not found", 404
+
+    try:
+        with open(EPAPER_TXT, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        pages = [
+            entry for entry in data.get("data", [])
+            if entry.get("Location") == "Malappuram"
+        ]
+
+        if not pages:
+            return "No pages found for Malappuram.", 404
+
+        cards = ""
+        for i, page in enumerate(sorted(pages, key=lambda x: x.get("PageNo", 0))):
+            img_url = page.get("Image")
+            page_no = page.get("PageNo", "N/A")
+            date = page.get("Date", "")
+            cards += f'''
+            <div class="card" style="background-color:{RGB_COLORS[i % len(RGB_COLORS)]};">
+                <a href="{img_url}" target="_blank">Page {page_no}<br><small>{date}</small></a>
+            </div>
+            '''
+
+        return render_template_string(wrap_grid_page("Malappuram - All Pages", cards))
+
+    except Exception as e:
+        return f"Error: {e}", 500
+
 
 if __name__ == '__main__':
     threading.Thread(target=update_epaper_json, daemon=True).start()
