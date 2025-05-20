@@ -2,42 +2,29 @@ import os
 import datetime
 import threading
 import time
-from datetime import datetime as dt, timedelta, date
 from flask import Flask, render_template_string, redirect, request
-
 import requests
+from datetime import datetime as dt, timedelta, date
 
 app = Flask(__name__)
 
-# Upload & cache setup
-UPLOAD_FOLDER = 'static'
-EDITORIAL_IMAGE = 'editorial.jpg'
-ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
+UPLOAD_FOLDER = "static"
+NAMAZ_IMAGE = "prayer.jpeg"
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-
-def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 LOCATIONS = [
     "Kozhikode", "Malappuram", "Kannur", "Thrissur",
     "Kochi", "Thiruvananthapuram", "Palakkad", "Gulf"
 ]
-
 RGB_COLORS = [
     "#FF6B6B", "#6BCB77", "#4D96FF", "#FFD93D",
     "#FF6EC7", "#00C2CB", "#FFA41B", "#845EC2"
 ]
 
-editorial_cache = {
+namaz_cache = {
     "date": None,
     "url": None
 }
-
-def get_url_for_location(location, dt_obj=None):
-    if dt_obj is None:
-        dt_obj = datetime.datetime.now()
-    date_str = dt_obj.strftime('%Y-%m-%d')
-    return f"https://epaper.suprabhaatham.com/details/{location}/{date_str}/1"
 
 def check_url(url):
     try:
@@ -46,9 +33,15 @@ def check_url(url):
     except:
         return False
 
+def get_url_for_location(location, dt_obj=None):
+    if dt_obj is None:
+        dt_obj = datetime.datetime.now()
+    date_str = dt_obj.strftime('%Y-%m-%d')
+    return f"https://epaper.suprabhaatham.com/details/{location}/{date_str}/1"
+
 def wrap_grid_page(title, items_html, show_back=True):
     back_html = '<p><a class="back" href="/">Back to Home</a></p>' if show_back else ''
-    html_template = f"""
+    return f"""
     <!DOCTYPE html>
     <html>
     <head>
@@ -64,31 +57,23 @@ def wrap_grid_page(title, items_html, show_back=True):
     </head>
     <body>
         <h1>{title}</h1>
-        <div class="grid">
-            {items_html}
-        </div>
+        <div class="grid">{items_html}</div>
         {back_html}
     </body>
     </html>
     """
-    return html_template
 
 @app.route('/')
 def homepage():
-    cards = ""
     links = [
         ("Today's Editions", "/today"),
         ("Njayar Prabhadham Archive", "/njayar"),
-        ("Editorial", "/editorial"),
-        ("Upload Editorial", "/upload"),
+        ("Prayer Times", "/prayer"),
     ]
+    cards = ""
     for i, (label, link) in enumerate(links):
         color = RGB_COLORS[i % len(RGB_COLORS)]
-        cards += f'''
-        <div class="card" style="background-color:{color};">
-            <a href="{link}">{label}</a>
-        </div>
-        '''
+        cards += f'<div class="card" style="background-color:{color};"><a href="{link}">{label}</a></div>'
     return render_template_string(wrap_grid_page("Suprabhaatham ePaper", cards, show_back=False))
 
 @app.route('/today')
@@ -97,39 +82,26 @@ def show_today_links():
     for i, loc in enumerate(LOCATIONS):
         url = get_url_for_location(loc)
         color = RGB_COLORS[i % len(RGB_COLORS)]
-        cards += f'''
-        <div class="card" style="background-color:{color};">
-            <a href="{url}" target="_blank" rel="noopener noreferrer">{loc}</a>
-        </div>
-        '''
+        cards += f'<div class="card" style="background-color:{color};"><a href="{url}" target="_blank">{loc}</a></div>'
     return render_template_string(wrap_grid_page("Today's Suprabhaatham ePaper Links", cards))
 
-@app.route('/editorial')
-def editorial():
-    global editorial_cache
+@app.route('/prayer')
+def show_prayer_image():
+    global namaz_cache
+
     today_date = date.today()
-
-    # Check for manually uploaded editorial
-    manual_path = os.path.join(app.config['UPLOAD_FOLDER'], EDITORIAL_IMAGE)
-    if os.path.exists(manual_path):
-        editorial_cache["date"] = today_date
-        editorial_cache["url"] = f"/static/{EDITORIAL_IMAGE}"
-        return redirect(editorial_cache["url"])
-
-    # Auto-fetch if not already cached
     folder_str = today_date.strftime('%d-%m-%Y')
     filename_prefix = today_date.strftime('%Y-%m-%d')
     base_url = "https://e-files.suprabhaatham.com"
     edition = "Malappuram"
     page_num = 5
 
-    if editorial_cache["date"] == today_date and editorial_cache["url"]:
-        return redirect(editorial_cache["url"])
+    if namaz_cache["date"] == today_date and namaz_cache["url"]:
+        return redirect(namaz_cache["url"])
 
     start_time = dt.strptime("00:05:00.000", "%H:%M:%S.%f")
     end_time = dt.strptime("00:05:20.000", "%H:%M:%S.%f")
     step = timedelta(milliseconds=100)
-
     current_time = start_time
     found_url = None
 
@@ -143,36 +115,17 @@ def editorial():
         current_time += step
 
     if not found_url:
-        fallback_time = "00-05-35-356"
-        fallback_filename = f"{filename_prefix}-{fallback_time}-epaper-page-{page_num}-{edition}.jpeg"
-        found_url = f"{base_url}/{folder_str}/{edition}/{fallback_filename}"
+        uploaded_path = os.path.join(app.config['UPLOAD_FOLDER'], NAMAZ_IMAGE)
+        if os.path.exists(uploaded_path):
+            found_url = f"/static/{NAMAZ_IMAGE}"
+        else:
+            fallback_time = "00-05-35-356"
+            fallback_filename = f"{filename_prefix}-{fallback_time}-epaper-page-{page_num}-{edition}.jpeg"
+            found_url = f"{base_url}/{folder_str}/{edition}/{fallback_filename}"
 
-    editorial_cache["date"] = today_date
-    editorial_cache["url"] = found_url
-
+    namaz_cache["date"] = today_date
+    namaz_cache["url"] = found_url
     return redirect(found_url)
-
-@app.route('/upload', methods=['GET', 'POST'])
-def upload_editorial_image():
-    if request.method == 'POST':
-        file = request.files.get('file')
-        if file and allowed_file(file.filename):
-            file.save(os.path.join(app.config['UPLOAD_FOLDER'], EDITORIAL_IMAGE))
-            editorial_cache["date"] = date.today()
-            editorial_cache["url"] = f"/static/{EDITORIAL_IMAGE}"
-            return redirect('/editorial')
-        return "Invalid file format. Only PNG or JPG allowed."
-
-    return '''
-    <!doctype html>
-    <title>Upload Editorial</title>
-    <h1>Upload Editorial Image</h1>
-    <form method=post enctype=multipart/form-data>
-      <input type=file name=file accept="image/*">
-      <input type=submit value=Upload>
-    </form>
-    <p><a href="/">Back to Home</a></p>
-    '''
 
 @app.route('/njayar')
 def show_njayar_archive():
@@ -198,53 +151,22 @@ def show_njayar_archive():
         '''
     return render_template_string(wrap_grid_page("Njayar Prabhadham - Sunday Editions", cards))
 
-def update_editorial_url_periodically():
-    global editorial_cache
-
-    while True:
-        today_date = date.today()
-
-        # Skip updating if manual image exists
-        manual_path = os.path.join(app.config['UPLOAD_FOLDER'], EDITORIAL_IMAGE)
-        if os.path.exists(manual_path):
-            editorial_cache["date"] = today_date
-            editorial_cache["url"] = f"/static/{EDITORIAL_IMAGE}"
-            time.sleep(3600)
-            continue
-
-        folder_str = today_date.strftime('%d-%m-%Y')
-        filename_prefix = today_date.strftime('%Y-%m-%d')
-        base_url = "https://e-files.suprabhaatham.com"
-        edition = "Malappuram"
-        page_num = 5
-
-        start_time = dt.strptime("00:05:00.000", "%H:%M:%S.%f")
-        end_time = dt.strptime("00:05:20.000", "%H:%M:%S.%f")
-        step = timedelta(milliseconds=100)
-
-        current_time = start_time
-        found_url = None
-
-        while current_time <= end_time:
-            time_str = current_time.strftime("%H-%M-%S-%f")[:-3]
-            filename = f"{filename_prefix}-{time_str}-epaper-page-{page_num}-{edition}.jpeg"
-            url = f"{base_url}/{folder_str}/{edition}/{filename}"
-            if check_url(url):
-                found_url = url
-                break
-            current_time += step
-
-        if not found_url:
-            fallback_time = "00-05-35-356"
-            fallback_filename = f"{filename_prefix}-{fallback_time}-epaper-page-{page_num}-{edition}.jpeg"
-            found_url = f"{base_url}/{folder_str}/{edition}/{fallback_filename}"
-
-        editorial_cache["date"] = today_date
-        editorial_cache["url"] = found_url
-
-        time.sleep(3600)  # Retry every hour
+@app.route('/upload', methods=['GET', 'POST'])
+def upload_prayer_image():
+    if request.method == 'POST':
+        file = request.files['file']
+        if file and file.filename.endswith(('.jpg', '.jpeg', '.png')):
+            path = os.path.join(app.config['UPLOAD_FOLDER'], NAMAZ_IMAGE)
+            file.save(path)
+            return 'Upload successful'
+        return 'Invalid file'
+    return '''
+        <h2>Upload Namaz Time Image</h2>
+        <form method="post" enctype="multipart/form-data">
+            <input type="file" name="file"><br><br>
+            <input type="submit" value="Upload">
+        </form>
+    '''
 
 if __name__ == '__main__':
-    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-    threading.Thread(target=update_editorial_url_periodically, daemon=True).start()
     app.run(host='0.0.0.0', port=8000)
