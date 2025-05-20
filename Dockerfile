@@ -1,27 +1,22 @@
-# Use official Python base image
-FROM python:3.10-slim
+# Use official Python runtime
+FROM python:3.11-slim
+
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
 
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    tesseract-ocr \
-    libglib2.0-0 \
-    libsm6 \
-    libxext6 \
-    libxrender-dev \
- && rm -rf /var/lib/apt/lists/*
-
-# Install Python dependencies
+# Install dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy app code
-COPY . .
+# Copy application code
+COPY main.py .
 
-# Expose port
+# Expose the port Flask runs on
 EXPOSE 8000
 
-# Start app
+# Run the Flask app
 CMD ["python", "main.py"]
