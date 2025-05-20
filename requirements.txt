@@ -1,3 +1,4 @@
-Flask
-requests
-brotli
+Flask==3.0.3
+requests==2.31.0
+Pillow==10.3.0
+brotli==1.1.0
