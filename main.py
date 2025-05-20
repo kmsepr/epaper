@@ -142,18 +142,21 @@ def update_epaper_json():
         "Content-Type": "application/json",
         "Accept-Encoding": "br"
     }
-    # Sending today's date as payload per latest usage
+    payload = {}  # Adjust if API needs any body parameters
+
     while True:
         try:
-            today = datetime.date.today().isoformat()
-            payload = {"date": today}
-
             print("Fetching latest ePaper data...")
             response = requests.post(url, json=payload, headers=headers, timeout=10)
             response.raise_for_status()
 
+            # Handle the decompression only if the response is encoded in Brotli
             if response.headers.get('Content-Encoding') == 'br':
-                decompressed_data = brotli.decompress(response.content).decode('utf-8')
+                try:
+                    decompressed_data = brotli.decompress(response.content).decode('utf-8')
+                except Exception as e:
+                    print(f"Error during Brotli decompression: {e}")
+                    decompressed_data = response.text  # Fallback to plain text if decompression fails
             else:
                 decompressed_data = response.text
 
