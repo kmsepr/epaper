@@ -4,12 +4,12 @@ import threading
 import datetime
 import requests
 import brotli
-from flask import Flask, render_template_string, request
+from flask import Flask, render_template_string, request, redirect, url_for
 
 app = Flask(__name__)
 
 UPLOAD_FOLDER = "static"
-NAMAZ_IMAGE = "prayer.jpeg"
+NAMAZ_IMAGE = "prayer.jpg"
 EPAPER_TXT = "epaper.txt"
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
@@ -114,42 +114,47 @@ def show_today_links():
 
 @app.route('/prayer')
 def show_prayer_image():
-    image_path = os.path.join(app.config['UPLOAD_FOLDER'], NAMAZ_IMAGE)
-    if os.path.exists(image_path):
-        return render_template_string('''
-            <!doctype html>
-            <html lang="en">
-            <head>
-                <meta charset="utf-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1">
-                <title>Prayer Times</title>
-                <style>
-                    body {{
-                        font-family: 'Segoe UI', sans-serif;
-                        background: #f8f9fa;
-                        padding: 30px;
-                        text-align: center;
-                    }}
-                    h2 {{
-                        margin-bottom: 20px;
-                    }}
-                    img {{
-                        width: 100%;
-                        max-width: 600px;
-                        border-radius: 10px;
-                        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-                        border: 1px solid #ccc;
-                    }}
-                </style>
-            </head>
-            <body>
-                <h2>Today's Namaz Times</h2>
-                <img src="/static/prayer.jpeg" alt="Prayer Times">
-            </body>
-            </html>
-        ''')
-    else:
-        return 'Namaz time image not found.', 404
+    if not os.path.exists(os.path.join('static', NAMAZ_IMAGE)):
+        return "Prayer image not found", 404
+    today = datetime.date.today().strftime("%B %d, %Y")
+    return render_template_string('''
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Prayer Times</title>
+            <style>
+                body {
+                    font-family: Arial, sans-serif;
+                    background-color: #f4f4f4;
+                    margin: 0;
+                    padding: 0;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    height: 100vh;
+                }
+                .container {
+                    background: white;
+                    padding: 20px;
+                    border-radius: 10px;
+                    box-shadow: 0 0 10px rgba(0,0,0,0.1);
+                    text-align: center;
+                }
+                img {
+                    max-width: 100%;
+                    height: auto;
+                    border-radius: 10px;
+                }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h2>Prayer Times - {{ date }}</h2>
+                <img src="{{ url_for('static', filename=filename) }}" alt="Prayer Times">
+            </div>
+        </body>
+        </html>
+    ''', filename=NAMAZ_IMAGE, date=today)
 
 @app.route('/njayar')
 def show_njayar_archive():
@@ -185,8 +190,9 @@ def upload_prayer_image():
             return 'No selected file.'
         if file and file.filename.lower().endswith(('.jpg', '.jpeg', '.png')):
             os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-            file.save(os.path.join(app.config['UPLOAD_FOLDER'], NAMAZ_IMAGE))
-            return 'Upload successful.'
+            save_path = os.path.join(app.config['UPLOAD_FOLDER'], NAMAZ_IMAGE)
+            file.save(save_path)
+            return redirect(url_for('show_prayer_image'))
         else:
             return 'Only JPG, JPEG, and PNG formats are allowed.'
     
@@ -196,17 +202,17 @@ def upload_prayer_image():
         <head>
             <title>Upload Namaz Image</title>
             <style>
-                body {{
+                body {
                     font-family: 'Segoe UI', sans-serif;
                     background: #f9f9f9;
                     padding: 40px;
                     text-align: center;
-                }}
-                input[type="file"], input[type="submit"] {{
+                }
+                input[type="file"], input[type="submit"] {
                     font-size: 1em;
                     padding: 10px;
                     margin: 10px 0;
-                }}
+                }
             </style>
         </head>
         <body>
