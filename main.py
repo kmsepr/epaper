@@ -5,6 +5,8 @@ import datetime
 import requests
 import brotli
 from flask import Flask, render_template_string, request, redirect, url_for
+from PIL import Image
+from io import BytesIO
 
 app = Flask(__name__)
 
@@ -180,50 +182,21 @@ def show_njayar_archive():
         '''
     return render_template_string(wrap_grid_page("Njayar Prabhadham - Sunday Editions", cards))
 
-@app.route('/upload', methods=['GET', 'POST'])
-def upload_prayer_image():
-    if request.method == 'POST':
-        if 'image' not in request.files:
-            return 'No file part in request.'
-        file = request.files['image']
-        if file.filename == '':
-            return 'No selected file.'
-        if file and file.filename.lower().endswith(('.jpg', '.jpeg', '.png')):
-            os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-            save_path = os.path.join(app.config['UPLOAD_FOLDER'], NAMAZ_IMAGE)
-            file.save(save_path)
-            return redirect(url_for('show_prayer_image'))
-        else:
-            return 'Only JPG, JPEG, and PNG formats are allowed.'
-    
-    return '''
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>Upload Namaz Image</title>
-            <style>
-                body {
-                    font-family: 'Segoe UI', sans-serif;
-                    background: #f9f9f9;
-                    padding: 40px;
-                    text-align: center;
-                }
-                input[type="file"], input[type="submit"] {
-                    font-size: 1em;
-                    padding: 10px;
-                    margin: 10px 0;
-                }
-            </style>
-        </head>
-        <body>
-            <h2>Upload Today's Namaz Image</h2>
-            <form method="post" enctype="multipart/form-data">
-                <input type="file" name="image" required><br>
-                <input type="submit" value="Upload">
-            </form>
-        </body>
-        </html>
-    '''
+def auto_crop_namaz_section():
+    try:
+        today = datetime.datetime.now().strftime("%Y-%m-%d")
+        page6_url = f"https://cdn.sprbm.com/pdf2image/{today}/6.jpg"
+        response = requests.get(page6_url, timeout=10)
+        response.raise_for_status()
+
+        img = Image.open(BytesIO(response.content))
+        # Adjust coordinates to match Namaz box on Page 6 (for Kozhikode)
+        cropped = img.crop((300, 1200, 1000, 1600))
+        os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+        cropped.save(os.path.join(UPLOAD_FOLDER, NAMAZ_IMAGE))
+        print("Prayer image updated.")
+    except Exception as e:
+        print(f"[Error in auto_crop_namaz_section] {e}")
 
 def update_epaper_json():
     url = "https://api2.suprabhaatham.com/api/ePaper"
@@ -252,10 +225,11 @@ def update_epaper_json():
                 f.write(decompressed_data)
 
             print("epaper.txt updated successfully.")
+            auto_crop_namaz_section()
         except Exception as e:
             print(f"[Error updating epaper.txt] {e}")
 
-        time.sleep(86400)  # Wait for 24 hours
+        time.sleep(86400)  # Run daily
 
 if __name__ == '__main__':
     threading.Thread(target=update_epaper_json, daemon=True).start()
