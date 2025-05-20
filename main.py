@@ -198,36 +198,23 @@ def auto_crop_namaz_section():
     except Exception as e:
         print(f"[Error in auto_crop_namaz_section] {e}")
 
+import requests
+
 def update_epaper_json():
     url = "https://api2.suprabhaatham.com/api/ePaper"
-    headers = {
-        "Content-Type": "application/json",
-        "Accept-Encoding": "br"
-    }
-    payload = {}
+    try:
+        response = requests.post(url, json={}, timeout=10)
+        response.raise_for_status()
 
-    while True:
-        try:
-            print("Fetching latest ePaper data...")
-            response = requests.post(url, json=payload, headers=headers, timeout=10)
-            response.raise_for_status()
+        # requests handles Brotli transparently if 'brotli' is installed
+        data = response.text
 
-            if response.headers.get('Content-Encoding') == 'br':
-                try:
-                    decompressed_data = brotli.decompress(response.content).decode('utf-8')
-                except Exception as e:
-                    print(f"Error during Brotli decompression: {e}")
-                    decompressed_data = response.text
-            else:
-                decompressed_data = response.text
+        with open("epaper.txt", "w", encoding="utf-8") as f:
+            f.write(data)
 
-            with open(EPAPER_TXT, "w", encoding="utf-8") as f:
-                f.write(decompressed_data)
-
-            print("epaper.txt updated successfully.")
-            auto_crop_namaz_section()
-        except Exception as e:
-            print(f"[Error updating epaper.txt] {e}")
+        print("epaper.txt updated successfully.")
+    except Exception as e:
+        print(f"[Error updating epaper.txt] {e}")
 
         time.sleep(86400)  # Run daily
 
