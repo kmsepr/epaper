@@ -151,19 +151,26 @@ def show_njayar_archive():
         '''
     return render_template_string(wrap_grid_page("Njayar Prabhadham - Sunday Editions", cards))
 
+import os
+from flask import request
+
 @app.route('/upload', methods=['GET', 'POST'])
 def upload_prayer_image():
     if request.method == 'POST':
-        file = request.files['file']
-        if file and file.filename.endswith(('.jpg', '.jpeg', '.png')):
-            path = os.path.join(app.config['UPLOAD_FOLDER'], NAMAZ_IMAGE)
-            file.save(path)
+        if 'image' not in request.files:
+            return 'No file part'
+        file = request.files['image']
+        if file.filename == '':
+            return 'No selected file'
+        if file and file.filename.lower().endswith(('.jpg', '.jpeg', '.png')):
+            os.makedirs('static', exist_ok=True)
+            file.save('static/prayer.jpeg')
             return 'Upload successful'
-        return 'Invalid file'
+        else:
+            return 'Invalid file format'
     return '''
-        <h2>Upload Namaz Time Image</h2>
         <form method="post" enctype="multipart/form-data">
-            <input type="file" name="file"><br><br>
+            <input type="file" name="image">
             <input type="submit" value="Upload">
         </form>
     '''
