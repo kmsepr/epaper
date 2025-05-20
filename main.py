@@ -3,8 +3,8 @@ import time
 import threading
 import datetime
 import requests
-import brotli
-from flask import Flask, render_template_string, request, redirect, url_for
+import logging
+from flask import Flask, render_template_string, url_for
 from PIL import Image
 from io import BytesIO
 
@@ -23,6 +23,10 @@ RGB_COLORS = [
     "#FF6B6B", "#6BCB77", "#4D96FF", "#FFD93D",
     "#FF6EC7", "#00C2CB", "#FFA41B", "#845EC2"
 ]
+
+# Setup logger
+logging.basicConfig(filename='app.log', level=logging.INFO, format='%(asctime)s %(message)s')
+log = logging.getLogger()
 
 def get_url_for_location(location, dt_obj=None):
     if dt_obj is None:
@@ -116,8 +120,18 @@ def show_today_links():
 
 @app.route('/prayer')
 def show_prayer_image():
-    if not os.path.exists(os.path.join('static', NAMAZ_IMAGE)):
-        return "Prayer image not found", 404
+    filepath = os.path.join('static', NAMAZ_IMAGE)
+    if not os.path.exists(filepath):
+        return render_template_string('''
+        <!DOCTYPE html>
+        <html>
+        <head><title>Prayer Times</title></head>
+        <body style="text-align:center; padding:40px; font-family:Arial, sans-serif;">
+            <h2>Prayer image not available yet. Please check back later.</h2>
+            <a href="/" style="text-decoration:underline; color:blue;">Back to Home</a>
+        </body>
+        </html>
+        '''), 404
     today = datetime.date.today().strftime("%B %d, %Y")
     return render_template_string('''
         <!DOCTYPE html>
@@ -190,34 +204,36 @@ def auto_crop_namaz_section():
         response.raise_for_status()
 
         img = Image.open(BytesIO(response.content))
-        # Adjust coordinates to match Namaz box on Page 6 (for Kozhikode)
-        cropped = img.crop((300, 1200, 1000, 1600))
+        cropped = img.crop((300, 1200, 1000, 1600))  # Customize if needed
         os.makedirs(UPLOAD_FOLDER, exist_ok=True)
         cropped.save(os.path.join(UPLOAD_FOLDER, NAMAZ_IMAGE))
-        print("Prayer image updated.")
+        log.info("Prayer image updated.")
     except Exception as e:
-        print(f"[Error in auto_crop_namaz_section] {e}")
-
-import requests
+        log.error(f"[Error in auto_crop_namaz_section] {e}")
 
 def update_epaper_json():
     url = "https://api2.suprabhaatham.com/api/ePaper"
     try:
         response = requests.post(url, json={}, timeout=10)
         response.raise_for_status()
-
-        # requests handles Brotli transparently if 'brotli' is installed
         data = response.text
-
-        with open("epaper.txt", "w", encoding="utf-8") as f:
+        with open(EPAPER_TXT, "w", encoding="utf-8") as f:
             f.write(data)
-
-        print("epaper.txt updated successfully.")
+        log.info("epaper.txt updated successfully.")
     except Exception as e:
-        print(f"[Error updating epaper.txt] {e}")
+        log.error(f"[Error updating epaper.txt] {e}")
 
-        time.sleep(86400)  # Run daily
+def update_epaper_json_loop():
+    while True:
+        update_epaper_json()
+        time.sleep(86400)
+
+def daily_crop_loop():
+    while True:
+        auto_crop_namaz_section()
+        time.sleep(86400)
 
 if __name__ == '__main__':
-    threading.Thread(target=update_epaper_json, daemon=True).start()
+    threading.Thread(target=update_epaper_json_loop, daemon=True).start()
+    threading.Thread(target=daily_crop_loop, daemon=True).start()
     app.run(host='0.0.0.0', port=8000)
