@@ -1,11 +1,15 @@
 import os
+import time
+import threading
 import datetime
+import requests
 from flask import Flask, render_template_string, request
 
 app = Flask(__name__)
 
 UPLOAD_FOLDER = "static"
 NAMAZ_IMAGE = "prayer.jpeg"
+EPAPER_TXT = "epaper.txt"
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 LOCATIONS = [
@@ -131,5 +135,20 @@ def upload_prayer_image():
         </form>
     '''
 
+# Background task to update epaper.txt daily
+def update_epaper_json():
+    while True:
+        try:
+            print("Fetching latest ePaper data...")
+            response = requests.get("https://api2.suprabhaatham.com/api/ePaper", timeout=10)
+            response.raise_for_status()
+            with open(EPAPER_TXT, "w", encoding="utf-8") as f:
+                f.write(response.text)
+            print("epaper.txt updated successfully.")
+        except Exception as e:
+            print(f"[Error updating epaper.txt] {e}")
+        time.sleep(86400)  # 24 hours
+
 if __name__ == '__main__':
+    threading.Thread(target=update_epaper_json, daemon=True).start()
     app.run(host='0.0.0.0', port=8000)
