@@ -32,16 +32,54 @@ def wrap_grid_page(title, items_html, show_back=True):
     back_html = '<p><a class="back" href="/">Back to Home</a></p>' if show_back else ''
     return f"""
     <!DOCTYPE html>
-    <html>
+    <html lang="en">
     <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>{title}</title>
         <style>
-            body {{ font-family: sans-serif; text-align: center; padding: 40px; background-color: #f9f9f9; }}
-            h1 {{ margin-bottom: 30px; }}
-            .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 20px; max-width: 1000px; margin: auto; }}
-            .card {{ padding: 20px; border-radius: 12px; box-shadow: 2px 2px 10px rgba(0,0,0,0.1); }}
-            .card a {{ text-decoration: none; font-size: 18px; color: white; font-weight: bold; }}
-            a.back {{ display: inline-block; margin-top: 40px; font-size: 16px; }}
+            body {{
+                font-family: 'Segoe UI', sans-serif;
+                background: #f0f2f5;
+                margin: 0;
+                padding: 40px 20px;
+                color: #333;
+                text-align: center;
+            }}
+            h1 {{
+                font-size: 2em;
+                margin-bottom: 30px;
+            }}
+            .grid {{
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+                gap: 20px;
+                max-width: 1000px;
+                margin: auto;
+            }}
+            .card {{
+                padding: 25px 15px;
+                border-radius: 16px;
+                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+                transition: transform 0.2s ease;
+            }}
+            .card:hover {{
+                transform: translateY(-4px);
+            }}
+            .card a {{
+                text-decoration: none;
+                font-size: 1.1em;
+                color: #fff;
+                font-weight: bold;
+                display: block;
+            }}
+            a.back {{
+                display: inline-block;
+                margin-top: 40px;
+                font-size: 1em;
+                color: #555;
+                text-decoration: underline;
+            }}
         </style>
     </head>
     <body>
@@ -80,11 +118,33 @@ def show_prayer_image():
     if os.path.exists(image_path):
         return render_template_string('''
             <!doctype html>
-            <html>
-            <head><title>Namaz Time</title></head>
-            <body style="text-align:center; padding:20px;">
-                <h2>Today's Namaz Time</h2>
-                <img src="/static/prayer.jpeg" style="width:100%; max-width:600px; border:1px solid #ccc;">
+            <html lang="en">
+            <head>
+                <meta charset="utf-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1">
+                <title>Prayer Times</title>
+                <style>
+                    body {{
+                        font-family: 'Segoe UI', sans-serif;
+                        background: #f8f9fa;
+                        padding: 30px;
+                        text-align: center;
+                    }}
+                    h2 {{
+                        margin-bottom: 20px;
+                    }}
+                    img {{
+                        width: 100%;
+                        max-width: 600px;
+                        border-radius: 10px;
+                        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                        border: 1px solid #ccc;
+                    }}
+                </style>
+            </head>
+            <body>
+                <h2>Today's Namaz Times</h2>
+                <img src="/static/prayer.jpeg" alt="Prayer Times">
             </body>
             </html>
         ''')
@@ -119,21 +179,44 @@ def show_njayar_archive():
 def upload_prayer_image():
     if request.method == 'POST':
         if 'image' not in request.files:
-            return 'No file part'
+            return 'No file part in request.'
         file = request.files['image']
         if file.filename == '':
-            return 'No selected file'
+            return 'No selected file.'
         if file and file.filename.lower().endswith(('.jpg', '.jpeg', '.png')):
             os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
             file.save(os.path.join(app.config['UPLOAD_FOLDER'], NAMAZ_IMAGE))
-            return 'Upload successful'
+            return 'Upload successful.'
         else:
-            return 'Invalid file format'
+            return 'Only JPG, JPEG, and PNG formats are allowed.'
+    
     return '''
-        <form method="post" enctype="multipart/form-data">
-            <input type="file" name="image" required>
-            <input type="submit" value="Upload">
-        </form>
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Upload Namaz Image</title>
+            <style>
+                body {{
+                    font-family: 'Segoe UI', sans-serif;
+                    background: #f9f9f9;
+                    padding: 40px;
+                    text-align: center;
+                }}
+                input[type="file"], input[type="submit"] {{
+                    font-size: 1em;
+                    padding: 10px;
+                    margin: 10px 0;
+                }}
+            </style>
+        </head>
+        <body>
+            <h2>Upload Today's Namaz Image</h2>
+            <form method="post" enctype="multipart/form-data">
+                <input type="file" name="image" required><br>
+                <input type="submit" value="Upload">
+            </form>
+        </body>
+        </html>
     '''
 
 def update_epaper_json():
@@ -142,7 +225,7 @@ def update_epaper_json():
         "Content-Type": "application/json",
         "Accept-Encoding": "br"
     }
-    payload = {}  # Adjust if API needs any body parameters
+    payload = {}
 
     while True:
         try:
@@ -150,13 +233,12 @@ def update_epaper_json():
             response = requests.post(url, json=payload, headers=headers, timeout=10)
             response.raise_for_status()
 
-            # Handle the decompression only if the response is encoded in Brotli
             if response.headers.get('Content-Encoding') == 'br':
                 try:
                     decompressed_data = brotli.decompress(response.content).decode('utf-8')
                 except Exception as e:
                     print(f"Error during Brotli decompression: {e}")
-                    decompressed_data = response.text  # Fallback to plain text if decompression fails
+                    decompressed_data = response.text
             else:
                 decompressed_data = response.text
 
@@ -167,7 +249,7 @@ def update_epaper_json():
         except Exception as e:
             print(f"[Error updating epaper.txt] {e}")
 
-        time.sleep(86400)  # Sleep for 24 hours
+        time.sleep(86400)  # Wait for 24 hours
 
 if __name__ == '__main__':
     threading.Thread(target=update_epaper_json, daemon=True).start()
