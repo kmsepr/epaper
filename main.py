@@ -3,6 +3,7 @@ import time
 import threading
 import datetime
 import requests
+import brotli
 from flask import Flask, render_template_string, request
 
 app = Flask(__name__)
@@ -135,19 +136,33 @@ def upload_prayer_image():
         </form>
     '''
 
-# Background task to update epaper.txt daily
 def update_epaper_json():
+    url = "https://api2.suprabhaatham.com/api/ePaper"
+    headers = {
+        "Content-Type": "application/json",
+        "Accept-Encoding": "br"
+    }
+    payload = {}  # Adjust if API needs any body parameters
+
     while True:
         try:
             print("Fetching latest ePaper data...")
-            response = requests.get("https://api2.suprabhaatham.com/api/ePaper", timeout=10)
+            response = requests.post(url, json=payload, headers=headers, timeout=10)
             response.raise_for_status()
+
+            if response.headers.get('Content-Encoding') == 'br':
+                decompressed_data = brotli.decompress(response.content).decode('utf-8')
+            else:
+                decompressed_data = response.text
+
             with open(EPAPER_TXT, "w", encoding="utf-8") as f:
-                f.write(response.text)
+                f.write(decompressed_data)
+
             print("epaper.txt updated successfully.")
         except Exception as e:
             print(f"[Error updating epaper.txt] {e}")
-        time.sleep(86400)  # 24 hours
+
+        time.sleep(86400)  # Sleep for 24 hours
 
 if __name__ == '__main__':
     threading.Thread(target=update_epaper_json, daemon=True).start()
