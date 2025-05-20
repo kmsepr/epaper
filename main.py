@@ -142,10 +142,12 @@ def update_epaper_json():
         "Content-Type": "application/json",
         "Accept-Encoding": "br"
     }
-    payload = {}  # Adjust if API needs any body parameters
-
+    # Sending today's date as payload per latest usage
     while True:
         try:
+            today = datetime.date.today().isoformat()
+            payload = {"date": today}
+
             print("Fetching latest ePaper data...")
             response = requests.post(url, json=payload, headers=headers, timeout=10)
             response.raise_for_status()
