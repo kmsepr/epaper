@@ -10,7 +10,6 @@ from flask import Flask, render_template_string, request, redirect, url_for
 app = Flask(__name__)
 
 UPLOAD_FOLDER = "static"
-NAMAZ_IMAGE = "prayer.jpg"
 EPAPER_TXT = "epaper.txt"
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
@@ -95,8 +94,7 @@ def wrap_grid_page(title, items_html, show_back=True):
 def homepage():
     links = [
         ("Today's Editions", "/today"),
-        ("Njayar Prabhadham Archive", "/njayar"),
-        ("Prayer Times", "/prayer"),
+        ("Njayar Prabhadham Archive", "/njayar")
     ]
     cards = ""
     for i, (label, link) in enumerate(links):
@@ -112,50 +110,6 @@ def show_today_links():
         color = RGB_COLORS[i % len(RGB_COLORS)]
         cards += f'<div class="card" style="background-color:{color};"><a href="{url}" target="_blank">{loc}</a></div>'
     return render_template_string(wrap_grid_page("Today's Suprabhaatham ePaper Links", cards))
-
-@app.route('/prayer')
-def show_prayer_image():
-    if not os.path.exists(os.path.join('static', NAMAZ_IMAGE)):
-        return "Prayer image not found", 404
-    today = datetime.date.today().strftime("%B %d, %Y")
-    return render_template_string('''
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>Prayer Times</title>
-            <style>
-                body {
-                    font-family: Arial, sans-serif;
-                    background-color: #f4f4f4;
-                    margin: 0;
-                    padding: 0;
-                    display: flex;
-                    justify-content: center;
-                    align-items: center;
-                    height: 100vh;
-                }
-                .container {
-                    background: white;
-                    padding: 20px;
-                    border-radius: 10px;
-                    box-shadow: 0 0 10px rgba(0,0,0,0.1);
-                    text-align: center;
-                }
-                img {
-                    max-width: 100%;
-                    height: auto;
-                    border-radius: 10px;
-                }
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <h2>Prayer Times - {{ date }}</h2>
-                <img src="{{ url_for('static', filename=filename) }}" alt="Prayer Times">
-            </div>
-        </body>
-        </html>
-    ''', filename=NAMAZ_IMAGE, date=today)
 
 @app.route('/njayar')
 def show_njayar_archive():
@@ -180,51 +134,6 @@ def show_njayar_archive():
         </div>
         '''
     return render_template_string(wrap_grid_page("Njayar Prabhadham - Sunday Editions", cards))
-
-@app.route('/upload', methods=['GET', 'POST'])
-def upload_prayer_image():
-    if request.method == 'POST':
-        if 'image' not in request.files:
-            return 'No file part in request.'
-        file = request.files['image']
-        if file.filename == '':
-            return 'No selected file.'
-        if file and file.filename.lower().endswith(('.jpg', '.jpeg', '.png')):
-            os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-            save_path = os.path.join(app.config['UPLOAD_FOLDER'], NAMAZ_IMAGE)
-            file.save(save_path)
-            return redirect(url_for('show_prayer_image'))
-        else:
-            return 'Only JPG, JPEG, and PNG formats are allowed.'
-    
-    return '''
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>Upload Namaz Image</title>
-            <style>
-                body {
-                    font-family: 'Segoe UI', sans-serif;
-                    background: #f9f9f9;
-                    padding: 40px;
-                    text-align: center;
-                }
-                input[type="file"], input[type="submit"] {
-                    font-size: 1em;
-                    padding: 10px;
-                    margin: 10px 0;
-                }
-            </style>
-        </head>
-        <body>
-            <h2>Upload Today's Namaz Image</h2>
-            <form method="post" enctype="multipart/form-data">
-                <input type="file" name="image" required><br>
-                <input type="submit" value="Upload">
-            </form>
-        </body>
-        </html>
-    '''
 
 def update_epaper_json():
     url = "https://api2.suprabhaatham.com/api/ePaper"
@@ -258,7 +167,6 @@ def update_epaper_json():
 
         time.sleep(86400)  # Wait for 24 hours
 
-
 @app.route('/malappuram/pages')
 def show_malappuram_pages():
     if not os.path.exists(EPAPER_TXT):
@@ -291,7 +199,6 @@ def show_malappuram_pages():
 
     except Exception as e:
         return f"Error: {e}", 500
-
 
 if __name__ == '__main__':
     threading.Thread(target=update_epaper_json, daemon=True).start()
