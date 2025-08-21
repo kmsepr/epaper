@@ -5,12 +5,15 @@ import threading
 import datetime
 import requests
 import brotli
-from flask import Flask, render_template_string, request, redirect, url_for
+from flask import Flask, render_template_string, request, redirect, url_for, send_file
+from io import BytesIO
+from PIL import Image
 
 app = Flask(__name__)
 
 UPLOAD_FOLDER = "static"
 EPAPER_TXT = "epaper.txt"
+PRAYER_IMG = os.path.join(UPLOAD_FOLDER, "prayer.png")
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 LOCATIONS = [
@@ -94,7 +97,9 @@ def wrap_grid_page(title, items_html, show_back=True):
 def homepage():
     links = [
         ("Today's Editions", "/today"),
-        ("Njayar Prabhadham Archive", "/njayar")
+        ("Njayar Prabhadham Archive", "/njayar"),
+        ("Malappuram Pages", "/malappuram/pages"),
+        ("Prayer Times", "/prayer")
     ]
     cards = ""
     for i, (label, link) in enumerate(links):
@@ -199,6 +204,39 @@ def show_malappuram_pages():
 
     except Exception as e:
         return f"Error: {e}", 500
+
+# ---------------- NEW FEATURE: PRAYER TIMES ----------------
+@app.route('/prayer')
+def show_prayer_times():
+    if not os.path.exists(EPAPER_TXT):
+        return "epaper.txt not found", 404
+
+    try:
+        with open(EPAPER_TXT, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        # Find Malappuram Page 6
+        page6 = next(
+            (entry for entry in data.get("data", [])
+             if entry.get("Location") == "Malappuram" and entry.get("PageNo") == 6),
+            None
+        )
+        if not page6:
+            return "Prayer page not found", 404
+
+        # Download and crop image
+        img_url = page6.get("Image")
+        img_data = requests.get(img_url, timeout=10).content
+        img = Image.open(BytesIO(img_data))
+        # Example crop region (adjust based on actual newspaper layout)
+        cropped = img.crop((100, 1600, 900, 2000))
+        cropped.save(PRAYER_IMG)
+
+        return send_file(PRAYER_IMG, mimetype="image/png")
+
+    except Exception as e:
+        return f"Error: {e}", 500
+# -----------------------------------------------------------
 
 if __name__ == '__main__':
     threading.Thread(target=update_epaper_json, daemon=True).start()
