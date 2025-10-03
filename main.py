@@ -1,5 +1,7 @@
 import feedparser
 
+app = Flask(__name__)
+
 RSS_FEED = "https://www.thehindu.com/news/national/feeder/default.rss"
 
 CATEGORIES = {
