@@ -180,14 +180,14 @@ def show_malappuram_pages():
     except Exception as e:
         return f"Error: {e}", 500
 
-# ---------------- QUIZ ----------------
+# ---------------- QUIZ (FREE API) ----------------
 def fetch_latest_news():
-    """Get headlines from NewsAPI (replace NEWS_API_KEY with env var)"""
-    api_key = os.getenv("NEWS_API_KEY", "demo")
+    """Get headlines from free Inshorts API"""
     try:
-        url = f"https://newsapi.org/v2/top-headlines?country=in&apiKey={api_key}"
+        url = "https://inshorts.deta.dev/news?category=national"
         r = requests.get(url, timeout=10)
-        return [a["title"] for a in r.json().get("articles", []) if "title" in a]
+        data = r.json().get("data", [])
+        return [a["title"] for a in data if "title" in a]
     except:
         return ["Parliament passes new education bill", "India wins cricket test match", "ISRO launches new satellite"]
 
