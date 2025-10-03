@@ -1,6 +1,3 @@
 flask
 requests
-pillow
-pytesseract
-brotli
-feedparser
+openai
