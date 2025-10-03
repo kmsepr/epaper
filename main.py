@@ -5,8 +5,9 @@ import threading
 import datetime
 import requests
 import brotli
-from flask import Flask, render_template_string
 import random
+import feedparser
+from flask import Flask, render_template_string
 
 app = Flask(__name__)
 
@@ -180,21 +181,31 @@ def show_malappuram_pages():
     except Exception as e:
         return f"Error: {e}", 500
 
-# ---------------- QUIZ (FREE API) ----------------
+# ---------------- QUIZ (RSS BASED) ----------------
 def fetch_latest_news():
-    """Get headlines from free Inshorts API"""
+    """Fetch latest headlines from The Hindu RSS feed"""
     try:
-        url = "https://inshorts.deta.dev/news?category=national"
-        r = requests.get(url, timeout=10)
-        data = r.json().get("data", [])
-        return [a["title"] for a in data if "title" in a]
+        feed = feedparser.parse("https://www.thehindu.com/news/national/feeder/default.rss")
+        return [entry.title for entry in feed.entries[:10]]
     except:
         return ["Parliament passes new education bill", "India wins cricket test match", "ISRO launches new satellite"]
+
+def categorize_headline(headline):
+    """Naive keyword-based categorization"""
+    headline_l = headline.lower()
+    if any(word in headline_l for word in ["parliament", "government", "minister", "bill", "policy"]):
+        return "A. Related to Politics"
+    elif any(word in headline_l for word in ["cricket", "match", "tournament", "olympic", "sport"]):
+        return "B. Related to Sports"
+    elif any(word in headline_l for word in ["isro", "satellite", "research", "technology", "science"]):
+        return "C. Related to Science/Tech"
+    else:
+        return "D. Related to Economy"
 
 def generate_quiz():
     headlines = fetch_latest_news()
     quiz = []
-    for i, headline in enumerate(headlines[:10]):
+    for i, headline in enumerate(headlines):
         quiz.append({
             "q": f"Q{i+1}. What is the news about: {headline}?",
             "options": [
@@ -203,7 +214,7 @@ def generate_quiz():
                 "C. Related to Science/Tech",
                 "D. Related to Economy"
             ],
-            "answer": "Depends on headline"
+            "answer": categorize_headline(headline)
         })
     with open(QUIZ_JSON, "w", encoding="utf-8") as f:
         json.dump(quiz, f, indent=2)
@@ -211,16 +222,15 @@ def generate_quiz():
 
 @app.route('/quiz')
 def show_quiz():
-    if not os.path.exists(QUIZ_JSON):
-        quiz = generate_quiz()
-    else:
-        with open(QUIZ_JSON, "r", encoding="utf-8") as f:
-            quiz = json.load(f)
+    quiz = generate_quiz()
     html = ""
     for q in quiz:
         html += f'<div class="question"><p><b>{q["q"]}</b></p><div class="options">'
         for opt in q["options"]:
-            html += f"<p>{opt}</p>"
+            if opt == q["answer"]:
+                html += f"<p><b>{opt}</b> ✅</p>"
+            else:
+                html += f"<p>{opt}</p>"
         html += "</div></div>"
     return render_template_string(wrap_grid_page("Current Affairs Quiz", html))
 
