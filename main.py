@@ -5,7 +5,7 @@ import threading
 import datetime
 import requests
 import brotli
-from flask import Flask, render_template_string, request
+from flask import Flask, render_template_string
 import random
 
 app = Flask(__name__)
@@ -182,9 +182,10 @@ def show_malappuram_pages():
 
 # ---------------- QUIZ ----------------
 def fetch_latest_news():
-    """Get headlines from NewsAPI (replace YOUR_KEY with real key)"""
+    """Get headlines from NewsAPI (replace NEWS_API_KEY with env var)"""
+    api_key = os.getenv("NEWS_API_KEY", "demo")
     try:
-        url = "https://newsapi.org/v2/top-headlines?country=in&apiKey=demo"
+        url = f"https://newsapi.org/v2/top-headlines?country=in&apiKey={api_key}"
         r = requests.get(url, timeout=10)
         return [a["title"] for a in r.json().get("articles", []) if "title" in a]
     except:
@@ -194,14 +195,13 @@ def generate_quiz():
     headlines = fetch_latest_news()
     quiz = []
     for i, headline in enumerate(headlines[:10]):
-        options = random.sample(["A", "B", "C", "D"], 4)
         quiz.append({
             "q": f"Q{i+1}. What is the news about: {headline}?",
             "options": [
-                f"A. Related to Politics",
-                f"B. Related to Sports",
-                f"C. Related to Science/Tech",
-                f"D. Related to Economy"
+                "A. Related to Politics",
+                "B. Related to Sports",
+                "C. Related to Science/Tech",
+                "D. Related to Economy"
             ],
             "answer": "Depends on headline"
         })
