@@ -5,12 +5,14 @@ import threading
 import datetime
 import requests
 import brotli
-from flask import Flask, render_template_string, request, redirect, url_for
+from flask import Flask, render_template_string, request
+import random
 
 app = Flask(__name__)
 
 UPLOAD_FOLDER = "static"
 EPAPER_TXT = "epaper.txt"
+QUIZ_JSON = "quiz.json"
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 LOCATIONS = [
@@ -22,12 +24,7 @@ RGB_COLORS = [
     "#FF6EC7", "#00C2CB", "#FFA41B", "#845EC2"
 ]
 
-def get_url_for_location(location, dt_obj=None):
-    if dt_obj is None:
-        dt_obj = datetime.datetime.now()
-    date_str = dt_obj.strftime('%Y-%m-%d')
-    return f"https://epaper.suprabhaatham.com/details/{location}/{date_str}/1"
-
+# ---------------- GRID WRAPPER ----------------
 def wrap_grid_page(title, items_html, show_back=True):
     back_html = '<p><a class="back" href="/">Back to Home</a></p>' if show_back else ''
     return f"""
@@ -46,61 +43,56 @@ def wrap_grid_page(title, items_html, show_back=True):
                 color: #333;
                 text-align: center;
             }}
-            h1 {{
-                font-size: 2em;
-                margin-bottom: 30px;
-            }}
+            h1 {{ font-size: 2em; margin-bottom: 30px; }}
             .grid {{
                 display: grid;
                 grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-                gap: 20px;
-                max-width: 1000px;
-                margin: auto;
+                gap: 20px; max-width: 1000px; margin: auto;
             }}
             .card {{
-                padding: 25px 15px;
-                border-radius: 16px;
-                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+                padding: 25px 15px; border-radius: 16px;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.1);
                 transition: transform 0.2s ease;
             }}
-            .card:hover {{
-                transform: translateY(-4px);
-            }}
+            .card:hover {{ transform: translateY(-4px); }}
             .card a {{
-                text-decoration: none;
-                font-size: 1.1em;
-                color: #fff;
-                font-weight: bold;
-                display: block;
+                text-decoration: none; font-size: 1.1em;
+                color: #fff; font-weight: bold; display: block;
             }}
-            a.back {{
-                display: inline-block;
-                margin-top: 40px;
-                font-size: 1em;
-                color: #555;
-                text-decoration: underline;
-            }}
+            a.back {{ display: inline-block; margin-top: 40px; font-size: 1em; color: #555; text-decoration: underline; }}
+            .question {{ text-align: left; margin: 20px auto; max-width: 700px; background: #fff; padding: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }}
+            .options p {{ margin: 8px 0; }}
         </style>
     </head>
     <body>
         <h1>{title}</h1>
-        <div class="grid">{items_html}</div>
+        {items_html}
         {back_html}
     </body>
     </html>
     """
 
+# ---------------- HOMEPAGE ----------------
 @app.route('/')
 def homepage():
     links = [
         ("Today's Editions", "/today"),
-        ("Njayar Prabhadham Archive", "/njayar")
+        ("Njayar Prabhadham Archive", "/njayar"),
+        ("Malappuram Pages", "/malappuram/pages"),
+        ("Current Affairs Quiz", "/quiz")
     ]
     cards = ""
     for i, (label, link) in enumerate(links):
         color = RGB_COLORS[i % len(RGB_COLORS)]
         cards += f'<div class="card" style="background-color:{color};"><a href="{link}">{label}</a></div>'
-    return render_template_string(wrap_grid_page("Suprabhaatham ePaper", cards, show_back=False))
+    return render_template_string(wrap_grid_page("Suprabhaatham ePaper & Quiz", f'<div class="grid">{cards}</div>', show_back=False))
+
+# ---------------- TODAY LINKS ----------------
+def get_url_for_location(location, dt_obj=None):
+    if dt_obj is None:
+        dt_obj = datetime.datetime.now()
+    date_str = dt_obj.strftime('%Y-%m-%d')
+    return f"https://epaper.suprabhaatham.com/details/{location}/{date_str}/1"
 
 @app.route('/today')
 def show_today_links():
@@ -109,8 +101,9 @@ def show_today_links():
         url = get_url_for_location(loc)
         color = RGB_COLORS[i % len(RGB_COLORS)]
         cards += f'<div class="card" style="background-color:{color};"><a href="{url}" target="_blank">{loc}</a></div>'
-    return render_template_string(wrap_grid_page("Today's Suprabhaatham ePaper Links", cards))
+    return render_template_string(wrap_grid_page("Today's Suprabhaatham ePaper Links", f'<div class="grid">{cards}</div>'))
 
+# ---------------- NJAYAR ----------------
 @app.route('/njayar')
 def show_njayar_archive():
     start_date = datetime.date(2019, 1, 6)
@@ -128,19 +121,13 @@ def show_njayar_archive():
         url = get_url_for_location("Njayar Prabhadham", d)
         date_str = d.strftime('%Y-%m-%d')
         color = RGB_COLORS[i % len(RGB_COLORS)]
-        cards += f'''
-        <div class="card" style="background-color:{color};">
-            <a href="{url}" target="_blank" rel="noopener noreferrer">{date_str}</a>
-        </div>
-        '''
-    return render_template_string(wrap_grid_page("Njayar Prabhadham - Sunday Editions", cards))
+        cards += f'<div class="card" style="background-color:{color};"><a href="{url}" target="_blank">{date_str}</a></div>'
+    return render_template_string(wrap_grid_page("Njayar Prabhadham - Sunday Editions", f'<div class="grid">{cards}</div>'))
 
+# ---------------- UPDATE EPAPER JSON ----------------
 def update_epaper_json():
     url = "https://api2.suprabhaatham.com/api/ePaper"
-    headers = {
-        "Content-Type": "application/json",
-        "Accept-Encoding": "br"
-    }
+    headers = {"Content-Type": "application/json", "Accept-Encoding": "br"}
     payload = {}
 
     while True:
@@ -167,6 +154,7 @@ def update_epaper_json():
 
         time.sleep(86400)  # Wait for 24 hours
 
+# ---------------- MALAPPURAM ----------------
 @app.route('/malappuram/pages')
 def show_malappuram_pages():
     if not os.path.exists(EPAPER_TXT):
@@ -176,10 +164,7 @@ def show_malappuram_pages():
         with open(EPAPER_TXT, "r", encoding="utf-8") as f:
             data = json.load(f)
 
-        pages = [
-            entry for entry in data.get("data", [])
-            if entry.get("Location") == "Malappuram"
-        ]
+        pages = [entry for entry in data.get("data", []) if entry.get("Location") == "Malappuram"]
 
         if not pages:
             return "No pages found for Malappuram.", 404
@@ -189,17 +174,57 @@ def show_malappuram_pages():
             img_url = page.get("Image")
             page_no = page.get("PageNo", "N/A")
             date = page.get("Date", "")
-            cards += f'''
-            <div class="card" style="background-color:{RGB_COLORS[i % len(RGB_COLORS)]};">
-                <a href="{img_url}" target="_blank">Page {page_no}<br><small>{date}</small></a>
-            </div>
-            '''
+            cards += f'<div class="card" style="background-color:{RGB_COLORS[i % len(RGB_COLORS)]};"><a href="{img_url}" target="_blank">Page {page_no}<br><small>{date}</small></a></div>'
 
-        return render_template_string(wrap_grid_page("Malappuram - All Pages", cards))
-
+        return render_template_string(wrap_grid_page("Malappuram - All Pages", f'<div class="grid">{cards}</div>'))
     except Exception as e:
         return f"Error: {e}", 500
 
+# ---------------- QUIZ ----------------
+def fetch_latest_news():
+    """Get headlines from NewsAPI (replace YOUR_KEY with real key)"""
+    try:
+        url = "https://newsapi.org/v2/top-headlines?country=in&apiKey=demo"
+        r = requests.get(url, timeout=10)
+        return [a["title"] for a in r.json().get("articles", []) if "title" in a]
+    except:
+        return ["Parliament passes new education bill", "India wins cricket test match", "ISRO launches new satellite"]
+
+def generate_quiz():
+    headlines = fetch_latest_news()
+    quiz = []
+    for i, headline in enumerate(headlines[:10]):
+        options = random.sample(["A", "B", "C", "D"], 4)
+        quiz.append({
+            "q": f"Q{i+1}. What is the news about: {headline}?",
+            "options": [
+                f"A. Related to Politics",
+                f"B. Related to Sports",
+                f"C. Related to Science/Tech",
+                f"D. Related to Economy"
+            ],
+            "answer": "Depends on headline"
+        })
+    with open(QUIZ_JSON, "w", encoding="utf-8") as f:
+        json.dump(quiz, f, indent=2)
+    return quiz
+
+@app.route('/quiz')
+def show_quiz():
+    if not os.path.exists(QUIZ_JSON):
+        quiz = generate_quiz()
+    else:
+        with open(QUIZ_JSON, "r", encoding="utf-8") as f:
+            quiz = json.load(f)
+    html = ""
+    for q in quiz:
+        html += f'<div class="question"><p><b>{q["q"]}</b></p><div class="options">'
+        for opt in q["options"]:
+            html += f"<p>{opt}</p>"
+        html += "</div></div>"
+    return render_template_string(wrap_grid_page("Current Affairs Quiz", html))
+
+# ---------------- MAIN ----------------
 if __name__ == '__main__':
     threading.Thread(target=update_epaper_json, daemon=True).start()
     app.run(host='0.0.0.0', port=8000)
