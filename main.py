@@ -116,15 +116,19 @@ def update_epaper_json():
             with open(EPAPER_TXT, "w", encoding="utf-8") as f:
                 f.write(decompressed_data)
 
-            print("epaper.txt updated successfully.")
+            print("✅ epaper.txt updated successfully.")
         except Exception as e:
             print(f"[Error updating epaper.txt] {e}")
 
-        time.sleep(86400)  # Wait for 24 hours
+        time.sleep(86400)  # every 24h
 
 # ------------------ RSS Quiz Functions ------------------
 
-RSS_FEED = "https://www.thehindu.com/news/national/feeder/default.rss"
+RSS_FEEDS = [
+    "https://feeds.bbci.co.uk/news/world/rss.xml",
+    "https://timesofindia.indiatimes.com/rssfeeds/-2128936835.cms",
+    "https://www.thehindu.com/news/national/feeder/default.rss"
+]
 
 CATEGORIES = {
     "Politics & Governance": ["parliament", "bill", "modi", "bjp", "congress", "minister", "election", "assembly"],
@@ -135,13 +139,22 @@ CATEGORIES = {
 }
 
 def fetch_latest_news():
-    try:
-        feed = feedparser.parse(RSS_FEED)
-        return [entry.title for entry in feed.entries[:10]]
-    except:
-        return ["Fallback: Parliament passes new education bill",
-                "Fallback: India wins cricket test match",
-                "Fallback: ISRO launches new satellite"]
+    for feed_url in RSS_FEEDS:
+        try:
+            feed = feedparser.parse(feed_url)
+            if len(feed.entries) > 0:
+                print(f"✅ Loaded {len(feed.entries)} entries from {feed_url}")
+                return [entry.title for entry in feed.entries[:10]]
+            else:
+                print(f"⚠️ No entries in {feed_url}")
+        except Exception as e:
+            print(f"[Error fetching {feed_url}] {e}")
+    print("❌ All feeds failed. Using fallback headlines.")
+    return [
+        "Parliament passes new education bill",
+        "India wins cricket test match",
+        "ISRO launches new satellite"
+    ]
 
 def categorize_headline(headline: str) -> str:
     h = headline.lower()
@@ -163,6 +176,7 @@ def generate_quiz():
         })
     with open(QUIZ_JSON, "w", encoding="utf-8") as f:
         json.dump(quiz, f, indent=2)
+    print(f"🧩 Quiz generated with {len(quiz)} questions.")
     return quiz
 
 # ------------------ Routes ------------------
@@ -179,17 +193,6 @@ def homepage():
         color = RGB_COLORS[i % len(RGB_COLORS)]
         cards += f'<div class="card" style="background-color:{color};"><a href="{link}">{label}</a></div>'
     return render_template_string(wrap_grid_page("Suprabhaatham ePaper & Quiz", cards, show_back=False))
-
-def auto_update_quiz():
-    """Background task to regenerate quiz daily."""
-    while True:
-        try:
-            print("Generating latest quiz from RSS feed...")
-            quiz = generate_quiz()
-            print(f"Quiz updated successfully at {datetime.datetime.now()}")
-        except Exception as e:
-            print(f"[Error updating quiz] {e}")
-        time.sleep(86400)  # Wait 24 hours
 
 @app.route('/today')
 def show_today_links():
@@ -217,53 +220,21 @@ def show_njayar_archive():
         url = get_url_for_location("Njayar Prabhadham", d)
         date_str = d.strftime('%Y-%m-%d')
         color = RGB_COLORS[i % len(RGB_COLORS)]
-        cards += f'<div class="card" style="background-color:{color};"><a href="{url}" target="_blank" rel="noopener noreferrer">{date_str}</a></div>'
+        cards += f'<div class="card" style="background-color:{color};"><a href="{url}" target="_blank">{date_str}</a></div>'
     return render_template_string(wrap_grid_page("Njayar Prabhadham - Sunday Editions", cards))
-
-@app.route('/malappuram/pages')
-def show_malappuram_pages():
-    if not os.path.exists(EPAPER_TXT):
-        return "epaper.txt not found", 404
-
-    try:
-        with open(EPAPER_TXT, "r", encoding="utf-8") as f:
-            data = json.load(f)
-
-        pages = [entry for entry in data.get("data", []) if entry.get("Location") == "Malappuram"]
-
-        if not pages:
-            return "No pages found for Malappuram.", 404
-
-        cards = ""
-        for i, page in enumerate(sorted(pages, key=lambda x: x.get("PageNo", 0))):
-            img_url = page.get("Image")
-            page_no = page.get("PageNo", "N/A")
-            date = page.get("Date", "")
-            cards += f'<div class="card" style="background-color:{RGB_COLORS[i % len(RGB_COLORS)]};"><a href="{img_url}" target="_blank">Page {page_no}<br><small>{date}</small></a></div>'
-
-        return render_template_string(wrap_grid_page("Malappuram - All Pages", cards))
-    except Exception as e:
-        return f"Error: {e}", 500
-
-def auto_update_quiz():
-    """Background task to regenerate quiz daily."""
-    while True:
-        try:
-            print("Generating latest quiz from RSS feed...")
-            quiz = generate_quiz()
-            print(f"Quiz updated successfully at {datetime.datetime.now()}")
-        except Exception as e:
-            print(f"[Error updating quiz] {e}")
-        time.sleep(86400)  # Wait 24 hours
-
 
 @app.route('/quiz')
 def show_quiz():
     if not os.path.exists(QUIZ_JSON):
         quiz = generate_quiz()
     else:
-        with open(QUIZ_JSON, "r", encoding="utf-8") as f:
-            quiz = json.load(f)
+        try:
+            with open(QUIZ_JSON, "r", encoding="utf-8") as f:
+                quiz = json.load(f)
+            if not quiz:
+                quiz = generate_quiz()
+        except:
+            quiz = generate_quiz()
 
     quiz_json = json.dumps(quiz)
 
@@ -427,6 +398,18 @@ def show_quiz():
     </html>
     """
     return html
+
+# ------------------ Background threads ------------------
+
+def auto_update_quiz():
+    while True:
+        try:
+            print("🔄 Regenerating daily quiz...")
+            generate_quiz()
+            print(f"✅ Quiz updated at {datetime.datetime.now()}")
+        except Exception as e:
+            print(f"[Error updating quiz] {e}")
+        time.sleep(86400)
 
 # ------------------ Main ------------------
 
