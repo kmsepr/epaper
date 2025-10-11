@@ -245,23 +245,16 @@ def show_malappuram_pages():
     except Exception as e:
         return f"Error: {e}", 500
 
-@app.route('/quiz')
-def show_quiz():
-    if not os.path.exists(QUIZ_JSON):
-        quiz = generate_quiz()
-    else:
-        with open(QUIZ_JSON, "r", encoding="utf-8") as f:
-            quiz = json.load(f)
-
-    html = ""
-    for q in quiz:
-        html += f'<div class="card"><p><b>{q["q"]}</b></p>'
-        for opt in q["options"]:
-            color = "green" if opt == q["answer"] else "black"
-            html += f'<p style="color:{color}">{opt}</p>'
-        html += "</div>"
-
-    return render_template_string(wrap_grid_page("Current Affairs Quiz", html))
+def auto_update_quiz():
+    """Background task to regenerate quiz daily."""
+    while True:
+        try:
+            print("Generating latest quiz from RSS feed...")
+            quiz = generate_quiz()
+            print(f"Quiz updated successfully at {datetime.datetime.now()}")
+        except Exception as e:
+            print(f"[Error updating quiz] {e}")
+        time.sleep(86400)  # Wait 24 hours
 
 
 @app.route('/quiz')
