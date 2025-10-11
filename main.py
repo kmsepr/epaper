@@ -134,15 +134,15 @@ def ask_openai_for_mcq(headline, model=OPENAI_MODEL, max_retries=2):
         return None
 
     prompt = (
-        "Turn the following news headline into a single, specific multiple-choice question (one correct answer) "
-        "suitable for current affairs quizzes. Avoid vague 'which field' questions. Produce exactly 4 options. "
-        "Return only valid JSON with keys: question, options (list of 4 strings), answer (exact option text that is correct).\n\n"
-        f"Headline: {headline}\n\n"
-        "Example output:\n"
-        '{\"question\": \"Who won the Nobel Peace Prize in 2023?\", \"options\": [\"A\",\"B\",\"C\",\"D\"], \"answer\": \"C\"}\n\n"
-        "Now produce the JSON for the headline above."
-    )
-
+    "Turn the following news headline into a single, specific multiple-choice question (one correct answer) "
+    "suitable for current affairs quizzes. Avoid vague 'which field' questions. Produce exactly 4 options. "
+    "Return only valid JSON with keys: question, options (list of 4 strings), answer (exact option text that is correct).\n\n"
+    f"Headline: {headline}\n\n"
+    "Example output:\n"
+    "{\"question\": \"Who won the Nobel Peace Prize in 2023?\", \"options\": [\"A\",\"B\",\"C\",\"D\"], \"answer\": \"C\"}\n\n"
+    "Now produce the JSON for the headline above."
+)
+   
     for attempt in range(max_retries + 1):
         try:
             resp = openai.ChatCompletion.create(
