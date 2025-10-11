@@ -3,3 +3,4 @@ requests
 gunicorn
 brotli
 feedparser
+openai
