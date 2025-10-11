@@ -6,7 +6,10 @@ import datetime
 import requests
 import brotli
 import feedparser
-from flask import Flask, render_template_string
+from flask import Flask, render_template_string, Response
+from bs4 import BeautifulSoup
+from feedgen.feed import FeedGenerator
+from datetime import datetime as dt
 
 app = Flask(__name__)
 
@@ -122,48 +125,46 @@ def update_epaper_json():
 
         time.sleep(86400)  # Wait for 24 hours
 
-# ------------------ RSS Quiz Functions ------------------
+# ------------------ Kerala PSC RSS ------------------
 
-RSS_FEED = "https://www.thehindu.com/news/national/feeder/default.rss"
+URL = "https://www.keralapsc.gov.in/answerkey_omrexams"
 
-CATEGORIES = {
-    "Politics & Governance": ["parliament", "bill", "modi", "bjp", "congress", "minister", "election", "assembly"],
-    "Sports & Games": ["cricket", "football", "hockey", "tennis", "olympic", "match", "tournament", "cup"],
-    "Science & Technology": ["isro", "satellite", "ai", "space", "research", "nasa", "scientist", "technology"],
-    "Business & Economy": ["market", "gdp", "inflation", "trade", "stock", "investment", "economy", "budget"],
-    "International Affairs": ["china", "us", "pakistan", "war", "united nations", "ukraine", "world"]
-}
+def fetch_answerkeys():
+    res = requests.get(URL)
+    res.raise_for_status()
+    soup = BeautifulSoup(res.text, "html.parser")
+    links = soup.select("div.view-content a")
 
-def fetch_latest_news():
-    try:
-        feed = feedparser.parse(RSS_FEED)
-        return [entry.title for entry in feed.entries[:10]]
-    except:
-        return ["Fallback: Parliament passes new education bill",
-                "Fallback: India wins cricket test match",
-                "Fallback: ISRO launches new satellite"]
+    items = []
+    for a in links:
+        href = a.get("href")
+        text = a.get_text(strip=True)
+        if href and text:
+            if href.startswith("/"):
+                href = "https://www.keralapsc.gov.in" + href
+            items.append({
+                "title": text,
+                "link": href,
+                "date": dt.now()
+            })
+    return items
 
-def categorize_headline(headline: str) -> str:
-    h = headline.lower()
-    for category, keywords in CATEGORIES.items():
-        if any(word in h for word in keywords):
-            return category
-    return "General Affairs"
+def generate_rss():
+    fg = FeedGenerator()
+    fg.title("Kerala PSC Answer Keys")
+    fg.link(href=URL, rel='alternate')
+    fg.description("Automatically updated list of Kerala PSC Answer Keys (OMR Exams)")
+    fg.language('en')
 
-def generate_quiz():
-    headlines = fetch_latest_news()
-    quiz = []
-    for i, headline in enumerate(headlines[:10]):
-        correct = categorize_headline(headline)
-        options = list(CATEGORIES.keys()) + ["General Affairs"]
-        quiz.append({
-            "q": f"Q{i+1}. Which category best fits this news: \"{headline}\"?",
-            "options": options,
-            "answer": correct
-        })
-    with open(QUIZ_JSON, "w", encoding="utf-8") as f:
-        json.dump(quiz, f, indent=2)
-    return quiz
+    for item in fetch_answerkeys():
+        fe = fg.add_entry()
+        fe.title(item["title"])
+        fe.link(href=item["link"])
+        fe.pubDate(item["date"])
+
+    fg.rss_file("keralapsc_answerkeys.xml")
+    print("✅ RSS feed generated: keralapsc_answerkeys.xml")
+    return "keralapsc_answerkeys.xml"
 
 # ------------------ Routes ------------------
 
@@ -172,13 +173,36 @@ def homepage():
     links = [
         ("Today's Editions", "/today"),
         ("Njayar Prabhadham Archive", "/njayar"),
-        ("Current Affairs Quiz", "/quiz")
+        ("Kerala PSC Previous Questions", "/keralapsc")
     ]
     cards = ""
     for i, (label, link) in enumerate(links):
         color = RGB_COLORS[i % len(RGB_COLORS)]
         cards += f'<div class="card" style="background-color:{color};"><a href="{link}">{label}</a></div>'
-    return render_template_string(wrap_grid_page("Suprabhaatham ePaper & Quiz", cards, show_back=False))
+    return render_template_string(wrap_grid_page("Suprabhaatham ePaper & Kerala PSC", cards, show_back=False))
+
+@app.route('/keralapsc')
+def show_keralapsc_links():
+    try:
+        items = fetch_answerkeys()
+        cards = ""
+        for i, item in enumerate(items[:40]):
+            color = RGB_COLORS[i % len(RGB_COLORS)]
+            cards += f'<div class="card" style="background-color:{color};"><a href="{item["link"]}" target="_blank">{item["title"]}</a></div>'
+        return render_template_string(wrap_grid_page("Kerala PSC Previous Questions (Answer Keys)", cards))
+    except Exception as e:
+        return f"<h3>Error fetching Kerala PSC links: {e}</h3>"
+
+@app.route('/keralapsc/rss')
+def show_keralapsc_rss():
+    """Serve live RSS feed"""
+    try:
+        xml_path = generate_rss()
+        with open(xml_path, "r", encoding="utf-8") as f:
+            rss_content = f.read()
+        return Response(rss_content, mimetype="application/rss+xml")
+    except Exception as e:
+        return f"<h3>Error generating RSS: {e}</h3>"
 
 @app.route('/today')
 def show_today_links():
@@ -206,7 +230,7 @@ def show_njayar_archive():
         url = get_url_for_location("Njayar Prabhadham", d)
         date_str = d.strftime('%Y-%m-%d')
         color = RGB_COLORS[i % len(RGB_COLORS)]
-        cards += f'<div class="card" style="background-color:{color};"><a href="{url}" target="_blank" rel="noopener noreferrer">{date_str}</a></div>'
+        cards += f'<div class="card" style="background-color:{color};"><a href="{url}" target="_blank">{date_str}</a></div>'
     return render_template_string(wrap_grid_page("Njayar Prabhadham - Sunday Editions", cards))
 
 @app.route('/malappuram/pages')
@@ -233,24 +257,6 @@ def show_malappuram_pages():
         return render_template_string(wrap_grid_page("Malappuram - All Pages", cards))
     except Exception as e:
         return f"Error: {e}", 500
-
-@app.route('/quiz')
-def show_quiz():
-    if not os.path.exists(QUIZ_JSON):
-        quiz = generate_quiz()
-    else:
-        with open(QUIZ_JSON, "r", encoding="utf-8") as f:
-            quiz = json.load(f)
-
-    html = ""
-    for q in quiz:
-        html += f'<div class="card"><p><b>{q["q"]}</b></p>'
-        for opt in q["options"]:
-            color = "green" if opt == q["answer"] else "black"
-            html += f'<p style="color:{color}">{opt}</p>'
-        html += "</div>"
-
-    return render_template_string(wrap_grid_page("Current Affairs Quiz", html))
 
 # ------------------ Main ------------------
 
