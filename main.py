@@ -13,8 +13,9 @@ from flask import Flask, render_template_string
 
 # -------------------- Config --------------------
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")  # change to "gpt-4-turbo" if available
-openai.api_key = OPENAI_API_KEY
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")  # or "gpt-4-turbo"
+if OPENAI_API_KEY:
+    openai.api_key = OPENAI_API_KEY
 
 # Flask app
 app = Flask(__name__)
@@ -85,7 +86,7 @@ def update_epaper_json():
             print("✅ epaper.txt updated successfully.")
         except Exception as e:
             print(f"[Error updating epaper.txt] {e}")
-        time.sleep(86400)
+        time.sleep(86400)  # update daily
 
 # ------------------ News & Quiz Helpers ------------------
 
@@ -134,15 +135,15 @@ def ask_openai_for_mcq(headline, model=OPENAI_MODEL, max_retries=2):
         return None
 
     prompt = (
-    "Turn the following news headline into a single, specific multiple-choice question (one correct answer) "
-    "suitable for current affairs quizzes. Avoid vague 'which field' questions. Produce exactly 4 options. "
-    "Return only valid JSON with keys: question, options (list of 4 strings), answer (exact option text that is correct).\n\n"
-    f"Headline: {headline}\n\n"
-    "Example output:\n"
-    "{\"question\": \"Who won the Nobel Peace Prize in 2023?\", \"options\": [\"A\",\"B\",\"C\",\"D\"], \"answer\": \"C\"}\n\n"
-    "Now produce the JSON for the headline above."
-)
-   
+        "Turn the following news headline into a single, specific multiple-choice question (one correct answer) "
+        "suitable for current affairs quizzes. Avoid vague 'which field' questions. Produce exactly 4 options. "
+        "Return only valid JSON with keys: question, options (list of 4 strings), answer (exact option text that is correct).\n\n"
+        f"Headline: {headline}\n\n"
+        "Example output:\n"
+        "{\"question\": \"Who won the Nobel Peace Prize in 2023?\", \"options\": [\"A\",\"B\",\"C\",\"D\"], \"answer\": \"C\"}\n\n"
+        "Now produce the JSON for the headline above."
+    )
+
     for attempt in range(max_retries + 1):
         try:
             resp = openai.ChatCompletion.create(
@@ -151,20 +152,26 @@ def ask_openai_for_mcq(headline, model=OPENAI_MODEL, max_retries=2):
                 temperature=0.2,
                 max_tokens=400
             )
-            text = resp.choices[0].message.get("content", "").strip()
-            # Attempt to find JSON inside text (some models may return surrounding text)
-            # Try direct load; if fails, try to extract first {...}
+            # Support multiple response shapes
+            content = ""
             try:
-                data = json.loads(text)
+                content = resp.choices[0].message.get("content", "").strip()
             except Exception:
-                # extract the first JSON object in the response
-                start = text.find("{")
-                end = text.rfind("}") + 1
+                # fallback for older/future client shapes
+                content = resp.choices[0].get("text", "").strip()
+
+            # Try parsing JSON directly; if that fails, try to extract JSON block.
+            try:
+                data = json.loads(content)
+            except Exception:
+                start = content.find("{")
+                end = content.rfind("}") + 1
                 if start != -1 and end != -1:
-                    snippet = text[start:end]
+                    snippet = content[start:end]
                     data = json.loads(snippet)
                 else:
                     raise
+
             # Validate structure
             if isinstance(data, dict) and "question" in data and "options" in data and "answer" in data:
                 if isinstance(data["options"], list) and len(data["options"]) == 4:
@@ -181,19 +188,18 @@ def ask_openai_for_mcq(headline, model=OPENAI_MODEL, max_retries=2):
 
 def local_mcq_fallback(headline, idx):
     """If OpenAI isn't available or fails, produce a template MCQ so quiz still works."""
-    # Very simple heuristic-based fallback
-    lower = headline.lower()
+    lower = (headline or "").lower()
     year = datetime.datetime.now().year
     if "nobel" in lower:
         q = f"Who won the Nobel Peace Prize in {year}?"
         opts = ["Médecins Sans Frontières", "Greta Thunberg", "WHO", "UNICEF"]
         correct = opts[0]
     elif "launch" in lower or "satellite" in lower or "mission" in lower:
-        q = f"Which organization launched the mission described in the news?"
+        q = "Which organization launched the mission mentioned in the news?"
         opts = ["ISRO", "NASA", "ESA", "Roscosmos"]
         correct = random.choice(opts)
     elif "tournament" in lower or "cup" in lower or "match" in lower:
-        q = "Which team won the event mentioned in news?"
+        q = "Which team won the event mentioned in the news?"
         opts = ["India", "Australia", "England", "South Africa"]
         correct = random.choice(opts)
     elif "appointed" in lower or "resigned" in lower or "elected" in lower:
@@ -218,7 +224,8 @@ def generate_quiz(num_questions=8, use_openai=True):
     print("🧠 Generating current-affairs quiz...")
     headlines = fetch_latest_headlines()
     # Prefer randomness: sample headlines so daily variety is higher
-    sampled = random.sample(headlines, min(len(headlines), max(num_questions * 2, 12)))
+    sample_count = min(len(headlines), max(num_questions * 2, 12))
+    sampled = random.sample(headlines, sample_count) if headlines else []
     quiz = []
     for i, headline in enumerate(sampled, start=1):
         if len(quiz) >= num_questions:
@@ -234,16 +241,16 @@ def generate_quiz(num_questions=8, use_openai=True):
             opts = []
             for o in mcq["options"]:
                 o = o.strip()
-                if o not in opts and o != "":
+                if o and o not in opts:
                     opts.append(o)
-            # if dedupe reduced to <4, pad with generic distractors
+            # pad if necessary
             while len(opts) < 4:
                 filler = f"Option {len(opts)+1}"
                 if filler not in opts:
                     opts.append(filler)
-            # if answer not present, set first option as answer (fallback)
             answer = mcq["answer"].strip()
             if answer not in opts:
+                # ensure answer is present
                 opts[0] = answer
             random.shuffle(opts)
             quiz.append({
@@ -252,7 +259,6 @@ def generate_quiz(num_questions=8, use_openai=True):
                 "answer": answer
             })
         else:
-            # skip malformed and continue
             continue
         time.sleep(1)  # gentle pacing to avoid rate spikes
 
@@ -267,9 +273,12 @@ def generate_quiz(num_questions=8, use_openai=True):
             })
 
     # Persist
-    with open(QUIZ_JSON, "w", encoding="utf-8") as f:
-        json.dump(quiz, f, indent=2, ensure_ascii=False)
-    print(f"✅ Saved {len(quiz)} questions to {QUIZ_JSON}")
+    try:
+        with open(QUIZ_JSON, "w", encoding="utf-8") as f:
+            json.dump(quiz, f, indent=2, ensure_ascii=False)
+        print(f"✅ Saved {len(quiz)} questions to {QUIZ_JSON}")
+    except Exception as e:
+        print(f"[Error saving quiz.json] {e}")
     return quiz
 
 # ------------------ Routes ------------------
@@ -330,34 +339,99 @@ def show_quiz():
             quiz = generate_quiz()
 
     quiz_json = json.dumps(quiz)
-    # Same UI you had, but title updated
-    return render_template_string(f"""
-    <!DOCTYPE html><html lang="en"><head>
-    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Current Affairs Quiz</title>
-    <style>
-        body {{font-family:'Segoe UI',sans-serif;background:#f0f2f5;margin:0;padding:30px 10px;text-align:center;color:#333}}
-        h1{{font-size:1.8em;margin-bottom:20px}}
-        .quiz-box{{background:white;padding:20px;border-radius:12px;box-shadow:0 2px 10px rgba(0,0,0,0.1);max-width:600px;margin:0 auto}}
-        .options button{{display:block;width:100%;margin:8px 0;padding:10px;border:none;border-radius:8px;background:#e4e4e4;cursor:pointer;font-size:1em}}
-        .options button:hover{{background:#d0d0d0}}
-        .correct{{background:#6BCB77!important;color:white}}
-        .wrong{{background:#FF6B6B!important;color:white}}
-        .next-btn{{margin-top:15px;background:#4D96FF;color:white;border:none;border-radius:8px;padding:10px 20px;display:none}}
-        a.back{{display:inline-block;margin-top:30px;font-size:1em;color:#555;text-decoration:underline}}
-    </style></head><body>
-    <h1>📰 AI Current Affairs Quiz</h1>
-    <div class="quiz-box" id="quiz-box"><div class="question" id="question"></div><div class="options" id="options"></div><button class="next-btn" id="next-btn">Next</button></div>
-    <div class="score-box" id="score-box" style="display:none"><h2>Your Score</h2><p id="score-text"></p><a class="back" href="/">Back to Home</a></div>
-    <script>
-        const quizData = {quiz_json};
-        let current=0,score=0;
-        const questionEl=document.getElementById('question'),optionsEl=document.getElementById('options'),nextBtn=document.getElementById('next-btn'),quizBox=document.getElementById('quiz-box'),scoreBox=document.getElementById('score-box'),scoreText=document.getElementById('score-text');
-        function showQuestion(){const q=quizData[current];questionEl.textContent=q.q;optionsEl.innerHTML='';q.options.forEach(opt=>{const btn=document.createElement('button');btn.textContent=opt;btn.onclick=()=>selectAnswer(btn,q.answer);optionsEl.appendChild(btn);});}
-        function selectAnswer(btn,correct){const buttons=optionsEl.querySelectorAll('button');buttons.forEach(b=>{b.disabled=true;if(b.textContent===correct)b.classList.add('correct');});if(btn.textContent===correct)score++;else btn.classList.add('wrong');nextBtn.style.display='block'}
-        nextBtn.onclick=()=>{current++;nextBtn.style.display='none';if(current<quizData.length)showQuestion();else{quizBox.style.display='none';scoreBox.style.display='block';scoreText.textContent=`You scored ${score} / ${quizData.length}`}};showQuestion();
-    </script></body></html>
-    """)
+    # Use Jinja to safely inject JSON
+    template = """
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="utf-8" />
+      <meta name="viewport" content="width=device-width,initial-scale=1" />
+      <title>Current Affairs Quiz</title>
+      <style>
+        body {font-family:'Segoe UI',sans-serif;background:#f0f2f5;margin:0;padding:30px 10px;text-align:center;color:#333}
+        h1{font-size:1.8em;margin-bottom:20px}
+        .quiz-box{background:white;padding:20px;border-radius:12px;box-shadow:0 2px 10px rgba(0,0,0,0.1);max-width:600px;margin:0 auto}
+        .options button{display:block;width:100%;margin:8px 0;padding:10px;border:none;border-radius:8px;background:#e4e4e4;cursor:pointer;font-size:1em}
+        .options button:hover{background:#d0d0d0}
+        .correct{background:#6BCB77!important;color:white}
+        .wrong{background:#FF6B6B!important;color:white}
+        .next-btn{margin-top:15px;background:#4D96FF;color:white;border:none;border-radius:8px;padding:10px 20px;display:none}
+        a.back{display:inline-block;margin-top:30px;font-size:1em;color:#555;text-decoration:underline}
+      </style>
+    </head>
+    <body>
+      <h1>📰 AI Current Affairs Quiz</h1>
+      <div class="quiz-box" id="quiz-box">
+        <div class="question" id="question"></div>
+        <div class="options" id="options"></div>
+        <button class="next-btn" id="next-btn">Next</button>
+      </div>
+
+      <div class="score-box" id="score-box" style="display:none">
+        <h2>Your Score</h2>
+        <p id="score-text"></p>
+        <a class="back" href="/">Back to Home</a>
+      </div>
+
+      <script>
+        const quizData = {{ quiz_json | safe }};
+        let current = 0, score = 0;
+        const questionEl = document.getElementById('question');
+        const optionsEl = document.getElementById('options');
+        const nextBtn = document.getElementById('next-btn');
+        const quizBox = document.getElementById('quiz-box');
+        const scoreBox = document.getElementById('score-box');
+        const scoreText = document.getElementById('score-text');
+
+        function showQuestion() {
+          const q = quizData[current];
+          questionEl.textContent = q.q;
+          optionsEl.innerHTML = '';
+          q.options.forEach(opt => {
+            const btn = document.createElement('button');
+            btn.textContent = opt;
+            btn.onclick = () => selectAnswer(btn, q.answer);
+            optionsEl.appendChild(btn);
+          });
+        }
+
+        function selectAnswer(btn, correctAnswer) {
+          const buttons = optionsEl.querySelectorAll('button');
+          buttons.forEach(b => {
+            b.disabled = true;
+            if (b.textContent === correctAnswer) b.classList.add('correct');
+          });
+          if (btn.textContent === correctAnswer) {
+            score++;
+          } else {
+            btn.classList.add('wrong');
+          }
+          nextBtn.style.display = 'block';
+        }
+
+        nextBtn.onclick = () => {
+          current++;
+          nextBtn.style.display = 'none';
+          if (current < quizData.length) {
+            showQuestion();
+          } else {
+            quizBox.style.display = 'none';
+            scoreBox.style.display = 'block';
+            scoreText.textContent = `You scored ${score} / ${quizData.length}`;
+          }
+        };
+
+        // start
+        if (Array.isArray(quizData) && quizData.length > 0) {
+          showQuestion();
+        } else {
+          questionEl.textContent = 'No quiz available right now.';
+        }
+      </script>
+    </body>
+    </html>
+    """
+    return render_template_string(template, quiz_json=quiz_json)
 
 # ------------------ Background threads ------------------
 
@@ -369,7 +443,7 @@ def auto_update_quiz():
             print(f"✅ Quiz updated at {datetime.datetime.now()}")
         except Exception as e:
             print(f"[Error updating quiz] {e}")
-        time.sleep(86400)
+        time.sleep(86400)  # change to 3600 for hourly
 
 # ------------------ Main ------------------
 
