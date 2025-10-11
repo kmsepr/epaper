@@ -180,6 +180,17 @@ def homepage():
         cards += f'<div class="card" style="background-color:{color};"><a href="{link}">{label}</a></div>'
     return render_template_string(wrap_grid_page("Suprabhaatham ePaper & Quiz", cards, show_back=False))
 
+def auto_update_quiz():
+    """Background task to regenerate quiz daily."""
+    while True:
+        try:
+            print("Generating latest quiz from RSS feed...")
+            quiz = generate_quiz()
+            print(f"Quiz updated successfully at {datetime.datetime.now()}")
+        except Exception as e:
+            print(f"[Error updating quiz] {e}")
+        time.sleep(86400)  # Wait 24 hours
+
 @app.route('/today')
 def show_today_links():
     cards = ""
@@ -252,8 +263,181 @@ def show_quiz():
 
     return render_template_string(wrap_grid_page("Current Affairs Quiz", html))
 
+
+@app.route('/quiz')
+def show_quiz():
+    if not os.path.exists(QUIZ_JSON):
+        quiz = generate_quiz()
+    else:
+        with open(QUIZ_JSON, "r", encoding="utf-8") as f:
+            quiz = json.load(f)
+
+    quiz_json = json.dumps(quiz)
+
+    html = f"""
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Current Affairs Quiz</title>
+        <style>
+            body {{
+                font-family: 'Segoe UI', sans-serif;
+                background: #f0f2f5;
+                margin: 0;
+                padding: 30px 10px;
+                color: #333;
+                text-align: center;
+            }}
+            h1 {{
+                font-size: 1.8em;
+                margin-bottom: 20px;
+            }}
+            .quiz-box {{
+                background: white;
+                padding: 20px;
+                border-radius: 12px;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                max-width: 600px;
+                margin: 0 auto;
+            }}
+            .question {{
+                font-size: 1.1em;
+                margin-bottom: 15px;
+            }}
+            .options button {{
+                display: block;
+                width: 100%;
+                margin: 8px 0;
+                padding: 10px;
+                font-size: 1em;
+                border: none;
+                border-radius: 8px;
+                background: #e4e4e4;
+                cursor: pointer;
+                transition: background 0.2s;
+            }}
+            .options button:hover {{
+                background: #d0d0d0;
+            }}
+            .correct {{
+                background: #6BCB77 !important;
+                color: white;
+            }}
+            .wrong {{
+                background: #FF6B6B !important;
+                color: white;
+            }}
+            .next-btn {{
+                margin-top: 15px;
+                background: #4D96FF;
+                color: white;
+                border: none;
+                border-radius: 8px;
+                padding: 10px 20px;
+                cursor: pointer;
+                display: none;
+            }}
+            .next-btn:hover {{
+                background: #3c7de6;
+            }}
+            .score-box {{
+                display: none;
+                background: #fff;
+                padding: 20px;
+                border-radius: 12px;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                max-width: 400px;
+                margin: 0 auto;
+            }}
+            a.back {{
+                display: inline-block;
+                margin-top: 30px;
+                font-size: 1em;
+                color: #555;
+                text-decoration: underline;
+            }}
+        </style>
+    </head>
+    <body>
+        <h1>📰 Current Affairs Quiz</h1>
+        <div class="quiz-box" id="quiz-box">
+            <div class="question" id="question"></div>
+            <div class="options" id="options"></div>
+            <button class="next-btn" id="next-btn">Next</button>
+        </div>
+
+        <div class="score-box" id="score-box">
+            <h2>Your Score</h2>
+            <p id="score-text"></p>
+            <a class="back" href="/">Back to Home</a>
+        </div>
+
+        <script>
+            const quizData = {quiz_json};
+            let current = 0;
+            let score = 0;
+
+            const questionEl = document.getElementById('question');
+            const optionsEl = document.getElementById('options');
+            const nextBtn = document.getElementById('next-btn');
+            const quizBox = document.getElementById('quiz-box');
+            const scoreBox = document.getElementById('score-box');
+            const scoreText = document.getElementById('score-text');
+
+            function showQuestion() {{
+                const q = quizData[current];
+                questionEl.textContent = q.q;
+                optionsEl.innerHTML = '';
+                q.options.forEach(opt => {{
+                    const btn = document.createElement('button');
+                    btn.textContent = opt;
+                    btn.onclick = () => selectAnswer(btn, q.answer);
+                    optionsEl.appendChild(btn);
+                }});
+            }}
+
+            function selectAnswer(btn, correctAnswer) {{
+                const buttons = optionsEl.querySelectorAll('button');
+                buttons.forEach(b => {{
+                    b.disabled = true;
+                    if (b.textContent === correctAnswer) b.classList.add('correct');
+                }});
+                if (btn.textContent === correctAnswer) {{
+                    score++;
+                }} else {{
+                    btn.classList.add('wrong');
+                }}
+                nextBtn.style.display = 'block';
+            }}
+
+            nextBtn.onclick = () => {{
+                current++;
+                nextBtn.style.display = 'none';
+                if (current < quizData.length) {{
+                    showQuestion();
+                }} else {{
+                    showScore();
+                }}
+            }};
+
+            function showScore() {{
+                quizBox.style.display = 'none';
+                scoreBox.style.display = 'block';
+                scoreText.textContent = `You scored ${{score}} / ${{quizData.length}}`;
+            }}
+
+            showQuestion();
+        </script>
+    </body>
+    </html>
+    """
+    return html
+
 # ------------------ Main ------------------
 
 if __name__ == '__main__':
     threading.Thread(target=update_epaper_json, daemon=True).start()
+    threading.Thread(target=auto_update_quiz, daemon=True).start()
     app.run(host='0.0.0.0', port=8000)
