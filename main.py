@@ -1,6 +1,4 @@
-# main.py
 import os
-import random
 import time
 import json
 import threading
@@ -8,24 +6,13 @@ import datetime
 import requests
 import brotli
 import feedparser
-import openai
-from flask import Flask, render_template_string
-from flask import Response
+from flask import Flask, render_template_string, Response
 from bs4 import BeautifulSoup
 
-
 # -------------------- Config --------------------
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")  # or "gpt-4-turbo"
-if OPENAI_API_KEY:
-    openai.api_key = OPENAI_API_KEY
-
-# Flask app
 app = Flask(__name__)
-
 UPLOAD_FOLDER = "static"
 EPAPER_TXT = "epaper.txt"
-QUIZ_JSON = "quiz.json"
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 LOCATIONS = [
@@ -37,7 +24,7 @@ RGB_COLORS = [
     "#FF6EC7", "#00C2CB", "#FFA41B", "#845EC2"
 ]
 
-# ------------------ ePaper Functions ------------------
+# ------------------ ePaper ------------------
 
 def get_url_for_location(location, dt_obj=None):
     if dt_obj is None:
@@ -80,209 +67,114 @@ def update_epaper_json():
             print("Fetching latest ePaper data...")
             response = requests.post(url, json=payload, headers=headers, timeout=10)
             response.raise_for_status()
-            if response.headers.get('Content-Encoding') == 'br':
-                decompressed_data = brotli.decompress(response.content).decode('utf-8')
-            else:
-                decompressed_data = response.text
+            data = brotli.decompress(response.content).decode('utf-8') if response.headers.get('Content-Encoding') == 'br' else response.text
             with open(EPAPER_TXT, "w", encoding="utf-8") as f:
-                f.write(decompressed_data)
+                f.write(data)
             print("✅ epaper.txt updated successfully.")
         except Exception as e:
             print(f"[Error updating epaper.txt] {e}")
-        time.sleep(86400)  # update daily
+        time.sleep(86400)
 
-# ------------------ News & Quiz Helpers ------------------
+# ------------------ RSS News ------------------
 
 RSS_FEEDS = [
-    "https://feeds.bbci.co.uk/news/world/rss.xml",
-    "https://timesofindia.indiatimes.com/rssfeeds/-2128936835.cms",
-    "https://www.thehindu.com/news/national/feeder/default.rss"
+    ("BBC World", "https://feeds.bbci.co.uk/news/world/rss.xml"),
+    ("Times of India", "https://timesofindia.indiatimes.com/rssfeeds/-2128936835.cms"),
+    ("The Hindu", "https://www.thehindu.com/news/national/feeder/default.rss")
 ]
 
-def fetch_latest_headlines(max_per_feed=5, total_max=30):
-    """Fetch headlines from configured RSS feeds. Return up to total_max headlines."""
-    headlines = []
-    for feed_url in RSS_FEEDS:
+@app.route("/news")
+def show_news():
+    items = []
+    for name, url in RSS_FEEDS:
         try:
-            feed = feedparser.parse(feed_url)
-            for entry in feed.entries[:max_per_feed]:
-                title = entry.get("title") or entry.get("summary") or ""
-                if title:
-                    headlines.append(title.strip())
+            feed = feedparser.parse(url)
+            for entry in feed.entries[:8]:
+                items.append({
+                    "source": name,
+                    "title": entry.get("title", ""),
+                    "link": entry.get("link", ""),
+                    "date": entry.get("published", "")
+                })
         except Exception as e:
-            print(f"[Error fetching {feed_url}] {e}")
-    # Deduplicate and trim
-    unique = []
-    for h in headlines:
-        if h not in unique:
-            unique.append(h)
-        if len(unique) >= total_max:
-            break
-    if not unique:
-        # fallback headlines (will be used to generate questions when feeds fail)
-        unique = [
-            "India wins a major cricket tournament",
-            "ISRO launches a new satellite",
-            "Government announces a new education policy",
-            "Nobel Prize ceremony announces winners"
-        ]
-    return unique
+            print(f"[RSS error] {url}: {e}")
 
-def ask_openai_for_mcq(headline, model=OPENAI_MODEL, max_retries=2):
-    """
-    Ask OpenAI to convert a headline into a specific MCQ with 4 options.
-    Returns dict {question, options, answer} or None on failure.
-    """
-    if not OPENAI_API_KEY:
-        print("[OpenAI] API key not set — skipping AI generation.")
-        return None
+    cards = ""
+    for i, item in enumerate(items):
+        color = RGB_COLORS[i % len(RGB_COLORS)]
+        cards += f'''
+        <div class="card" style="background:{color};color:white;text-align:left">
+            <a href="{item['link']}" target="_blank">{item['title']}</a>
+            <p style="font-size:0.9em;margin-top:8px;">🗞 {item['source']} — {item['date']}</p>
+        </div>
+        '''
+    return render_template_string(wrap_grid_page("📰 Latest RSS News", cards))
 
-    prompt = (
-        "Turn the following news headline into a single, specific multiple-choice question (one correct answer) "
-        "suitable for current affairs quizzes. Avoid vague 'which field' questions. Produce exactly 4 options. "
-        "Return only valid JSON with keys: question, options (list of 4 strings), answer (exact option text that is correct).\n\n"
-        f"Headline: {headline}\n\n"
-        "Example output:\n"
-        "{\"question\": \"Who won the Nobel Peace Prize in 2023?\", \"options\": [\"A\",\"B\",\"C\",\"D\"], \"answer\": \"C\"}\n\n"
-        "Now produce the JSON for the headline above."
-    )
+# ------------------ Telegram to RSS ------------------
 
-    for attempt in range(max_retries + 1):
-        try:
-            resp = openai.ChatCompletion.create(
-                model=model,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.2,
-                max_tokens=400
-            )
-            # Support multiple response shapes
-            content = ""
-            try:
-                content = resp.choices[0].message.get("content", "").strip()
-            except Exception:
-                # fallback for older/future client shapes
-                content = resp.choices[0].get("text", "").strip()
+telegram_cache = {"rss": None, "time": 0}
 
-            # Try parsing JSON directly; if that fails, try to extract JSON block.
-            try:
-                data = json.loads(content)
-            except Exception:
-                start = content.find("{")
-                end = content.rfind("}") + 1
-                if start != -1 and end != -1:
-                    snippet = content[start:end]
-                    data = json.loads(snippet)
-                else:
-                    raise
+@app.route("/telegram")
+def telegram_feed():
+    """Scrape Telegram public channel messages and output as RSS feed (cached 10 min)."""
+    channel_url = "https://t.me/s/Pathravarthakal"
+    now = time.time()
 
-            # Validate structure
-            if isinstance(data, dict) and "question" in data and "options" in data and "answer" in data:
-                if isinstance(data["options"], list) and len(data["options"]) == 4:
-                    return {
-                        "question": data["question"].strip(),
-                        "options": [opt.strip() for opt in data["options"]],
-                        "answer": data["answer"].strip()
-                    }
-            print("[OpenAI] Response did not contain valid MCQ JSON — retrying.")
-        except Exception as e:
-            print(f"[OpenAI] attempt {attempt} error: {e}")
-            time.sleep(1 + attempt * 2)
-    return None
+    if telegram_cache["rss"] and now - telegram_cache["time"] < 600:
+        return Response(telegram_cache["rss"], mimetype="application/rss+xml")
 
-def local_mcq_fallback(headline, idx):
-    """If OpenAI isn't available or fails, produce a template MCQ so quiz still works."""
-    lower = (headline or "").lower()
-    year = datetime.datetime.now().year
-    if "nobel" in lower:
-        q = f"Who won the Nobel Peace Prize in {year}?"
-        opts = ["Médecins Sans Frontières", "Greta Thunberg", "WHO", "UNICEF"]
-        correct = opts[0]
-    elif "launch" in lower or "satellite" in lower or "mission" in lower:
-        q = "Which organization launched the mission mentioned in the news?"
-        opts = ["ISRO", "NASA", "ESA", "Roscosmos"]
-        correct = random.choice(opts)
-    elif "tournament" in lower or "cup" in lower or "match" in lower:
-        q = "Which team won the event mentioned in the news?"
-        opts = ["India", "Australia", "England", "South Africa"]
-        correct = random.choice(opts)
-    elif "appointed" in lower or "resigned" in lower or "elected" in lower:
-        q = "Who was mentioned in the leadership change reported?"
-        opts = ["Narendra Modi", "Joe Biden", "Rishi Sunak", "Emmanuel Macron"]
-        correct = random.choice(opts)
-    else:
-        q = f"What is a key fact from this headline: \"{headline}\"?"
-        opts = ["Politics", "Sports", "Science", "Economy"]
-        correct = random.choice(opts)
-
-    random.shuffle(opts)
-    return {"question": q, "options": opts, "answer": correct}
-
-# ------------------ AI-driven Quiz Generation ------------------
-
-def generate_quiz(num_questions=8, use_openai=True):
-    """
-    Generate quiz.json using live headlines + OpenAI (if available).
-    Ensures num_questions MCQs (4 options each).
-    """
-    print("🧠 Generating current-affairs quiz...")
-    headlines = fetch_latest_headlines()
-    # Prefer randomness: sample headlines so daily variety is higher
-    sample_count = min(len(headlines), max(num_questions * 2, 12))
-    sampled = random.sample(headlines, sample_count) if headlines else []
-    quiz = []
-    for i, headline in enumerate(sampled, start=1):
-        if len(quiz) >= num_questions:
-            break
-        mcq = None
-        if use_openai and OPENAI_API_KEY:
-            mcq = ask_openai_for_mcq(headline)
-        if not mcq:
-            mcq = local_mcq_fallback(headline, i)
-        # Sanity check: ensure 4 options and non-empty answer
-        if mcq and isinstance(mcq.get("options"), list) and len(mcq["options"]) == 4 and mcq.get("answer"):
-            # dedupe options and ensure answer in options
-            opts = []
-            for o in mcq["options"]:
-                o = o.strip()
-                if o and o not in opts:
-                    opts.append(o)
-            # pad if necessary
-            while len(opts) < 4:
-                filler = f"Option {len(opts)+1}"
-                if filler not in opts:
-                    opts.append(filler)
-            answer = mcq["answer"].strip()
-            if answer not in opts:
-                # ensure answer is present
-                opts[0] = answer
-            random.shuffle(opts)
-            quiz.append({
-                "q": f"Q{len(quiz)+1}. {mcq['question']}",
-                "options": opts,
-                "answer": answer
-            })
-        else:
-            continue
-        time.sleep(1)  # gentle pacing to avoid rate spikes
-
-    # Ensure at least 5 questions exist
-    if len(quiz) < 5:
-        while len(quiz) < 5:
-            fallback = local_mcq_fallback("Fallback headline", len(quiz)+1)
-            quiz.append({
-                "q": f"Q{len(quiz)+1}. {fallback['question']}",
-                "options": fallback['options'],
-                "answer": fallback['answer']
-            })
-
-    # Persist
     try:
-        with open(QUIZ_JSON, "w", encoding="utf-8") as f:
-            json.dump(quiz, f, indent=2, ensure_ascii=False)
-        print(f"✅ Saved {len(quiz)} questions to {QUIZ_JSON}")
+        html = requests.get(channel_url, timeout=10).text
+        soup = BeautifulSoup(html, "html.parser")
+
+        items = []
+        for post in soup.select(".tgme_widget_message_wrap"):
+            title_el = post.select_one(".tgme_widget_message_text")
+            img_el = post.select_one("a.tgme_widget_message_photo_wrap img")
+            link_el = post.select_one("a.tgme_widget_message_date")
+            date_el = post.select_one("time")
+
+            title = title_el.get_text(strip=True) if title_el else "(No text)"
+            link = link_el["href"] if link_el else channel_url
+            pub_date = date_el["datetime"] if date_el else datetime.datetime.utcnow().isoformat()
+            img_url = img_el["src"] if img_el else ""
+            desc = title + (f'<br><img src="{img_url}" style="max-width:100%">' if img_url else "")
+
+            items.append({
+                "title": title,
+                "link": link,
+                "pubDate": pub_date,
+                "description": desc
+            })
+
+        rss_items = "\n".join(
+            f"""
+            <item>
+                <title><![CDATA[{i['title']}]]></title>
+                <link>{i['link']}</link>
+                <pubDate>{i['pubDate']}</pubDate>
+                <description><![CDATA[{i['description']}]]></description>
+            </item>
+            """ for i in items[:20]
+        )
+
+        rss = f"""<?xml version="1.0" encoding="UTF-8"?>
+        <rss version="2.0">
+          <channel>
+            <title>Pathravarthakal Telegram Feed</title>
+            <link>{channel_url}</link>
+            <description>Latest updates from the Pathravarthakal Telegram channel.</description>
+            <language>ml</language>
+            {rss_items}
+          </channel>
+        </rss>"""
+
+        telegram_cache["rss"] = rss
+        telegram_cache["time"] = now
+        return Response(rss, mimetype="application/rss+xml")
+
     except Exception as e:
-        print(f"[Error saving quiz.json] {e}")
-    return quiz
+        return f"Error fetching Telegram feed: {e}", 500
 
 # ------------------ Routes ------------------
 
@@ -291,13 +183,14 @@ def homepage():
     links = [
         ("Today's Editions", "/today"),
         ("Njayar Prabhadham Archive", "/njayar"),
-        ("Current Affairs Quiz", "/quiz")
+        ("Latest News (RSS)", "/news"),
+        ("Pathravarthakal Telegram RSS", "/telegram")
     ]
     cards = ""
     for i, (label, link) in enumerate(links):
         color = RGB_COLORS[i % len(RGB_COLORS)]
         cards += f'<div class="card" style="background-color:{color};"><a href="{link}">{label}</a></div>'
-    return render_template_string(wrap_grid_page("Suprabhaatham ePaper & Quiz", cards, show_back=False))
+    return render_template_string(wrap_grid_page("Suprabhaatham ePaper & RSS News", cards, show_back=False))
 
 @app.route('/today')
 def show_today_links():
@@ -327,201 +220,8 @@ def show_njayar_archive():
         cards += f'<div class="card" style="background-color:{color};"><a href="{url}" target="_blank">{date_str}</a></div>'
     return render_template_string(wrap_grid_page("Njayar Prabhadham - Sunday Editions", cards))
 
-@app.route('/quiz')
-def show_quiz():
-    # If quiz json missing or empty, generate now
-    if not os.path.exists(QUIZ_JSON):
-        quiz = generate_quiz()
-    else:
-        try:
-            with open(QUIZ_JSON, "r", encoding="utf-8") as f:
-                quiz = json.load(f)
-            if not quiz:
-                quiz = generate_quiz()
-        except Exception:
-            quiz = generate_quiz()
-
-    quiz_json = json.dumps(quiz)
-    # Use Jinja to safely inject JSON
-    template = """
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-      <meta charset="utf-8" />
-      <meta name="viewport" content="width=device-width,initial-scale=1" />
-      <title>Current Affairs Quiz</title>
-      <style>
-        body {font-family:'Segoe UI',sans-serif;background:#f0f2f5;margin:0;padding:30px 10px;text-align:center;color:#333}
-        h1{font-size:1.8em;margin-bottom:20px}
-        .quiz-box{background:white;padding:20px;border-radius:12px;box-shadow:0 2px 10px rgba(0,0,0,0.1);max-width:600px;margin:0 auto}
-        .options button{display:block;width:100%;margin:8px 0;padding:10px;border:none;border-radius:8px;background:#e4e4e4;cursor:pointer;font-size:1em}
-        .options button:hover{background:#d0d0d0}
-        .correct{background:#6BCB77!important;color:white}
-        .wrong{background:#FF6B6B!important;color:white}
-        .next-btn{margin-top:15px;background:#4D96FF;color:white;border:none;border-radius:8px;padding:10px 20px;display:none}
-        a.back{display:inline-block;margin-top:30px;font-size:1em;color:#555;text-decoration:underline}
-      </style>
-    </head>
-    <body>
-      <h1>📰 AI Current Affairs Quiz</h1>
-      <div class="quiz-box" id="quiz-box">
-        <div class="question" id="question"></div>
-        <div class="options" id="options"></div>
-        <button class="next-btn" id="next-btn">Next</button>
-      </div>
-
-      <div class="score-box" id="score-box" style="display:none">
-        <h2>Your Score</h2>
-        <p id="score-text"></p>
-        <a class="back" href="/">Back to Home</a>
-      </div>
-
-      <script>
-        const quizData = {{ quiz_json | safe }};
-        let current = 0, score = 0;
-        const questionEl = document.getElementById('question');
-        const optionsEl = document.getElementById('options');
-        const nextBtn = document.getElementById('next-btn');
-        const quizBox = document.getElementById('quiz-box');
-        const scoreBox = document.getElementById('score-box');
-        const scoreText = document.getElementById('score-text');
-
-        function showQuestion() {
-          const q = quizData[current];
-          questionEl.textContent = q.q;
-          optionsEl.innerHTML = '';
-          q.options.forEach(opt => {
-            const btn = document.createElement('button');
-            btn.textContent = opt;
-            btn.onclick = () => selectAnswer(btn, q.answer);
-            optionsEl.appendChild(btn);
-          });
-        }
-
-        function selectAnswer(btn, correctAnswer) {
-          const buttons = optionsEl.querySelectorAll('button');
-          buttons.forEach(b => {
-            b.disabled = true;
-            if (b.textContent === correctAnswer) b.classList.add('correct');
-          });
-          if (btn.textContent === correctAnswer) {
-            score++;
-          } else {
-            btn.classList.add('wrong');
-          }
-          nextBtn.style.display = 'block';
-        }
-
-        nextBtn.onclick = () => {
-          current++;
-          nextBtn.style.display = 'none';
-          if (current < quizData.length) {
-            showQuestion();
-          } else {
-            quizBox.style.display = 'none';
-            scoreBox.style.display = 'block';
-            scoreText.textContent = `You scored ${score} / ${quizData.length}`;
-          }
-        };
-
-        // start
-        if (Array.isArray(quizData) && quizData.length > 0) {
-          showQuestion();
-        } else {
-          questionEl.textContent = 'No quiz available right now.';
-        }
-      </script>
-    </body>
-    </html>
-    """
-    return render_template_string(template, quiz_json=quiz_json)
-
-# ------------------ Background threads ------------------
-
-def auto_update_quiz():
-    while True:
-        try:
-            print("🔄 Auto updating daily quiz...")
-            generate_quiz(num_questions=8, use_openai=True)
-            print(f"✅ Quiz updated at {datetime.datetime.now()}")
-        except Exception as e:
-            print(f"[Error updating quiz] {e}")
-        time.sleep(86400)  # change to 3600 for hourly
-
-telegram_cache = {"rss": None, "time": 0}
-
-@app.route("/telegram")
-def telegram_feed():
-    """Scrape Telegram public channel messages and output as RSS feed (cached 10 min)."""
-    channel_url = "https://t.me/s/Pathravarthakal"
-    now = time.time()
-
-    # Serve cached version if recent
-    if telegram_cache["rss"] and now - telegram_cache["time"] < 600:
-        return Response(telegram_cache["rss"], mimetype="application/rss+xml")
-
-    try:
-        html = requests.get(channel_url, timeout=10).text
-        soup = BeautifulSoup(html, "html.parser")
-
-        items = []
-        for post in soup.select(".tgme_widget_message_wrap"):
-            title_el = post.select_one(".tgme_widget_message_text")
-            img_el = post.select_one("a.tgme_widget_message_photo_wrap img")
-            link_el = post.select_one("a.tgme_widget_message_date")
-            date_el = post.select_one("time")
-
-            title = title_el.get_text(strip=True) if title_el else "(No text)"
-            link = link_el["href"] if link_el else channel_url
-            pub_date = date_el["datetime"] if date_el else datetime.datetime.utcnow().isoformat()
-            img_url = img_el["src"] if img_el else ""
-
-            desc = title
-            if img_url:
-                desc += f'<br><img src="{img_url}" style="max-width:100%">'
-
-            items.append({
-                "title": title,
-                "link": link,
-                "pubDate": pub_date,
-                "description": desc
-            })
-
-        rss_items = "\n".join(
-            f"""
-            <item>
-                <title><![CDATA[{i['title']}]]></title>
-                <link>{i['link']}</link>
-                <pubDate>{i['pubDate']}</pubDate>
-                <description><![CDATA[{i['description']}]]></description>
-            </item>
-            """
-            for i in items[:20]
-        )
-
-        rss = f"""<?xml version="1.0" encoding="UTF-8"?>
-        <rss version="2.0">
-          <channel>
-            <title>Pathravarthakal Telegram Feed</title>
-            <link>{channel_url}</link>
-            <description>Latest updates from the Pathravarthakal Telegram channel.</description>
-            <language>ml</language>
-            {rss_items}
-          </channel>
-        </rss>"""
-
-        telegram_cache["rss"] = rss
-        telegram_cache["time"] = now
-        return Response(rss, mimetype="application/rss+xml")
-
-    except Exception as e:
-        return f"Error fetching Telegram feed: {e}", 500
-
 # ------------------ Main ------------------
 
 if __name__ == '__main__':
-    # start background threads
     threading.Thread(target=update_epaper_json, daemon=True).start()
-    threading.Thread(target=auto_update_quiz, daemon=True).start()
-    # run app
     app.run(host='0.0.0.0', port=8000)
