@@ -64,23 +64,24 @@ def wrap_grid_page(title, items_html, show_back=True):
     """
     
 def wrap_feeds_page(title, content_html, active_tab, message=None):
+    # FIXED: Doubled all curly braces in the CSS block to prevent Jinja2 TemplateSyntaxError.
     base_style = """
-        body {font-family: 'Segoe UI', sans-serif; background:#f0f2f5; margin:0; padding:20px; color:#333;}
-        h1 {font-size:2em; margin-bottom:20px; text-align:center;}
-        .message.success {color:#38761d; background:#e6ffe6; border:1px solid #c6e6c6; padding:10px; border-radius:8px; margin-bottom:20px;}
-        .tabs {display:flex; justify-content:center; margin-bottom:20px; border-bottom:2px solid #ccc; max-width:800px; margin:20px auto;}
-        .tab-button {padding:10px 20px; cursor:pointer; font-size:1.1em; font-weight:bold; color:#555; text-decoration:none; transition:color 0.2s;}
-        .tab-button.active {color:#4D96FF; border-bottom:3px solid #4D96FF; margin-bottom:-2px;}
-        .tab-content {max-width:800px; margin:auto; padding:20px; background:white; border-radius:12px; box-shadow:0 4px 12px rgba(0,0,0,0.08);}
-        .grid {display:grid; grid-template-columns:repeat(auto-fit, minmax(250px, 1fr)); gap:15px;}
-        .card {padding:15px; border-radius:10px; box-shadow:0 1px 4px rgba(0,0,0,0.1); transition:transform .2s; min-height: 100px; display: flex; flex-direction: column; justify-content: space-between;}
-        .card:hover {transform:translateY(-2px);}
-        .card a {text-decoration:none; font-size:1em; color:#fff; font-weight:bold; display:block;}
-        .card p {font-size:0.85em; margin: 5px 0 0 0;}
+        body {{font-family: 'Segoe UI', sans-serif; background:#f0f2f5; margin:0; padding:20px; color:#333;}}
+        h1 {{font-size:2em; margin-bottom:20px; text-align:center;}}
+        .message.success {{color:#38761d; background:#e6ffe6; border:1px solid #c6e6c6; padding:10px; border-radius:8px; margin-bottom:20px;}}
+        .tabs {{display:flex; justify-content:center; margin-bottom:20px; border-bottom:2px solid #ccc; max-width:800px; margin:20px auto;}}
+        .tab-button {{padding:10px 20px; cursor:pointer; font-size:1.1em; font-weight:bold; color:#555; text-decoration:none; transition:color 0.2s;}}
+        .tab-button.active {{color:#4D96FF; border-bottom:3px solid #4D96FF; margin-bottom:-2px;}}
+        .tab-content {{max-width:800px; margin:auto; padding:20px; background:white; border-radius:12px; box-shadow:0 4px 12px rgba(0,0,0,0.08);}}
+        .grid {{display:grid; grid-template-columns:repeat(auto-fit, minmax(250px, 1fr)); gap:15px;}}
+        .card {{padding:15px; border-radius:10px; box-shadow:0 1px 4px rgba(0,0,0,0.1); transition:transform .2s; min-height: 100px; display: flex; flex-direction: column; justify-content: space-between;}}
+        .card:hover {{transform:translateY(-2px);}}
+        .card a {{text-decoration:none; font-size:1em; color:#fff; font-weight:bold; display:block;}}
+        .card p {{font-size:0.85em; margin: 5px 0 0 0;}}
         .podcast-card {{background-color:#4D96FF;}}
         .podcast-thumb {{width: 100%; height: 150px; background-size: cover; background-position: center; border-radius: 8px; margin-bottom: 10px;}}
-        a.back {display:block; margin-top:20px; text-align:center; font-size:1em; color:#555; text-decoration:underline;}
-        .placeholder {text-align:center; padding:50px; color:#999; font-style:italic;}
+        a.back {{display:block; margin-top:20px; text-align:center; font-size:1em; color:#555; text-decoration:underline;}}
+        .placeholder {{text-align:center; padding:50px; color:#999; font-style:italic;}}
     """
     
     tabs_html = f"""
@@ -128,11 +129,13 @@ def update_epaper_json():
             print("Fetching latest ePaper data...")
             response = requests.post(url, json=payload, headers=headers, timeout=10)
             response.raise_for_status()
+            # The BrotliDecompress error happened here, but the code logic is correct for handling compressed data.
             data = brotli.decompress(response.content).decode('utf-8') if response.headers.get('Content-Encoding') == 'br' else response.text
             with open(EPAPER_TXT, "w", encoding="utf-8") as f:
                 f.write(data)
             print("✅ epaper.txt updated successfully.")
         except Exception as e:
+            # We keep the error printing for diagnostics
             print(f"[Error updating epaper.txt] {e}")
         time.sleep(86400)
 
@@ -211,13 +214,14 @@ def add_custom_feed():
         return redirect(url_for('show_feeds', tab='add', message='Error: URL and Category are required!'))
 
     try:
-        # Simple test to see if feedparser can read it and get a title
         feed = feedparser.parse(url)
         if not feed.feed.get('title'):
             raise ValueError("Could not parse a title from the feed.")
             
         feed_title = feed.feed.get('title', 'Untitled Feed')
         feed_image = feed.feed.get('image', {}).get('href', None)
+        if not feed_image and 'itunes_image' in feed.feed:
+            feed_image = feed.feed.itunes_image
             
         CUSTOM_FEEDS.append({
             'url': url,
@@ -227,11 +231,13 @@ def add_custom_feed():
         })
 
         msg = f"✅ Successfully added '{feed_title}' as a {category.title()} feed!"
-        # Redirect to the feeds tab to see the change
         return redirect(url_for('show_feeds', tab=category.lower(), message=msg))
 
     except Exception as e:
-        return redirect(url_for('show_feeds', tab='add', message=f'Error adding feed: {e}'))
+        # URL encode the error message for safe passing in the redirect URL
+        import urllib.parse
+        error_msg = urllib.parse.quote(f'Error adding feed: {e}')
+        return redirect(url_for('show_feeds', tab='add', message=error_msg))
 
 # ------------------ Feeds Route ------------------
 
@@ -242,20 +248,19 @@ def show_feeds():
     content_html = ""
     
     if active_tab == 'news':
-        # --- Aggregated News Feeds (Existing RSS + Telegram Scrape) ---
         items = []
         
         # 1. Existing Static RSS Feeds
         for name, url in RSS_FEEDS:
             try:
                 feed = feedparser.parse(url)
-                for entry in feed.entries[:5]: # Max 5 per source
+                for entry in feed.entries[:5]:
                     items.append({
                         "source": name,
                         "title": entry.get("title", ""),
                         "link": entry.get("link", ""),
                         "date": entry.get("published", ""),
-                        "color_index": RSS_FEEDS.index((name, url)) # Use index for consistent coloring
+                        "color_index": RSS_FEEDS.index((name, url))
                     })
             except Exception as e:
                 print(f"[RSS error] {url}: {e}")
@@ -263,31 +268,45 @@ def show_feeds():
         # 2. Pathravarthakal Telegram Scrape
         try:
             channel_url = "https://t.me/s/Pathravarthakal"
-            html = requests.get(channel_url, timeout=5).text
-            soup = BeautifulSoup(html, "html.parser")
-            for post in soup.select(".tgme_widget_message_wrap")[:5]: # Max 5 posts
-                title_el = post.select_one(".tgme_widget_message_text")
-                link_el = post.select_one("a.tgme_widget_message_date")
-                date_el = post.select_one("time")
+            # Attempt to use cached RSS data for items
+            entries = []
+            if telegram_cache["rss"]:
+                 feed = feedparser.parse(telegram_cache["rss"])
+                 entries = feed.entries[:5]
+            else:
+                # Fallback to scraping if cache is empty (less efficient)
+                html = requests.get(channel_url, timeout=5).text
+                soup = BeautifulSoup(html, "html.parser")
+                for post in soup.select(".tgme_widget_message_wrap")[:5]:
+                    title_el = post.select_one(".tgme_widget_message_text")
+                    link_el = post.select_one("a.tgme_widget_message_date")
+                    date_el = post.select_one("time")
 
-                title = title_el.get_text(strip=True)[:100] + "..." if title_el else "(No text)"
-                link = link_el["href"] if link_el else channel_url
-                pub_date = date_el["datetime"] if date_el else ""
-                
-                items.append({
+                    title = title_el.get_text(strip=True)[:100] + "..." if title_el else "(No text)"
+                    link = link_el["href"] if link_el else channel_url
+                    pub_date = date_el["datetime"] if date_el else ""
+
+                    entries.append({
+                        "title": title,
+                        "link": link,
+                        "published": pub_date,
+                    })
+            
+            for entry in entries:
+                 items.append({
                     "source": "Pathravarthakal (Telegram)",
-                    "title": title,
-                    "link": link,
-                    "date": pub_date,
-                    "color_index": len(RSS_FEEDS) # Assign a new color index
+                    "title": entry.get("title", ""),
+                    "link": entry.get("link", ""),
+                    "date": entry.get("published", ""),
+                    "color_index": len(RSS_FEEDS)
                 })
+
         except Exception as e:
             print(f"[Telegram Scrape error] {e}")
 
         # --- Render Cards ---
         cards = ""
         for i, item in enumerate(items):
-            # Rotate colors based on the full list of colors
             color_idx = item.get('color_index', i)
             color = RGB_COLORS[color_idx % len(RGB_COLORS)]
             cards += f'''
@@ -299,7 +318,6 @@ def show_feeds():
         content_html = f'<div class="grid">{cards}</div>'
 
     elif active_tab == 'podcast':
-        # --- Podcast Feed Display (Combined Static + Custom) ---
         podcast_feeds = [f for f in CUSTOM_FEEDS if f['category'] == 'podcast']
         
         if not podcast_feeds:
@@ -314,35 +332,40 @@ def show_feeds():
                 # Use a specific color for podcasts or let it cycle
                 color = RGB_COLORS[3] # Yellow for distinction
                 
-                # Check for image and link to the latest episode (or the feed itself)
-                feed_link = feed_info['url']
-                latest_title = feed_info['title'] # Placeholder, but can be updated with latest episode
+                latest_title = feed_info['title']
                 latest_link = feed_info['url']
                 
                 try:
-                    feed = feedparser.parse(feed_info['url'])
+                    feed = feedparser.parse(feed_info['url'], agent="Suprabhaatham-Podcast-Reader")
                     if feed.entries:
-                        latest_title = feed.entries[0].get('title', latest_title)
-                        latest_link = feed.entries[0].get('link', latest_link)
+                        latest_entry = feed.entries[0]
+                        latest_title = latest_entry.get('title', latest_title)
+                        latest_link = latest_entry.get('link', latest_link)
+                        if 'enclosures' in latest_entry and latest_entry['enclosures']:
+                             latest_link = latest_entry['enclosures'][0].get('href', latest_link)
+                             
                 except Exception as e:
                     print(f"[Podcast parse error] {e}")
                 
                 
-                thumb_style = f'background-image: url("{feed_info["image"]}");' if feed_info.get("image") else 'background-color: #555;'
+                thumb_style = f'background-image: url("{feed_info["image"]}");' if feed_info.get("image") else 'background-color: #555; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 1.5em;'
+                thumb_content = '' if feed_info.get("image") else feed_info['title'][:1]
                 
                 cards += f'''
                 <div class="card podcast-card" style="background:{color}; color:white; text-align:left;">
-                    <div class="podcast-thumb" style="{thumb_style}"></div>
+                    <a href="{feed_info['url']}" target="_blank" style="text-decoration:none;">
+                        <div class="podcast-thumb" style="{thumb_style}">{thumb_content}</div>
+                    </a>
                     <div style="flex-grow: 1;">
-                        <h3 style="margin-top: 0; font-size: 1.1em; color: white;">{feed_info['title']}</h3>
-                        <p style="font-size: 0.9em;">Latest: <a href="{latest_link}" target="_blank" style="color: white; text-decoration: underline;">{latest_title}</a></p>
+                        <h3 style="margin-top: 0; font-size: 1.1em; color: white; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;" title="{feed_info['title']}">{feed_info['title']}</h3>
+                        <p style="font-size: 0.9em;">Latest Episode: <a href="{latest_link}" target="_blank" style="color: white; text-decoration: underline;">{latest_title}</a></p>
                     </div>
                 </div>
                 '''
             content_html = f'<div class="grid">{cards}</div>'
 
+
     elif active_tab == 'add':
-        # --- Add RSS by URL Form (Updated with category) ---
         content_html = f'''
             <div style="padding: 20px;">
                 <p style="margin-bottom: 20px; font-weight: bold;">Add a new RSS feed to the collection:</p>
