@@ -10,6 +10,9 @@ import brotli
 import feedparser
 import openai
 from flask import Flask, render_template_string
+from flask import Response
+from bs4 import BeautifulSoup
+
 
 # -------------------- Config --------------------
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -444,6 +447,75 @@ def auto_update_quiz():
         except Exception as e:
             print(f"[Error updating quiz] {e}")
         time.sleep(86400)  # change to 3600 for hourly
+
+telegram_cache = {"rss": None, "time": 0}
+
+@app.route("/telegram")
+def telegram_feed():
+    """Scrape Telegram public channel messages and output as RSS feed (cached 10 min)."""
+    channel_url = "https://t.me/s/Pathravarthakal"
+    now = time.time()
+
+    # Serve cached version if recent
+    if telegram_cache["rss"] and now - telegram_cache["time"] < 600:
+        return Response(telegram_cache["rss"], mimetype="application/rss+xml")
+
+    try:
+        html = requests.get(channel_url, timeout=10).text
+        soup = BeautifulSoup(html, "html.parser")
+
+        items = []
+        for post in soup.select(".tgme_widget_message_wrap"):
+            title_el = post.select_one(".tgme_widget_message_text")
+            img_el = post.select_one("a.tgme_widget_message_photo_wrap img")
+            link_el = post.select_one("a.tgme_widget_message_date")
+            date_el = post.select_one("time")
+
+            title = title_el.get_text(strip=True) if title_el else "(No text)"
+            link = link_el["href"] if link_el else channel_url
+            pub_date = date_el["datetime"] if date_el else datetime.datetime.utcnow().isoformat()
+            img_url = img_el["src"] if img_el else ""
+
+            desc = title
+            if img_url:
+                desc += f'<br><img src="{img_url}" style="max-width:100%">'
+
+            items.append({
+                "title": title,
+                "link": link,
+                "pubDate": pub_date,
+                "description": desc
+            })
+
+        rss_items = "\n".join(
+            f"""
+            <item>
+                <title><![CDATA[{i['title']}]]></title>
+                <link>{i['link']}</link>
+                <pubDate>{i['pubDate']}</pubDate>
+                <description><![CDATA[{i['description']}]]></description>
+            </item>
+            """
+            for i in items[:20]
+        )
+
+        rss = f"""<?xml version="1.0" encoding="UTF-8"?>
+        <rss version="2.0">
+          <channel>
+            <title>Pathravarthakal Telegram Feed</title>
+            <link>{channel_url}</link>
+            <description>Latest updates from the Pathravarthakal Telegram channel.</description>
+            <language>ml</language>
+            {rss_items}
+          </channel>
+        </rss>"""
+
+        telegram_cache["rss"] = rss
+        telegram_cache["time"] = now
+        return Response(rss, mimetype="application/rss+xml")
+
+    except Exception as e:
+        return f"Error fetching Telegram feed: {e}", 500
 
 # ------------------ Main ------------------
 
