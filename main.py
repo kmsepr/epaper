@@ -26,7 +26,6 @@ RGB_COLORS = [
     "#FF6EC7", "#00C2CB", "#FFA41B", "#845EC2"
 ]
 
-# RSS_FEEDS now serves as a set of initial suggestions, but is NOT parsed by default.
 RSS_FEEDS = [
     ("BBC World", "https://feeds.bbci.co.uk/news/world/rss.xml"),
     ("Times of India", "https://timesofindia.indiatimes.com/rssfeeds/-2128936835.cms"),
@@ -53,7 +52,7 @@ def clean_html(raw_html):
 # ------------------ HTML Wrappers ------------------
 
 def wrap_grid_page(title, items_html, show_back=True):
-    # ... (Keep existing wrap_grid_page logic)
+    # FIXED: Escaping CSS braces by doubling them for Jinja compatibility.
     back_html = '<p><a class="back" href="/">Back to Home</a></p>' if show_back else ''
     return f"""
     <!DOCTYPE html>
@@ -80,31 +79,31 @@ def wrap_grid_page(title, items_html, show_back=True):
     """
     
 def wrap_feeds_page(title, content_html, active_tab, message=None):
-    # FIXED: Doubled all curly braces in the CSS block to prevent Jinja2 TemplateSyntaxError.
+    # FIXED: Replaced f-string with standard quotes for base_style to solve the persistent Jinja2 parsing error.
     base_style = """
-        body {{font-family: 'Segoe UI', sans-serif; background:#f0f2f5; margin:0; padding:20px; color:#333;}}
-        h1 {{font-size:2em; margin-bottom:20px; text-align:center;}}
-        .message.success {{color:#38761d; background:#e6ffe6; border:1px solid #c6e6c6; padding:10px; border-radius:8px; margin-bottom:20px;}}
-        .tabs {{display:flex; justify-content:center; margin-bottom:20px; border-bottom:2px solid #ccc; max-width:800px; margin:20px auto;}}
-        .tab-button {{padding:10px 20px; cursor:pointer; font-size:1.1em; font-weight:bold; color:#555; text-decoration:none; transition:color 0.2s;}}
-        .tab-button.active {{color:#4D96FF; border-bottom:3px solid #4D96FF; margin-bottom:-2px;}}
-        .tab-content {{max-width:800px; margin:auto; padding:20px; background:white; border-radius:12px; box-shadow:0 4px 12px rgba(0,0,0,0.08);}}
-        .grid {{display:grid; grid-template-columns:repeat(auto-fit, minmax(250px, 1fr)); gap:15px;}}
-        .card {{padding:15px; border-radius:10px; box-shadow:0 1px 4px rgba(0,0,0,0.1); transition:transform .2s; min-height: 100px; display: flex; flex-direction: column; justify-content: space-between;}}
-        .card:hover {{transform:translateY(-2px);}}
-        .card a {{text-decoration:none; font-size:1em; color:#fff; font-weight:bold; display:block;}}
-        .card p {{font-size:0.85em; margin: 5px 0 0 0;}}
-        .feed-card {{cursor: pointer;}}
-        .podcast-card {{background-color:#4D96FF;}}
-        .podcast-thumb {{width: 100%; height: 150px; background-size: cover; background-position: center; border-radius: 8px; margin-bottom: 10px;}}
-        .feed-list-item {{border-bottom: 1px solid #eee; padding: 10px 0; text-align: left;}}
-        .feed-list-item h4 {{margin: 0; font-size: 1.1em;}}
-        .feed-list-item a {{text-decoration: none; color: #333; display: block;}}
-        .feed-list-item a:hover {{color: #4D96FF;}}
-        .feed-list-item small {{color: #777;}}
-        .audio-player {{width: 100%; margin-top: 15px;}}
-        a.back {{display:block; margin-top:20px; text-align:center; font-size:1em; color:#555; text-decoration:underline;}}
-        .placeholder {{text-align:center; padding:50px; color:#999; font-style:italic;}}
+        body {font-family: 'Segoe UI', sans-serif; background:#f0f2f5; margin:0; padding:20px; color:#333;}
+        h1 {font-size:2em; margin-bottom:20px; text-align:center;}
+        .message.success {color:#38761d; background:#e6ffe6; border:1px solid #c6e6c6; padding:10px; border-radius:8px; margin-bottom:20px;}
+        .tabs {display:flex; justify-content:center; margin-bottom:20px; border-bottom:2px solid #ccc; max-width:800px; margin:20px auto;}
+        .tab-button {padding:10px 20px; cursor:pointer; font-size:1.1em; font-weight:bold; color:#555; text-decoration:none; transition:color 0.2s;}
+        .tab-button.active {color:#4D96FF; border-bottom:3px solid #4D96FF; margin-bottom:-2px;}
+        .tab-content {max-width:800px; margin:auto; padding:20px; background:white; border-radius:12px; box-shadow:0 4px 12px rgba(0,0,0,0.08);}
+        .grid {display:grid; grid-template-columns:repeat(auto-fit, minmax(250px, 1fr)); gap:15px;}
+        .card {padding:15px; border-radius:10px; box-shadow:0 1px 4px rgba(0,0,0,0.1); transition:transform .2s; min-height: 100px; display: flex; flex-direction: column; justify-content: space-between;}
+        .card:hover {transform:translateY(-2px);}
+        .card a {text-decoration:none; font-size:1em; color:#fff; font-weight:bold; display:block;}
+        .card p {font-size:0.85em; margin: 5px 0 0 0;}
+        .feed-card {cursor: pointer;}
+        .podcast-card {background-color:#4D96FF;}
+        .podcast-thumb {width: 100%; height: 150px; background-size: cover; background-position: center; border-radius: 8px; margin-bottom: 10px;}
+        .feed-list-item {border-bottom: 1px solid #eee; padding: 10px 0; text-align: left;}
+        .feed-list-item h4 {margin: 0; font-size: 1.1em;}
+        .feed-list-item a {text-decoration: none; color: #333; display: block;}
+        .feed-list-item a:hover {color: #4D96FF;}
+        .feed-list-item small {color: #777;}
+        .audio-player {width: 100%; margin-top: 15px;}
+        a.back {display:block; margin-top:20px; text-align:center; font-size:1em; color:#555; text-decoration:underline;}
+        .placeholder {text-align:center; padding:50px; color:#999; font-style:italic;}
     """
     
     tabs_html = f"""
@@ -136,7 +135,7 @@ def wrap_feeds_page(title, content_html, active_tab, message=None):
     """
 
 # ------------------ ePaper ------------------
-# (Keep existing ePaper functions intact)
+
 def get_url_for_location(location, dt_obj=None):
     if dt_obj is None:
         dt_obj = datetime.datetime.now()
@@ -161,7 +160,6 @@ def update_epaper_json():
         time.sleep(86400)
 
 # ------------------ Telegram to RSS Endpoint ------------------
-# (Keep existing /telegram endpoint intact for feed readers)
 
 @app.route("/telegram")
 def telegram_feed():
@@ -258,6 +256,7 @@ def add_custom_feed():
         return redirect(url_for('show_feeds', tab=category.lower(), message=msg))
 
     except Exception as e:
+        # URL encode the error message for safe passing in the redirect URL
         error_msg = urllib.parse.quote(f'Error adding feed: {e}')
         return redirect(url_for('show_feeds', tab='add', message=error_msg))
 
@@ -277,7 +276,7 @@ def show_feeds():
              content_html = f'''
                 <div class="placeholder">
                     <p>No {active_tab.title()} feeds added yet. Use the "Add RSS by URL" tab to add a feed.</p>
-                    <p>Suggested feeds (not yet added):</p>
+                    <p>Suggested feeds (for manual addition):</p>
                     <ul>
                         {''.join(f'<li>{name} - <code style="font-size:0.9em;">{url}</code></li>' for name, url in RSS_FEEDS)}
                     </ul>
@@ -287,7 +286,6 @@ def show_feeds():
             # Build the grid of feed titles/cards
             cards = ""
             for i, feed_info in enumerate(display_feeds):
-                # Use a distinct color based on category/index
                 color = RGB_COLORS[feed_info['index'] % len(RGB_COLORS)]
                 
                 # Check for image and link to the item list page
@@ -369,9 +367,14 @@ def show_feed_items(feed_index):
         title = clean_html(entry.get('title', '(No Title)'))
         link = entry.get('link', '#')
         published = entry.get('published', entry.get('updated', ''))
-        summary = clean_html(entry.get('summary', entry.get('description', '')))
         
-        item_content = f"<h4><a href='{link}' target='_blank'>{title}</a></h4>"
+        # Use content/summary/description fields for the body text
+        content = entry.get('content', [{}])[0].get('value')
+        summary_or_desc = entry.get('summary', entry.get('description', ''))
+        
+        body_text = clean_html(content) if content else clean_html(summary_or_desc)
+        
+        item_content = f"<h4>{title}</h4>" # Title is not an external link anymore
         item_content += f"<small>{published}</small>"
         
         # Add audio player for podcasts
@@ -386,15 +389,17 @@ def show_feed_items(feed_index):
             if audio_url:
                 item_content += f'<audio controls class="audio-player" src="{audio_url}">Your browser does not support the audio element.</audio>'
         
-        item_content += f"<p style='font-size: 0.9em; margin-top: 5px;'>{summary[:200]}...</p>"
+        item_content += f"<p style='font-size: 0.9em; margin-top: 5px;'>{body_text[:300]}...</p>"
         
+        # Provide a link to the original source if needed
+        item_content += f"<p><a href='{link}' target='_blank'>Read/Listen to full item...</a></p>"
+
         items_html += f'<div class="feed-list-item">{item_content}</div>'
 
     # The wrap_grid_page is reused but with custom HTML structure for list view
     return render_template_string(wrap_grid_page(f"Items from: {feed_title}", items_html))
 
 # ------------------ Routes ------------------
-# (Keep homepage, /today, and /njayar routes intact)
 
 @app.route('/')
 def homepage():
