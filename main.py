@@ -6,7 +6,7 @@ import datetime
 import requests
 import brotli
 import feedparser
-from flask import Flask, render_template_string, Response, request # 'request' added for /feeds
+from flask import Flask, render_template_string, Response, request, redirect, url_for
 from bs4 import BeautifulSoup
 
 # -------------------- Config --------------------
@@ -17,7 +17,7 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 LOCATIONS = [
     "Kozhikode", "Malappuram", "Kannur", "Thrissur",
-    "Kochi", "Thiruvananthapuram", "Palakkad", "Gulf"
+    "Kochi", "Thiruvananthapuram", "Palakkal", "Gulf"
 ]
 RGB_COLORS = [
     "#FF6B6B", "#6BCB77", "#4D96FF", "#FFD93D",
@@ -31,6 +31,9 @@ RSS_FEEDS = [
 ]
 
 telegram_cache = {"rss": None, "time": 0}
+
+# NEW: Global list to store custom feeds in memory
+CUSTOM_FEEDS = []
 
 # ------------------ HTML Wrappers ------------------
 
@@ -60,19 +63,22 @@ def wrap_grid_page(title, items_html, show_back=True):
     </html>
     """
     
-def wrap_feeds_page(title, content_html, active_tab):
+def wrap_feeds_page(title, content_html, active_tab, message=None):
     base_style = """
         body {font-family: 'Segoe UI', sans-serif; background:#f0f2f5; margin:0; padding:20px; color:#333;}
         h1 {font-size:2em; margin-bottom:20px; text-align:center;}
+        .message.success {color:#38761d; background:#e6ffe6; border:1px solid #c6e6c6; padding:10px; border-radius:8px; margin-bottom:20px;}
         .tabs {display:flex; justify-content:center; margin-bottom:20px; border-bottom:2px solid #ccc; max-width:800px; margin:20px auto;}
         .tab-button {padding:10px 20px; cursor:pointer; font-size:1.1em; font-weight:bold; color:#555; text-decoration:none; transition:color 0.2s;}
         .tab-button.active {color:#4D96FF; border-bottom:3px solid #4D96FF; margin-bottom:-2px;}
         .tab-content {max-width:800px; margin:auto; padding:20px; background:white; border-radius:12px; box-shadow:0 4px 12px rgba(0,0,0,0.08);}
         .grid {display:grid; grid-template-columns:repeat(auto-fit, minmax(250px, 1fr)); gap:15px;}
-        .card {padding:15px; border-radius:10px; box-shadow:0 1px 4px rgba(0,0,0,0.1); transition:transform .2s; min-height: 100px;}
+        .card {padding:15px; border-radius:10px; box-shadow:0 1px 4px rgba(0,0,0,0.1); transition:transform .2s; min-height: 100px; display: flex; flex-direction: column; justify-content: space-between;}
         .card:hover {transform:translateY(-2px);}
         .card a {text-decoration:none; font-size:1em; color:#fff; font-weight:bold; display:block;}
         .card p {font-size:0.85em; margin: 5px 0 0 0;}
+        .podcast-card {{background-color:#4D96FF;}}
+        .podcast-thumb {{width: 100%; height: 150px; background-size: cover; background-position: center; border-radius: 8px; margin-bottom: 10px;}}
         a.back {display:block; margin-top:20px; text-align:center; font-size:1em; color:#555; text-decoration:underline;}
         .placeholder {text-align:center; padding:50px; color:#999; font-style:italic;}
     """
@@ -80,10 +86,11 @@ def wrap_feeds_page(title, content_html, active_tab):
     tabs_html = f"""
     <div class="tabs">
         <a class="tab-button {'active' if active_tab == 'news' else ''}" href="/feeds?tab=news">News Feeds</a>
-        <a class="tab-button {'active' if active_tab == 'podcast' else ''}" href="/feeds?tab=podcast">Podcasts (Placeholder)</a>
+        <a class="tab-button {'active' if active_tab == 'podcast' else ''}" href="/feeds?tab=podcast">Podcasts</a>
         <a class="tab-button {'active' if active_tab == 'add' else ''}" href="/feeds?tab=add">Add RSS by URL</a>
     </div>
     <div class="tab-content">
+        {f'<div class="message success">{message}</div>' if message else ''}
         {content_html}
     </div>
     """
@@ -193,12 +200,45 @@ def telegram_feed():
     except Exception as e:
         return f"Error fetching Telegram feed: {e}", 500
 
-# ------------------ Feeds Route (New) ------------------
+# ------------------ Process Custom Feed (New) ------------------
+
+@app.route("/add_custom_feed", methods=['POST'])
+def add_custom_feed():
+    url = request.form.get('rss_url')
+    category = request.form.get('category')
+    
+    if not url or not category:
+        return redirect(url_for('show_feeds', tab='add', message='Error: URL and Category are required!'))
+
+    try:
+        # Simple test to see if feedparser can read it and get a title
+        feed = feedparser.parse(url)
+        if not feed.feed.get('title'):
+            raise ValueError("Could not parse a title from the feed.")
+            
+        feed_title = feed.feed.get('title', 'Untitled Feed')
+        feed_image = feed.feed.get('image', {}).get('href', None)
+            
+        CUSTOM_FEEDS.append({
+            'url': url,
+            'category': category.lower(),
+            'title': feed_title,
+            'image': feed_image
+        })
+
+        msg = f"✅ Successfully added '{feed_title}' as a {category.title()} feed!"
+        # Redirect to the feeds tab to see the change
+        return redirect(url_for('show_feeds', tab=category.lower(), message=msg))
+
+    except Exception as e:
+        return redirect(url_for('show_feeds', tab='add', message=f'Error adding feed: {e}'))
+
+# ------------------ Feeds Route ------------------
 
 @app.route("/feeds")
 def show_feeds():
-    # Default to the 'news' tab
     active_tab = request.args.get('tab', 'news')
+    message = request.args.get('message', None)
     content_html = ""
     
     if active_tab == 'news':
@@ -214,7 +254,8 @@ def show_feeds():
                         "source": name,
                         "title": entry.get("title", ""),
                         "link": entry.get("link", ""),
-                        "date": entry.get("published", "")
+                        "date": entry.get("published", ""),
+                        "color_index": RSS_FEEDS.index((name, url)) # Use index for consistent coloring
                     })
             except Exception as e:
                 print(f"[RSS error] {url}: {e}")
@@ -237,7 +278,8 @@ def show_feeds():
                     "source": "Pathravarthakal (Telegram)",
                     "title": title,
                     "link": link,
-                    "date": pub_date
+                    "date": pub_date,
+                    "color_index": len(RSS_FEEDS) # Assign a new color index
                 })
         except Exception as e:
             print(f"[Telegram Scrape error] {e}")
@@ -245,7 +287,9 @@ def show_feeds():
         # --- Render Cards ---
         cards = ""
         for i, item in enumerate(items):
-            color = RGB_COLORS[i % len(RGB_COLORS)]
+            # Rotate colors based on the full list of colors
+            color_idx = item.get('color_index', i)
+            color = RGB_COLORS[color_idx % len(RGB_COLORS)]
             cards += f'''
             <div class="card" style="background:{color};color:white;text-align:left">
                 <a href="{item['link']}" target="_blank">{item['title']}</a>
@@ -255,47 +299,94 @@ def show_feeds():
         content_html = f'<div class="grid">{cards}</div>'
 
     elif active_tab == 'podcast':
-        # --- Podcast Placeholder ---
-        content_html = '''
-            <div class="placeholder">
-                <p>This section is reserved for podcast feeds. Logic to fetch and display podcast episodes would go here.</p>
-            </div>
-        '''
+        # --- Podcast Feed Display (Combined Static + Custom) ---
+        podcast_feeds = [f for f in CUSTOM_FEEDS if f['category'] == 'podcast']
+        
+        if not podcast_feeds:
+             content_html = '''
+                <div class="placeholder">
+                    <p>No podcasts added yet. Use the "Add RSS by URL" tab to add a podcast feed.</p>
+                </div>
+            '''
+        else:
+            cards = ""
+            for i, feed_info in enumerate(podcast_feeds):
+                # Use a specific color for podcasts or let it cycle
+                color = RGB_COLORS[3] # Yellow for distinction
+                
+                # Check for image and link to the latest episode (or the feed itself)
+                feed_link = feed_info['url']
+                latest_title = feed_info['title'] # Placeholder, but can be updated with latest episode
+                latest_link = feed_info['url']
+                
+                try:
+                    feed = feedparser.parse(feed_info['url'])
+                    if feed.entries:
+                        latest_title = feed.entries[0].get('title', latest_title)
+                        latest_link = feed.entries[0].get('link', latest_link)
+                except Exception as e:
+                    print(f"[Podcast parse error] {e}")
+                
+                
+                thumb_style = f'background-image: url("{feed_info["image"]}");' if feed_info.get("image") else 'background-color: #555;'
+                
+                cards += f'''
+                <div class="card podcast-card" style="background:{color}; color:white; text-align:left;">
+                    <div class="podcast-thumb" style="{thumb_style}"></div>
+                    <div style="flex-grow: 1;">
+                        <h3 style="margin-top: 0; font-size: 1.1em; color: white;">{feed_info['title']}</h3>
+                        <p style="font-size: 0.9em;">Latest: <a href="{latest_link}" target="_blank" style="color: white; text-decoration: underline;">{latest_title}</a></p>
+                    </div>
+                </div>
+                '''
+            content_html = f'<div class="grid">{cards}</div>'
 
     elif active_tab == 'add':
-        # --- Add RSS by URL Form ---
-        content_html = '''
+        # --- Add RSS by URL Form (Updated with category) ---
+        content_html = f'''
             <div style="padding: 20px;">
-                <p>Enter an RSS feed URL to read its content (requires server-side processing which is a placeholder here):</p>
-                <form action="/process_custom_rss" method="POST" style="display:flex; gap:10px;">
-                    <input type="url" name="rss_url" placeholder="e.g., https://example.com/feed.xml" required 
-                           style="flex-grow:1; padding:10px; border-radius:5px; border:1px solid #ccc;">
-                    <button type="submit" style="padding:10px 15px; border:none; border-radius:5px; background:#6BCB77; color:white; font-weight:bold;">Load Feed</button>
+                <p style="margin-bottom: 20px; font-weight: bold;">Add a new RSS feed to the collection:</p>
+                <form action="{url_for('add_custom_feed')}" method="POST" style="display:flex; flex-direction: column; gap:15px;">
+                    <div style="display:flex; flex-direction: column;">
+                        <label for="rss_url" style="font-weight: bold; margin-bottom: 5px;">Feed URL:</label>
+                        <input type="url" id="rss_url" name="rss_url" placeholder="e.g., https://example.com/feed.xml" required 
+                               style="padding:10px; border-radius:5px; border:1px solid #ccc;">
+                    </div>
+                    <div style="display:flex; flex-direction: column;">
+                        <label for="category" style="font-weight: bold; margin-bottom: 5px;">Category:</label>
+                        <select id="category" name="category" required 
+                                style="padding:10px; border-radius:5px; border:1px solid #ccc; background: white;">
+                            <option value="news">News</option>
+                            <option value="podcast">Podcast</option>
+                        </select>
+                    </div>
+                    <button type="submit" style="padding:12px; border:none; border-radius:5px; background:#6BCB77; color:white; font-weight:bold; cursor: pointer;">Add Feed</button>
                 </form>
-                <p style="margin-top:20px;">For the Pathravarthakal Telegram RSS URL, use: <code>/telegram</code></p>
+                <p style="margin-top:20px; font-size: 0.9em; color: #777;">Tip: The Pathravarthakal Telegram RSS URL is available at: <code>{url_for('telegram_feed', _external=True)}</code></p>
+                
+                <h3 style="margin-top:30px;">Current Custom Feeds:</h3>
+                <ul>
+                {"".join(f"<li>{f['title']} ({f['category'].title()}) - <code style='font-size:0.9em;'>{f['url']}</code></li>" for f in CUSTOM_FEEDS) if CUSTOM_FEEDS else '<li>No custom feeds currently loaded.</li>'}
+                </ul>
             </div>
         '''
         
-    return render_template_string(wrap_feeds_page("📰 News & Feeds Center", content_html, active_tab))
+    return render_template_string(wrap_feeds_page("📰 News & Feeds Center", content_html, active_tab, message))
 
 # ------------------ Routes ------------------
 
 @app.route('/')
 def homepage():
-    # UPDATED: Removed individual RSS/Telegram links from the homepage grid
     links = [
         ("Today's Editions", "/today"),
         ("Njayar Prabhadham Archive", "/njayar"),
-        ("News & Feeds Center", "/feeds") # NEW combined link
+        ("News & Feeds Center", "/feeds")
     ]
     cards = ""
     for i, (label, link) in enumerate(links):
-        # We need a fallback color set if the number of links is less than the RGB_COLORS list length
         color = RGB_COLORS[i % len(RGB_COLORS)]
         cards += f'<div class="card" style="background-color:{color};"><a href="{link}">{label}</a></div>'
     return render_template_string(wrap_grid_page("Suprabhaatham ePaper & RSS News", cards, show_back=False))
-
-# NOTE: The old /news route is now redundant and removed.
 
 @app.route('/today')
 def show_today_links():
