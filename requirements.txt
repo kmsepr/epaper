@@ -3,4 +3,5 @@ requests
 gunicorn
 brotli
 feedparser
+beautifulsoup4
 openai
