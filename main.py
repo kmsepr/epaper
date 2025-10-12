@@ -6,8 +6,10 @@ import datetime
 import requests
 import brotli
 import feedparser
-from flask import Flask, render_template_string, Response, request, redirect, url_for
+from flask import Flask, render_template_string, Response, request, redirect, url_for, abort
 from bs4 import BeautifulSoup
+import urllib.parse
+import re # Added for clean_html function
 
 # -------------------- Config --------------------
 app = Flask(__name__)
@@ -24,6 +26,7 @@ RGB_COLORS = [
     "#FF6EC7", "#00C2CB", "#FFA41B", "#845EC2"
 ]
 
+# RSS_FEEDS now serves as a set of initial suggestions, but is NOT parsed by default.
 RSS_FEEDS = [
     ("BBC World", "https://feeds.bbci.co.uk/news/world/rss.xml"),
     ("Times of India", "https://timesofindia.indiatimes.com/rssfeeds/-2128936835.cms"),
@@ -32,12 +35,25 @@ RSS_FEEDS = [
 
 telegram_cache = {"rss": None, "time": 0}
 
-# NEW: Global list to store custom feeds in memory
+# Global list to store custom feeds in memory (Index is crucial for /feed_items)
 CUSTOM_FEEDS = []
+
+# ------------------ Utility Functions ------------------
+
+def clean_html(raw_html):
+    """Strips HTML tags and removes common entities for cleaner descriptions."""
+    if not raw_html:
+        return ""
+    # Remove HTML tags
+    clean_text = re.sub(r'<[^>]+>', '', str(raw_html))
+    # Decode common HTML entities (e.g., &amp;)
+    clean_text = clean_text.replace('&amp;', '&').replace('&nbsp;', ' ')
+    return clean_text.strip()
 
 # ------------------ HTML Wrappers ------------------
 
 def wrap_grid_page(title, items_html, show_back=True):
+    # ... (Keep existing wrap_grid_page logic)
     back_html = '<p><a class="back" href="/">Back to Home</a></p>' if show_back else ''
     return f"""
     <!DOCTYPE html>
@@ -78,8 +94,15 @@ def wrap_feeds_page(title, content_html, active_tab, message=None):
         .card:hover {{transform:translateY(-2px);}}
         .card a {{text-decoration:none; font-size:1em; color:#fff; font-weight:bold; display:block;}}
         .card p {{font-size:0.85em; margin: 5px 0 0 0;}}
+        .feed-card {{cursor: pointer;}}
         .podcast-card {{background-color:#4D96FF;}}
         .podcast-thumb {{width: 100%; height: 150px; background-size: cover; background-position: center; border-radius: 8px; margin-bottom: 10px;}}
+        .feed-list-item {{border-bottom: 1px solid #eee; padding: 10px 0; text-align: left;}}
+        .feed-list-item h4 {{margin: 0; font-size: 1.1em;}}
+        .feed-list-item a {{text-decoration: none; color: #333; display: block;}}
+        .feed-list-item a:hover {{color: #4D96FF;}}
+        .feed-list-item small {{color: #777;}}
+        .audio-player {{width: 100%; margin-top: 15px;}}
         a.back {{display:block; margin-top:20px; text-align:center; font-size:1em; color:#555; text-decoration:underline;}}
         .placeholder {{text-align:center; padding:50px; color:#999; font-style:italic;}}
     """
@@ -113,7 +136,7 @@ def wrap_feeds_page(title, content_html, active_tab, message=None):
     """
 
 # ------------------ ePaper ------------------
-
+# (Keep existing ePaper functions intact)
 def get_url_for_location(location, dt_obj=None):
     if dt_obj is None:
         dt_obj = datetime.datetime.now()
@@ -129,17 +152,16 @@ def update_epaper_json():
             print("Fetching latest ePaper data...")
             response = requests.post(url, json=payload, headers=headers, timeout=10)
             response.raise_for_status()
-            # The BrotliDecompress error happened here, but the code logic is correct for handling compressed data.
             data = brotli.decompress(response.content).decode('utf-8') if response.headers.get('Content-Encoding') == 'br' else response.text
             with open(EPAPER_TXT, "w", encoding="utf-8") as f:
                 f.write(data)
             print("✅ epaper.txt updated successfully.")
         except Exception as e:
-            # We keep the error printing for diagnostics
             print(f"[Error updating epaper.txt] {e}")
         time.sleep(86400)
 
 # ------------------ Telegram to RSS Endpoint ------------------
+# (Keep existing /telegram endpoint intact for feed readers)
 
 @app.route("/telegram")
 def telegram_feed():
@@ -203,7 +225,7 @@ def telegram_feed():
     except Exception as e:
         return f"Error fetching Telegram feed: {e}", 500
 
-# ------------------ Process Custom Feed (New) ------------------
+# ------------------ Process Custom Feed ------------------
 
 @app.route("/add_custom_feed", methods=['POST'])
 def add_custom_feed():
@@ -214,7 +236,7 @@ def add_custom_feed():
         return redirect(url_for('show_feeds', tab='add', message='Error: URL and Category are required!'))
 
     try:
-        feed = feedparser.parse(url)
+        feed = feedparser.parse(url, agent="Custom-Feed-Reader")
         if not feed.feed.get('title'):
             raise ValueError("Could not parse a title from the feed.")
             
@@ -227,19 +249,19 @@ def add_custom_feed():
             'url': url,
             'category': category.lower(),
             'title': feed_title,
-            'image': feed_image
+            'image': feed_image,
+            # Adding an index for easy retrieval later
+            'index': len(CUSTOM_FEEDS) 
         })
 
         msg = f"✅ Successfully added '{feed_title}' as a {category.title()} feed!"
         return redirect(url_for('show_feeds', tab=category.lower(), message=msg))
 
     except Exception as e:
-        # URL encode the error message for safe passing in the redirect URL
-        import urllib.parse
         error_msg = urllib.parse.quote(f'Error adding feed: {e}')
         return redirect(url_for('show_feeds', tab='add', message=error_msg))
 
-# ------------------ Feeds Route ------------------
+# ------------------ Feeds Route - Main Display ------------------
 
 @app.route("/feeds")
 def show_feeds():
@@ -247,125 +269,49 @@ def show_feeds():
     message = request.args.get('message', None)
     content_html = ""
     
-    if active_tab == 'news':
-        items = []
-        
-        # 1. Existing Static RSS Feeds
-        for name, url in RSS_FEEDS:
-            try:
-                feed = feedparser.parse(url)
-                for entry in feed.entries[:5]:
-                    items.append({
-                        "source": name,
-                        "title": entry.get("title", ""),
-                        "link": entry.get("link", ""),
-                        "date": entry.get("published", ""),
-                        "color_index": RSS_FEEDS.index((name, url))
-                    })
-            except Exception as e:
-                print(f"[RSS error] {url}: {e}")
-                
-        # 2. Pathravarthakal Telegram Scrape
-        try:
-            channel_url = "https://t.me/s/Pathravarthakal"
-            # Attempt to use cached RSS data for items
-            entries = []
-            if telegram_cache["rss"]:
-                 feed = feedparser.parse(telegram_cache["rss"])
-                 entries = feed.entries[:5]
-            else:
-                # Fallback to scraping if cache is empty (less efficient)
-                html = requests.get(channel_url, timeout=5).text
-                soup = BeautifulSoup(html, "html.parser")
-                for post in soup.select(".tgme_widget_message_wrap")[:5]:
-                    title_el = post.select_one(".tgme_widget_message_text")
-                    link_el = post.select_one("a.tgme_widget_message_date")
-                    date_el = post.select_one("time")
-
-                    title = title_el.get_text(strip=True)[:100] + "..." if title_el else "(No text)"
-                    link = link_el["href"] if link_el else channel_url
-                    pub_date = date_el["datetime"] if date_el else ""
-
-                    entries.append({
-                        "title": title,
-                        "link": link,
-                        "published": pub_date,
-                    })
-            
-            for entry in entries:
-                 items.append({
-                    "source": "Pathravarthakal (Telegram)",
-                    "title": entry.get("title", ""),
-                    "link": entry.get("link", ""),
-                    "date": entry.get("published", ""),
-                    "color_index": len(RSS_FEEDS)
-                })
-
-        except Exception as e:
-            print(f"[Telegram Scrape error] {e}")
-
-        # --- Render Cards ---
-        cards = ""
-        for i, item in enumerate(items):
-            color_idx = item.get('color_index', i)
-            color = RGB_COLORS[color_idx % len(RGB_COLORS)]
-            cards += f'''
-            <div class="card" style="background:{color};color:white;text-align:left">
-                <a href="{item['link']}" target="_blank">{item['title']}</a>
-                <p style="font-size:0.9em;margin-top:8px;">🗞 {item['source']} — {item['date'].split('T')[0] if item['date'] else 'Date N/A'}</p>
-            </div>
-            '''
-        content_html = f'<div class="grid">{cards}</div>'
-
-    elif active_tab == 'podcast':
-        podcast_feeds = [f for f in CUSTOM_FEEDS if f['category'] == 'podcast']
-        
-        if not podcast_feeds:
-             content_html = '''
+    # Filter feeds based on the active tab (only custom feeds are displayed)
+    display_feeds = [f for f in CUSTOM_FEEDS if f['category'] == active_tab]
+    
+    if active_tab in ['news', 'podcast']:
+        if not display_feeds:
+             content_html = f'''
                 <div class="placeholder">
-                    <p>No podcasts added yet. Use the "Add RSS by URL" tab to add a podcast feed.</p>
+                    <p>No {active_tab.title()} feeds added yet. Use the "Add RSS by URL" tab to add a feed.</p>
+                    <p>Suggested feeds (not yet added):</p>
+                    <ul>
+                        {''.join(f'<li>{name} - <code style="font-size:0.9em;">{url}</code></li>' for name, url in RSS_FEEDS)}
+                    </ul>
                 </div>
             '''
         else:
+            # Build the grid of feed titles/cards
             cards = ""
-            for i, feed_info in enumerate(podcast_feeds):
-                # Use a specific color for podcasts or let it cycle
-                color = RGB_COLORS[3] # Yellow for distinction
+            for i, feed_info in enumerate(display_feeds):
+                # Use a distinct color based on category/index
+                color = RGB_COLORS[feed_info['index'] % len(RGB_COLORS)]
                 
-                latest_title = feed_info['title']
-                latest_link = feed_info['url']
-                
-                try:
-                    feed = feedparser.parse(feed_info['url'], agent="Suprabhaatham-Podcast-Reader")
-                    if feed.entries:
-                        latest_entry = feed.entries[0]
-                        latest_title = latest_entry.get('title', latest_title)
-                        latest_link = latest_entry.get('link', latest_link)
-                        if 'enclosures' in latest_entry and latest_entry['enclosures']:
-                             latest_link = latest_entry['enclosures'][0].get('href', latest_link)
-                             
-                except Exception as e:
-                    print(f"[Podcast parse error] {e}")
-                
-                
+                # Check for image and link to the item list page
                 thumb_style = f'background-image: url("{feed_info["image"]}");' if feed_info.get("image") else 'background-color: #555; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 1.5em;'
                 thumb_content = '' if feed_info.get("image") else feed_info['title'][:1]
+
+                # Link goes to the new feed item viewer route
+                link_url = url_for('show_feed_items', feed_index=feed_info['index'])
                 
                 cards += f'''
-                <div class="card podcast-card" style="background:{color}; color:white; text-align:left;">
-                    <a href="{feed_info['url']}" target="_blank" style="text-decoration:none;">
-                        <div class="podcast-thumb" style="{thumb_style}">{thumb_content}</div>
-                    </a>
+                <div class="card feed-card" style="background:{color}; color:white; text-align:left; cursor: pointer;" 
+                     onclick="window.location.href='{link_url}'">
+                    
+                    <div class="podcast-thumb" style="{thumb_style}">{thumb_content}</div>
                     <div style="flex-grow: 1;">
                         <h3 style="margin-top: 0; font-size: 1.1em; color: white; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;" title="{feed_info['title']}">{feed_info['title']}</h3>
-                        <p style="font-size: 0.9em;">Latest Episode: <a href="{latest_link}" target="_blank" style="color: white; text-decoration: underline;">{latest_title}</a></p>
+                        <p style="font-size: 0.9em; margin-bottom: 0;">Category: {feed_info['category'].title()}</p>
                     </div>
                 </div>
                 '''
             content_html = f'<div class="grid">{cards}</div>'
 
-
     elif active_tab == 'add':
+        # --- Add RSS by URL Form ---
         content_html = f'''
             <div style="padding: 20px;">
                 <p style="margin-bottom: 20px; font-weight: bold;">Add a new RSS feed to the collection:</p>
@@ -396,7 +342,59 @@ def show_feeds():
         
     return render_template_string(wrap_feeds_page("📰 News & Feeds Center", content_html, active_tab, message))
 
+# ------------------ Feed Item Viewer (New) ------------------
+
+@app.route("/feed_items/<int:feed_index>")
+def show_feed_items(feed_index):
+    try:
+        feed_info = CUSTOM_FEEDS[feed_index]
+    except IndexError:
+        abort(404, description="Feed not found.")
+
+    feed_url = feed_info['url']
+    category = feed_info['category']
+    
+    # Parse the feed to get the latest items
+    try:
+        feed = feedparser.parse(feed_url, agent="Custom-Feed-Reader")
+        items = feed.entries
+        feed_title = feed.feed.get('title', feed_info['title'])
+    except Exception as e:
+        return wrap_grid_page(f"Error Loading Feed", f"<p>Could not load feed from {feed_url}. Error: {e}</p>", show_back=True)
+
+    
+    # Render the items list
+    items_html = ""
+    for entry in items[:20]: # Show up to 20 items
+        title = clean_html(entry.get('title', '(No Title)'))
+        link = entry.get('link', '#')
+        published = entry.get('published', entry.get('updated', ''))
+        summary = clean_html(entry.get('summary', entry.get('description', '')))
+        
+        item_content = f"<h4><a href='{link}' target='_blank'>{title}</a></h4>"
+        item_content += f"<small>{published}</small>"
+        
+        # Add audio player for podcasts
+        if category == 'podcast':
+            audio_url = None
+            if 'enclosures' in entry and entry['enclosures']:
+                for enclosure in entry['enclosures']:
+                    if enclosure.get('type', '').startswith('audio/'):
+                        audio_url = enclosure['href']
+                        break
+            
+            if audio_url:
+                item_content += f'<audio controls class="audio-player" src="{audio_url}">Your browser does not support the audio element.</audio>'
+        
+        item_content += f"<p style='font-size: 0.9em; margin-top: 5px;'>{summary[:200]}...</p>"
+        
+        items_html += f'<div class="feed-list-item">{item_content}</div>'
+
+    # The wrap_grid_page is reused but with custom HTML structure for list view
+    return render_template_string(wrap_grid_page(f"Items from: {feed_title}", items_html))
+
 # ------------------ Routes ------------------
+# (Keep homepage, /today, and /njayar routes intact)
 
 @app.route('/')
 def homepage():
