@@ -77,83 +77,66 @@ def update_epaper_json():
 
 # ------------------ Telegram ------------------
 @app.route("/telegram")
-def telegram():
-    """Visual Telegram feed (text + images)"""
+def telegram_feed():
+    """RSS feed output from Telegram channel"""
     channel_url = "https://t.me/s/Pathravarthakal"
+    now = time.time()
+
+    if telegram_cache["rss"] and now - telegram_cache["time"] < 600:
+        return Response(telegram_cache["rss"], mimetype="application/rss+xml")
+
     try:
         html = requests.get(channel_url, timeout=10).text
         soup = BeautifulSoup(html, "html.parser")
 
-        posts_html = ""
+        items = []
         for post in soup.select(".tgme_widget_message_wrap"):
-            text_el = post.select_one(".tgme_widget_message_text")
+            title_el = post.select_one(".tgme_widget_message_text")
             img_el = post.select_one("a.tgme_widget_message_photo_wrap img")
+            link_el = post.select_one("a.tgme_widget_message_date")
             date_el = post.select_one("time")
 
-            text = text_el.get_text(" ", strip=True) if text_el else "(No text)"
-            img_url = img_el["src"] if img_el else None
-            date = date_el["datetime"] if date_el else ""
+            title = title_el.get_text(strip=True) if title_el else "(No text)"
+            link = link_el["href"] if link_el else channel_url
+            pub_date = date_el["datetime"] if date_el else datetime.datetime.utcnow().isoformat()
+            img_url = img_el["src"] if img_el else ""
+            desc = title + (f'<br><img src="{img_url}" style="max-width:100%">' if img_url else "")
 
-            img_tag = (
-                f'<img src="{img_url}" alt="Post image" '
-                f'style="max-width:100%; border-radius:10px; margin-top:10px;">'
-                if img_url else ""
-            )
-            posts_html += f"""
-                <div class="post-card">
-                    <p>{text}</p>
-                    {img_tag}
-                    <small style="color:#888;">{date}</small>
-                </div>
-            """
+            items.append({
+                "title": title,
+                "link": link,
+                "pubDate": pub_date,
+                "description": desc
+            })
 
-        html_page = f"""
-        <!DOCTYPE html>
-        <html lang="ml">
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        rss_items = "\n".join(
+            f"""
+            <item>
+                <title><![CDATA[{i['title']}]]></title>
+                <link>{i['link']}</link>
+                <pubDate>{i['pubDate']}</pubDate>
+                <description><![CDATA[{i['description']}]]></description>
+            </item>
+            """ for i in items[:20]
+        )
+
+        rss = f"""<?xml version="1.0" encoding="UTF-8"?>
+        <rss version="2.0">
+          <channel>
             <title>Pathravarthakal Telegram Feed</title>
-            <style>
-                body {{
-                    font-family: 'Segoe UI', sans-serif;
-                    background: #f8f9fa;
-                    color: #333;
-                    margin: 0;
-                    padding: 20px;
-                }}
-                h1 {{
-                    text-align: center;
-                    margin-bottom: 30px;
-                }}
-                .post-card {{
-                    background: white;
-                    padding: 15px 20px;
-                    border-radius: 12px;
-                    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-                    margin-bottom: 20px;
-                    text-align: left;
-                }}
-                a.back {{
-                    display:block;
-                    text-align:center;
-                    margin-top:30px;
-                    text-decoration:underline;
-                    color:#555;
-                }}
-            </style>
-        </head>
-        <body>
-            <h1>📰 Pathravarthakal Telegram Feed</h1>
-            {posts_html if posts_html else "<p style='text-align:center;color:#777;'>No posts found.</p>"}
-            <a class="back" href="/">← Back to Home</a>
-        </body>
-        </html>
-        """
+            <link>{channel_url}</link>
+            <description>Latest updates from the Pathravarthakal Telegram channel.</description>
+            <language>ml</language>
+            {rss_items}
+          </channel>
+        </rss>"""
 
-        return html_page
+        telegram_cache["rss"] = rss
+        telegram_cache["time"] = now
+        return Response(rss, mimetype="application/rss+xml")
+
     except Exception as e:
-        return f"<p>Error loading Telegram feed: {e}</p>", 500
+        return f"Error fetching Telegram feed: {e}", 500
 
 # ------------------ Routes ------------------
 @app.route('/')
