@@ -155,10 +155,6 @@ def telegram():
     except Exception as e:
         return f"<p>Error loading Telegram feed: {e}</p>", 500
 
-        return html_page
-    except Exception as e:
-        return f"<p>Error loading Telegram feed: {e}</p>", 500
-
 # ------------------ Routes ------------------
 @app.route('/')
 def homepage():
