@@ -77,71 +77,8 @@ def update_epaper_json():
 
 # ------------------ Telegram ------------------
 @app.route("/telegram")
-def telegram_feed():
-    """RSS feed output from Telegram channel"""
-    channel_url = "https://t.me/s/Pathravarthakal"
-    now = time.time()
-
-    if telegram_cache["rss"] and now - telegram_cache["time"] < 600:
-        return Response(telegram_cache["rss"], mimetype="application/rss+xml")
-
-    try:
-        html = requests.get(channel_url, timeout=10).text
-        soup = BeautifulSoup(html, "html.parser")
-
-        items = []
-        for post in soup.select(".tgme_widget_message_wrap"):
-            title_el = post.select_one(".tgme_widget_message_text")
-            img_el = post.select_one("a.tgme_widget_message_photo_wrap img")
-            link_el = post.select_one("a.tgme_widget_message_date")
-            date_el = post.select_one("time")
-
-            title = title_el.get_text(strip=True) if title_el else "(No text)"
-            link = link_el["href"] if link_el else channel_url
-            pub_date = date_el["datetime"] if date_el else datetime.datetime.utcnow().isoformat()
-            img_url = img_el["src"] if img_el else ""
-            desc = title + (f'<br><img src="{img_url}" style="max-width:100%">' if img_url else "")
-
-            items.append({
-                "title": title,
-                "link": link,
-                "pubDate": pub_date,
-                "description": desc
-            })
-
-        rss_items = "\n".join(
-            f"""
-            <item>
-                <title><![CDATA[{i['title']}]]></title>
-                <link>{i['link']}</link>
-                <pubDate>{i['pubDate']}</pubDate>
-                <description><![CDATA[{i['description']}]]></description>
-            </item>
-            """ for i in items[:20]
-        )
-
-        rss = f"""<?xml version="1.0" encoding="UTF-8"?>
-        <rss version="2.0">
-          <channel>
-            <title>Pathravarthakal Telegram Feed</title>
-            <link>{channel_url}</link>
-            <description>Latest updates from the Pathravarthakal Telegram channel.</description>
-            <language>ml</language>
-            {rss_items}
-          </channel>
-        </rss>"""
-
-        telegram_cache["rss"] = rss
-        telegram_cache["time"] = now
-        return Response(rss, mimetype="application/rss+xml")
-
-    except Exception as e:
-        return f"Error fetching Telegram feed: {e}", 500
-
-
-@app.route("/telegram/view")
-def telegram_feed_view():
-    """Visual view for Telegram feed"""
+def telegram():
+    """Visual Telegram feed (text + images)"""
     channel_url = "https://t.me/s/Pathravarthakal"
     try:
         html = requests.get(channel_url, timeout=10).text
@@ -157,7 +94,11 @@ def telegram_feed_view():
             img_url = img_el["src"] if img_el else None
             date = date_el["datetime"] if date_el else ""
 
-            img_tag = f'<img src="{img_url}" alt="Post image" style="max-width:100%; border-radius:10px; margin-top:10px;">' if img_url else ""
+            img_tag = (
+                f'<img src="{img_url}" alt="Post image" '
+                f'style="max-width:100%; border-radius:10px; margin-top:10px;">'
+                if img_url else ""
+            )
             posts_html += f"""
                 <div class="post-card">
                     <p>{text}</p>
@@ -214,13 +155,17 @@ def telegram_feed_view():
     except Exception as e:
         return f"<p>Error loading Telegram feed: {e}</p>", 500
 
+        return html_page
+    except Exception as e:
+        return f"<p>Error loading Telegram feed: {e}</p>", 500
+
 # ------------------ Routes ------------------
 @app.route('/')
 def homepage():
     links = [
         ("Today's Editions", "/today"),
         ("Njayar Prabhadham Archive", "/njayar"),
-        ("Telegram Feed", "/telegram/view")
+        ("Telegram Feed", "/telegram")
     ]
     cards = ""
     for i, (label, link) in enumerate(links):
