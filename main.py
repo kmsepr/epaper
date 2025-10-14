@@ -6,7 +6,7 @@ import datetime
 import requests
 import brotli
 import re
-from flask import Flask, render_template_string, Response
+from flask import Flask, render_template_string, Response, request
 from bs4 import BeautifulSoup
 
 # -------------------- Config --------------------
@@ -76,8 +76,7 @@ def update_epaper_json():
             print(f"[Error updating epaper.txt] {e}")
         time.sleep(86400)
 
-# ------------------ Telegram ------------------
-
+# ------------------ Telegram RSS Feed ------------------
 @app.route("/telegram")
 def telegram_feed():
     """RSS feed output from Telegram channel"""
@@ -102,11 +101,11 @@ def telegram_feed():
             photo_wrap = post.select_one("a.tgme_widget_message_photo_wrap, a.tgme_widget_message_video_thumb")
             img_url = ""
             if photo_wrap and "style" in photo_wrap.attrs:
-                match = re.search(r"url\(['\"]?(.*?)['\"]?\)", photo_wrap["style"])
+                match = re.search(r"url\\(['\"]?(.*?)['\"]?\\)", photo_wrap["style"])
                 if match:
                     img_url = match.group(1)
 
-            # Use proxy for image reliability
+            # Optional proxy through your server (for Telegram CDN)
             if img_url:
                 img_url = f"https://{request.host}/proxy_image?url=" + requests.utils.quote(img_url, safe='')
 
@@ -159,19 +158,20 @@ def telegram_feed():
 
     except Exception as e:
         return f"Error fetching Telegram feed: {e}", 500
+
 # ------------------ Routes ------------------
 @app.route('/')
 def homepage():
+    # ✅ Removed Telegram from home grid
     links = [
         ("Today's Editions", "/today"),
-        ("Njayar Prabhadham Archive", "/njayar"),
-        ("Telegram Feed", "/telegram")
+        ("Njayar Prabhadham Archive", "/njayar")
     ]
     cards = ""
     for i, (label, link) in enumerate(links):
         color = RGB_COLORS[i % len(RGB_COLORS)]
         cards += f'<div class="card" style="background-color:{color};"><a href="{link}">{label}</a></div>'
-    return render_template_string(wrap_grid_page("Suprabhaatham ePaper & Telegram", cards, show_back=False))
+    return render_template_string(wrap_grid_page("Suprabhaatham ePaper", cards, show_back=False))
 
 @app.route('/today')
 def show_today_links():
