@@ -76,13 +76,13 @@ def update_epaper_json():
             print(f"[Error updating epaper.txt] {e}")
         time.sleep(86400)
 
-# ------------------ Telegram Feed (HTML + RSS optional) ------------------
 @app.route("/telegram")
 def telegram_feed_view():
     """Visual viewer for the Pathravarthakal Telegram feed (default HTML view)."""
     channel_url = "https://t.me/s/Pathravarthakal"
     now = time.time()
 
+    # Cache for 10 minutes
     if telegram_cache.get("html") and now - telegram_cache["time"] < 600:
         return telegram_cache["html"]
 
@@ -90,8 +90,17 @@ def telegram_feed_view():
         html = requests.get(channel_url, timeout=10).text
         soup = BeautifulSoup(html, "html.parser")
 
+        # ✅ Exclude pinned messages
+        posts = [
+            post for post in soup.select(".tgme_widget_message_wrap")
+            if not post.select_one(".tgme_widget_message_pinned")
+        ]
+
+        # ✅ Reverse to show latest first
+        posts = list(reversed(posts))
+
         posts_html = ""
-        for post in soup.select(".tgme_widget_message_wrap"):
+        for post in posts:
             text_el = post.select_one(".tgme_widget_message_text")
             imgs = []
 
@@ -111,10 +120,7 @@ def telegram_feed_view():
             date = date_el["datetime"] if date_el else ""
             link = link_el["href"] if link_el else channel_url
 
-            # Build image grid
-            img_tags = "".join(
-                f'<img src="{src}" alt="Post image">' for src in imgs
-            )
+            img_tags = "".join(f'<img src="{src}" alt="Post image">' for src in imgs)
 
             if text or imgs:
                 posts_html += f"""
