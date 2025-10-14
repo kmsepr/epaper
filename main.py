@@ -75,6 +75,21 @@ def update_epaper_json():
         except Exception as e:
             print(f"[Error updating epaper.txt] {e}")
         time.sleep(86400)
+# ------------------ Proxy Telegram Images ------------------
+@app.route("/proxy_image")
+def proxy_image():
+    """Proxy Telegram images through this server"""
+    url = request.args.get("url")
+    if not url:
+        return "Missing image URL", 400
+    try:
+        headers = {"User-Agent": "Mozilla/5.0"}
+        resp = requests.get(url, headers=headers, timeout=10)
+        content_type = resp.headers.get("Content-Type", "image/jpeg")
+        return Response(resp.content, mimetype=content_type)
+    except Exception as e:
+        return f"Error fetching image: {e}", 500
+
 
 # ------------------ Telegram RSS Feed ------------------
 @app.route("/telegram")
@@ -88,7 +103,8 @@ def telegram_feed():
         return Response(telegram_cache["rss"], mimetype="application/rss+xml")
 
     try:
-        html = requests.get(channel_url, timeout=10).text
+        headers = {"User-Agent": "Mozilla/5.0"}
+        html = requests.get(channel_url, headers=headers, timeout=10).text
         soup = BeautifulSoup(html, "html.parser")
 
         items = []
@@ -97,25 +113,32 @@ def telegram_feed():
             link_el = post.select_one("a.tgme_widget_message_date")
             date_el = post.select_one("time")
 
-            # Extract image from background style
-            photo_wrap = post.select_one("a.tgme_widget_message_photo_wrap, a.tgme_widget_message_video_thumb")
+            # --- Extract possible image sources ---
+            img_el = post.select_one("a.tgme_widget_message_photo_wrap img")
+            bg_el = post.select_one("a.tgme_widget_message_photo_wrap")
+            preview_el = post.select_one(".tgme_widget_message_link_preview img")
+            video_thumb = post.select_one(".tgme_widget_message_video_thumb img")
+
             img_url = ""
-            if photo_wrap and "style" in photo_wrap.attrs:
-                match = re.search(r"url\\(['\"]?(.*?)['\"]?\\)", photo_wrap["style"])
-                if match:
-                    img_url = match.group(1)
+            if img_el and img_el.get("src"):
+                img_url = img_el["src"]
+            elif bg_el and "background-image" in bg_el.get("style", ""):
+                m = re.search(r'url\\((.*?)\\)', bg_el["style"])
+                if m:
+                    img_url = m.group(1)
+            elif preview_el and preview_el.get("src"):
+                img_url = preview_el["src"]
+            elif video_thumb and video_thumb.get("src"):
+                img_url = video_thumb["src"]
 
-            # Optional proxy through your server (for Telegram CDN)
+            # Proxy through Koyeb domain
             if img_url:
-                img_url = f"https://{request.host}/proxy_image?url=" + requests.utils.quote(img_url, safe='')
+                img_url = f"https://{request.host}/proxy_image?url=" + requests.utils.quote(img_url, safe="")
 
-            title = title_el.get_text(strip=True) if title_el else "(No text)"
+            title = title_el.get_text("\n", strip=True) if title_el else "(No text)"
             link = link_el["href"] if link_el else channel_url
             pub_date = date_el["datetime"] if date_el else datetime.datetime.utcnow().isoformat()
-
-            desc = title
-            if img_url:
-                desc += f'<br><img src="{img_url}" style="max-width:100%">'
+            desc = title + (f'<br><img src="{img_url}" style="max-width:100%">' if img_url else "")
 
             items.append({
                 "title": title,
@@ -127,6 +150,7 @@ def telegram_feed():
 
         latest_items = items[:30]
 
+        # --- Build RSS feed ---
         rss_items = "\n".join(
             f"""
             <item>
