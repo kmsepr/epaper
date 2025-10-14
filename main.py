@@ -93,28 +93,38 @@ def telegram_feed_view():
         posts_html = ""
         for post in soup.select(".tgme_widget_message_wrap"):
             text_el = post.select_one(".tgme_widget_message_text")
-            img_el = post.select_one("a.tgme_widget_message_photo_wrap img")
-            if not img_el:
-                # fallback for background-image style
-                bg_el = post.select_one(".tgme_widget_message_photo_wrap")
-                if bg_el and "style" in bg_el.attrs:
-                    match = re.search(r"url\\('(.*?)'\\)", bg_el["style"])
+            imgs = []
+
+            # Try both <img> tags and background-image style
+            for img in post.select("a.tgme_widget_message_photo_wrap img"):
+                imgs.append(img["src"])
+            for bg in post.select(".tgme_widget_message_photo_wrap"):
+                if "style" in bg.attrs:
+                    match = re.search(r"url\\('(.*?)'\\)", bg["style"])
                     if match:
-                        img_el = type("Dummy", (), {"src": match.group(1)})()
+                        imgs.append(match.group(1))
 
             date_el = post.select_one("time")
-            text = text_el.get_text(" ", strip=True) if text_el else "(No text)"
-            img_url = img_el.src if img_el else None
-            date = date_el["datetime"] if date_el else ""
+            link_el = post.select_one("a.tgme_widget_message_date")
 
-            img_tag = f'<img src="{img_url}" alt="Post image" style="max-width:100%; border-radius:10px; margin-top:10px;">' if img_url else ""
-            posts_html += f"""
-                <div class="post-card">
-                    <p>{text}</p>
-                    {img_tag}
-                    <small style="color:#888;">{date}</small>
+            text = text_el.get_text("\n", strip=True) if text_el else ""
+            date = date_el["datetime"] if date_el else ""
+            link = link_el["href"] if link_el else channel_url
+
+            # Build image grid
+            img_tags = "".join(
+                f'<img src="{src}" alt="Post image">' for src in imgs
+            )
+
+            if text or imgs:
+                posts_html += f"""
+                <div class="post">
+                    <div class="text">{text}</div>
+                    <div class="images">{img_tags}</div>
+                    <div class="time">{date}</div>
+                    <a href="{link}" target="_blank" class="button">🔗 Open in Telegram</a>
                 </div>
-            """
+                """
 
         html_page = f"""
         <!DOCTYPE html>
@@ -126,23 +136,50 @@ def telegram_feed_view():
             <title>Pathravarthakal Telegram Feed</title>
             <style>
                 body {{
-                    font-family: 'Segoe UI', sans-serif;
-                    background: #f8f9fa;
-                    color: #333;
+                    font-family: system-ui, sans-serif;
+                    background: #fafafa;
                     margin: 0;
-                    padding: 20px;
+                    padding: 15px;
                 }}
                 h1 {{
                     text-align: center;
-                    margin-bottom: 30px;
+                    color: #0088cc;
                 }}
-                .post-card {{
-                    background: white;
-                    padding: 15px 20px;
-                    border-radius: 12px;
+                .post {{
+                    background: #fff;
+                    border-radius: 10px;
                     box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-                    margin-bottom: 20px;
-                    text-align: left;
+                    padding: 12px 15px;
+                    margin-bottom: 16px;
+                }}
+                .text {{
+                    font-size: 1em;
+                    white-space: pre-wrap;
+                }}
+                .images {{
+                    display: grid;
+                    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+                    gap: 6px;
+                    margin-top: 8px;
+                }}
+                .images img {{
+                    width: 100%;
+                    border-radius: 6px;
+                }}
+                .time {{
+                    font-size: 0.8em;
+                    color: #777;
+                    margin-top: 6px;
+                }}
+                .button {{
+                    display: inline-block;
+                    background: #0088cc;
+                    color: white;
+                    padding: 6px 10px;
+                    border-radius: 6px;
+                    text-decoration: none;
+                    margin-top: 10px;
+                    font-size: 0.9em;
                 }}
                 a.back {{
                     display:block;
@@ -154,7 +191,7 @@ def telegram_feed_view():
             </style>
         </head>
         <body>
-            <h1>📰 Pathravarthakal Telegram Feed</h1>
+            <h1>📰 Pathravarthakal Telegram</h1>
             {posts_html if posts_html else "<p style='text-align:center;color:#777;'>No posts found.</p>"}
             <a class="back" href="/">← Back to Home</a>
         </body>
@@ -168,76 +205,13 @@ def telegram_feed_view():
     except Exception as e:
         return f"<p>Error loading Telegram feed: {e}</p>", 500
 
-
-@app.route("/telegram/rss")
-def telegram_feed_rss():
-    """Optional: RSS version of Pathravarthakal feed."""
-    channel_url = "https://t.me/s/Pathravarthakal"
-    now = time.time()
-
-    if telegram_cache.get("rss") and now - telegram_cache["time"] < 600:
-        return Response(telegram_cache["rss"], mimetype="application/rss+xml")
-
-    try:
-        html = requests.get(channel_url, timeout=10).text
-        soup = BeautifulSoup(html, "html.parser")
-
-        items = []
-        for post in soup.select(".tgme_widget_message_wrap"):
-            title_el = post.select_one(".tgme_widget_message_text")
-            img_el = post.select_one("a.tgme_widget_message_photo_wrap img")
-            link_el = post.select_one("a.tgme_widget_message_date")
-            date_el = post.select_one("time")
-
-            title = title_el.get_text(strip=True) if title_el else "(No text)"
-            link = link_el["href"] if link_el else channel_url
-            pub_date = date_el["datetime"] if date_el else datetime.datetime.utcnow().isoformat()
-            img_url = img_el["src"] if img_el else ""
-            desc = title + (f'<br><img src="{img_url}" style="max-width:100%">' if img_url else "")
-
-            items.append({
-                "title": title,
-                "link": link,
-                "pubDate": pub_date,
-                "description": desc
-            })
-
-        rss_items = "\n".join(
-            f"""
-            <item>
-                <title><![CDATA[{i['title']}]]></title>
-                <link>{i['link']}</link>
-                <pubDate>{i['pubDate']}</pubDate>
-                <description><![CDATA[{i['description']}]]></description>
-            </item>
-            """ for i in items[:20]
-        )
-
-        rss = f"""<?xml version="1.0" encoding="UTF-8"?>
-        <rss version="2.0">
-          <channel>
-            <title>Pathravarthakal Telegram Feed</title>
-            <link>{channel_url}</link>
-            <description>Latest updates from the Pathravarthakal Telegram channel.</description>
-            <language>ml</language>
-            {rss_items}
-          </channel>
-        </rss>"""
-
-        telegram_cache["rss"] = rss
-        telegram_cache["time"] = now
-        return Response(rss, mimetype="application/rss+xml")
-
-    except Exception as e:
-        return f"Error fetching Telegram RSS: {e}", 500
-
 # ------------------ Routes ------------------
 @app.route('/')
 def homepage():
     links = [
         ("Today's Editions", "/today"),
         ("Njayar Prabhadham Archive", "/njayar"),
-        ("Pathravarthakal Telegram Feed (RSS)", "/telegram"),
+        ("Pathravarthakal", "/telegram"),
     ]
     cards = ""
     for i, (label, link) in enumerate(links):
