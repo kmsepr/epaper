@@ -83,35 +83,36 @@ def telegram_feed_view():
     rss_url = "https://cdn.mysitemapgenerator.com/shareapi/rss/14101528987"
     now = time.time()
 
-    # Cache for 10 minutes
-    if telegram_cache.get("html") and now - telegram_cache["time"] < 600:
+    # Cache for 10 minutes unless manually refreshed
+    refresh = "refresh" in flask.request.args
+    if not refresh and telegram_cache.get("html") and now - telegram_cache["time"] < 600:
         return telegram_cache["html"]
 
     try:
         feed = feedparser.parse(rss_url)
         posts_html = ""
 
-        for entry in feed.entries:
+        # Limit to latest 50 posts
+        entries = feed.entries[:50]
+
+        for entry in entries:
             title = entry.get("title", "")
             link = entry.get("link", "#")
             date = entry.get("published", "")
-            # RSS feed may include media content
             imgs = []
+
             if "media_content" in entry:
-                for m in entry.media_content:
-                    imgs.append(m.get("url", ""))
+                imgs.extend(m.get("url", "") for m in entry.media_content)
             if "media_thumbnail" in entry:
-                for m in entry.media_thumbnail:
-                    imgs.append(m.get("url", ""))
+                imgs.extend(m.get("url", "") for m in entry.media_thumbnail)
 
             img_tags = "".join(f'<img src="{src}" alt="Post image">' for src in imgs)
 
             posts_html += f"""
             <div class="post">
-                <div class="text">{title}</div>
+                <a href="{link}" target="_blank" class="title">{title}</a>
                 <div class="images">{img_tags}</div>
                 <div class="time">{date}</div>
-                <a href="{link}" target="_blank" class="button">🔗 Read More</a>
             </div>
             """
 
@@ -121,18 +122,35 @@ def telegram_feed_view():
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <meta http-equiv="refresh" content="300">
-            <title>Pathravarthakal RSS Feed</title>
+            <meta http-equiv="refresh" content="600">
+            <title>📰 Pathravarthakal RSS Feed</title>
             <style>
                 body {{
                     font-family: system-ui, sans-serif;
-                    background: #fafafa;
+                    background: #f5f7fa;
                     margin: 0;
                     padding: 15px;
+                    color: #333;
                 }}
                 h1 {{
                     text-align: center;
-                    color: #0088cc;
+                    color: #0078cc;
+                    margin-bottom: 12px;
+                }}
+                .topbar {{
+                    display: flex;
+                    justify-content: center;
+                    gap: 10px;
+                    margin-bottom: 20px;
+                }}
+                .refresh {{
+                    display: inline-block;
+                    background: #0078cc;
+                    color: white;
+                    padding: 8px 12px;
+                    border-radius: 6px;
+                    text-decoration: none;
+                    font-size: 0.9em;
                 }}
                 .post {{
                     background: #fff;
@@ -140,14 +158,23 @@ def telegram_feed_view():
                     box-shadow: 0 2px 6px rgba(0,0,0,0.1);
                     padding: 12px 15px;
                     margin-bottom: 16px;
+                    text-align: left;
                 }}
-                .text {{
-                    font-size: 1em;
-                    white-space: pre-wrap;
+                .title {{
+                    font-size: 1.05em;
+                    font-weight: 600;
+                    color: #0078cc;
+                    text-decoration: none;
+                    display: block;
+                    margin-bottom: 6px;
+                    line-height: 1.4;
+                }}
+                .title:hover {{
+                    text-decoration: underline;
                 }}
                 .images {{
                     display: grid;
-                    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+                    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
                     gap: 6px;
                     margin-top: 8px;
                 }}
@@ -160,16 +187,6 @@ def telegram_feed_view():
                     color: #777;
                     margin-top: 6px;
                 }}
-                .button {{
-                    display: inline-block;
-                    background: #0088cc;
-                    color: white;
-                    padding: 6px 10px;
-                    border-radius: 6px;
-                    text-decoration: none;
-                    margin-top: 10px;
-                    font-size: 0.9em;
-                }}
                 a.back {{
                     display:block;
                     text-align:center;
@@ -181,8 +198,11 @@ def telegram_feed_view():
         </head>
         <body>
             <h1>📰 Pathravarthakal RSS Feed</h1>
+            <div class="topbar">
+                <a href="/telegram?refresh=1" class="refresh">🔄 Refresh</a>
+                <a href="/" class="refresh" style="background:#555;">🏠 Home</a>
+            </div>
             {posts_html if posts_html else "<p style='text-align:center;color:#777;'>No posts found.</p>"}
-            <a class="back" href="/">← Back to Home</a>
         </body>
         </html>
         """
