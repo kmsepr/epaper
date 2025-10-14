@@ -93,100 +93,55 @@ def proxy_image():
 
 # ------------------ Telegram RSS Feed ------------------
 @app.route("/telegram")
-def telegram_feed():
-    """RSS feed output from Telegram channel"""
-    channel_url = "https://t.me/s/Pathravarthakal"
-    now = time.time()
-
-    if telegram_cache.get("rss") and now - telegram_cache.get("time", 0) < 600:
-        return Response(telegram_cache["rss"], mimetype="application/rss+xml")
-
+def telegram_rss():
     try:
-        headers = {"User-Agent": "Mozilla/5.0"}
-        html = requests.get(channel_url, headers=headers, timeout=10).text
+        url = "https://t.me/s/Pathravarthakal"
+        html = requests.get(url, timeout=10).text
         soup = BeautifulSoup(html, "html.parser")
 
         items = []
-        for post in soup.select(".tgme_widget_message_wrap"):
-            title_el = post.select_one(".tgme_widget_message_text")
-            link_el = post.select_one("a.tgme_widget_message_date")
-            date_el = post.select_one("time")
+        for msg in soup.select(".tgme_widget_message_wrap"):
+            text = msg.select_one(".tgme_widget_message_text")
+            link = msg.select_one("a.tgme_widget_message_date")
+            photo = msg.select_one("a.tgme_widget_message_photo_wrap")
 
-            # --- Extract possible image sources robustly ---
-            img_url = ""
-            # <img> direct
-            img_el = post.select_one("img")
-            if img_el and img_el.get("src"):
-                img_url = img_el["src"]
-            # background-image in style
-            if not img_url:
-                for el in post.find_all(style=True):
-                    match = re.search(r"url\(['\"]?(.*?)['\"]?\)", el["style"])
-                    if match:
-                        img_url = match.group(1)
-                        break
-            # video thumbnail
-            if not img_url:
-                vid = post.select_one("video")
-                if vid and vid.get("poster"):
-                    img_url = vid["poster"]
-            # preview image in link
-            if not img_url:
-                preview = post.select_one(".tgme_widget_message_link_preview img")
-                if preview and preview.get("src"):
-                    img_url = preview["src"]
+            title = text.get_text(" ", strip=True)[:80] if text else "Pathravarthakal Update"
+            desc = text.decode_contents() if text else ""
+            link = link["href"] if link else url
 
-            # Proxy image through Koyeb
+            # 🖼️ Extract Telegram background image if available
+            img_url = None
+            if photo and "style" in photo.attrs:
+                style = photo["style"]
+                match = re.search(r"url\(['\"]?(.*?)['\"]?\)", style)
+                if match:
+                    img_url = match.group(1)
+
+            # proxy image through Koyeb
             if img_url:
-                img_url = f"https://{request.host}/proxy_image?url=" + requests.utils.quote(img_url, safe="")
+                proxied = request.url_root.rstrip("/") + "/proxy?url=" + urllib.parse.quote(img_url)
+                desc = f'<img src="{proxied}" style="max-width:100%"><br>' + desc
 
-            title = title_el.get_text("\n", strip=True) if title_el else "(No text)"
-            link = link_el["href"] if link_el else channel_url
-            pub_date = date_el["datetime"] if date_el else datetime.datetime.utcnow().isoformat()
-            desc = title + (f'<br><img src="{img_url}" style="max-width:100%">' if img_url else "")
-
-            items.append({
-                "title": title,
-                "link": link,
-                "pubDate": pub_date,
-                "description": desc,
-                "image": img_url
-            })
-
-        latest_items = items[:30]
-
-        # --- Build RSS ---
-        rss_items = "\n".join(
-            f"""
+            items.append(f"""
             <item>
-                <title><![CDATA[{i['title']}]]></title>
-                <link>{i['link']}</link>
-                <pubDate>{i['pubDate']}</pubDate>
-                <description><![CDATA[{i['description']}]]></description>
-                {f'<enclosure url="{i["image"]}" type="image/jpeg" />' if i["image"] else ""}
-                {f'<media:content url="{i["image"]}" medium="image" />' if i["image"] else ""}
+                <title>{title}</title>
+                <link>{link}</link>
+                <description><![CDATA[{desc}]]></description>
             </item>
-            """ for i in latest_items
-        )
+            """)
 
         rss = f"""<?xml version="1.0" encoding="UTF-8"?>
-        <rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/">
-          <channel>
-            <title>Pathravarthakal Telegram Feed</title>
-            <link>{channel_url}</link>
-            <description>Latest updates from the Pathravarthakal Telegram channel.</description>
-            <language>ml</language>
-            <lastBuildDate>{datetime.datetime.utcnow().isoformat()}</lastBuildDate>
-            {rss_items}
-          </channel>
-        </rss>"""
+        <rss version="2.0"><channel>
+        <title>Pathravarthakal Telegram Feed</title>
+        <link>{url}</link>
+        <description>Auto-fetched from Telegram</description>
+        {''.join(items)}
+        </channel></rss>"""
 
-        telegram_cache["rss"] = rss
-        telegram_cache["time"] = now
         return Response(rss, mimetype="application/rss+xml")
 
     except Exception as e:
-        return f"Error fetching Telegram feed: {e}", 500
+        return Response(f"Error fetching Telegram feed: {e}", mimetype="text/plain")
 
 # ------------------ Routes ------------------
 @app.route('/')
