@@ -82,7 +82,8 @@ def telegram_feed():
     channel_url = "https://t.me/s/Pathravarthakal"
     now = time.time()
 
-    if telegram_cache["rss"] and now - telegram_cache["time"] < 600:
+    # cache for 10 minutes
+    if telegram_cache.get("rss") and now - telegram_cache.get("time", 0) < 600:
         return Response(telegram_cache["rss"], mimetype="application/rss+xml")
 
     try:
@@ -100,14 +101,21 @@ def telegram_feed():
             link = link_el["href"] if link_el else channel_url
             pub_date = date_el["datetime"] if date_el else datetime.datetime.utcnow().isoformat()
             img_url = img_el["src"] if img_el else ""
-            desc = title + (f'<br><img src="{img_url}" style="max-width:100%">' if img_url else "")
+
+            desc = title
+            if img_url:
+                desc += f'<br><img src="{img_url}" style="max-width:100%">'
 
             items.append({
                 "title": title,
                 "link": link,
                 "pubDate": pub_date,
-                "description": desc
+                "description": desc,
+                "image": img_url
             })
+
+        # Keep only the latest 30
+        latest_items = items[:30]
 
         rss_items = "\n".join(
             f"""
@@ -116,23 +124,28 @@ def telegram_feed():
                 <link>{i['link']}</link>
                 <pubDate>{i['pubDate']}</pubDate>
                 <description><![CDATA[{i['description']}]]></description>
+                {f'<enclosure url="{i["image"]}" type="image/jpeg" />' if i["image"] else ""}
+                {f'<media:content url="{i["image"]}" medium="image" />' if i["image"] else ""}
             </item>
-            """ for i in items[:20]
+            """ for i in latest_items
         )
 
         rss = f"""<?xml version="1.0" encoding="UTF-8"?>
-        <rss version="2.0">
+        <rss version="2.0"
+             xmlns:media="http://search.yahoo.com/mrss/">
           <channel>
             <title>Pathravarthakal Telegram Feed</title>
             <link>{channel_url}</link>
             <description>Latest updates from the Pathravarthakal Telegram channel.</description>
             <language>ml</language>
+            <lastBuildDate>{datetime.datetime.utcnow().isoformat()}</lastBuildDate>
             {rss_items}
           </channel>
         </rss>"""
 
         telegram_cache["rss"] = rss
         telegram_cache["time"] = now
+
         return Response(rss, mimetype="application/rss+xml")
 
     except Exception as e:
