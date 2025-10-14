@@ -75,7 +75,8 @@ def update_epaper_json():
             print("✅ epaper.txt updated successfully.")
         except Exception as e:
             print(f"[Error updating epaper.txt] {e}")
-        time.sleep(8640json
+        time.sleep(8640)
+
 @app.route("/telegram")
 def telegram_feed_view():
     """Display Pathravarthakal news via RSS feed with images."""
