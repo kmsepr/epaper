@@ -75,6 +75,7 @@ def update_epaper_json():
         except Exception as e:
             print(f"[Error updating epaper.txt] {e}")
         time.sleep(86400)
+
 # ------------------ Proxy Telegram Images ------------------
 @app.route("/proxy_image")
 def proxy_image():
@@ -90,17 +91,20 @@ def proxy_image():
     except Exception as e:
         return f"Error fetching image: {e}", 500
 
-
 # ------------------ Telegram RSS Feed ------------------
 @app.route("/telegram")
 def telegram_rss():
     try:
+        # ✅ Use cached version (update every 5 min)
+        if telegram_cache["rss"] and (time.time() - telegram_cache["time"] < 300):
+            return Response(telegram_cache["rss"], mimetype="application/rss+xml")
+
         url = "https://t.me/s/Pathravarthakal"
-        html = requests.get(url, timeout=10).text
+        html = requests.get(url, timeout=10, headers={"User-Agent": "Mozilla/5.0"}).text
         soup = BeautifulSoup(html, "html.parser")
 
         items = []
-        for msg in soup.select(".tgme_widget_message_wrap"):
+        for msg in soup.select(".tgme_widget_message_wrap")[:30]:  # limit to 30 posts
             text = msg.select_one(".tgme_widget_message_text")
             link = msg.select_one("a.tgme_widget_message_date")
             photo = msg.select_one("a.tgme_widget_message_photo_wrap")
@@ -113,31 +117,36 @@ def telegram_rss():
             img_url = None
             if photo and "style" in photo.attrs:
                 style = photo["style"]
-                match = re.search(r"url\(['\"]?(.*?)['\"]?\)", style)
+                match = re.search(r"url\\(['\"]?(.*?)['\"]?\\)", style)
                 if match:
                     img_url = match.group(1)
 
-            # proxy image through Koyeb
+            # ✅ Proxy image through this Koyeb app
             if img_url:
-                proxied = request.url_root.rstrip("/") + "/proxy?url=" + urllib.parse.quote(img_url)
-                desc = f'<img src="{proxied}" style="max-width:100%"><br>' + desc
+                proxied = request.url_root.rstrip("/") + "/proxy_image?url=" + requests.utils.quote(img_url, safe="")
+                desc = f'<img src="{proxied}" style="max-width:100%;"><br>' + desc
 
             items.append(f"""
             <item>
-                <title>{title}</title>
+                <title><![CDATA[{title}]]></title>
                 <link>{link}</link>
                 <description><![CDATA[{desc}]]></description>
             </item>
             """)
 
         rss = f"""<?xml version="1.0" encoding="UTF-8"?>
-        <rss version="2.0"><channel>
-        <title>Pathravarthakal Telegram Feed</title>
-        <link>{url}</link>
-        <description>Auto-fetched from Telegram</description>
-        {''.join(items)}
-        </channel></rss>"""
+        <rss version="2.0">
+          <channel>
+            <title>Pathravarthakal Telegram Feed</title>
+            <link>{url}</link>
+            <description>Auto-fetched from Telegram (with images)</description>
+            <language>ml</language>
+            {''.join(items)}
+          </channel>
+        </rss>"""
 
+        telegram_cache["rss"] = rss
+        telegram_cache["time"] = time.time()
         return Response(rss, mimetype="application/rss+xml")
 
     except Exception as e:
@@ -146,10 +155,10 @@ def telegram_rss():
 # ------------------ Routes ------------------
 @app.route('/')
 def homepage():
-    # ✅ Removed Telegram from home grid
     links = [
         ("Today's Editions", "/today"),
-        ("Njayar Prabhadham Archive", "/njayar")
+        ("Njayar Prabhadham Archive", "/njayar"),
+        ("Pathravarthakal Telegram Feed (RSS)", "/telegram"),
     ]
     cards = ""
     for i, (label, link) in enumerate(links):
@@ -177,6 +186,7 @@ def show_njayar_archive():
         if current >= cutoff:
             sundays.append(current)
         current += datetime.timedelta(days=7)
+
     cards = ""
     for i, d in enumerate(reversed(sundays)):
         url = get_url_for_location("Njayar Prabhadham", d)
