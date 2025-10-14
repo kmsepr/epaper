@@ -91,57 +91,92 @@ def proxy_image():
     except Exception as e:
         return f"Error fetching image: {e}", 500
 
-# ------------------ Telegram RSS Feed ------------------
+# ------------------ Telegram RSS + HTML Feed ------------------
+def fetch_telegram_posts():
+    """Fetch Telegram posts with image parsing"""
+    url = "https://t.me/s/Pathravarthakal"
+    html = requests.get(url, timeout=10, headers={"User-Agent": "Mozilla/5.0"}).text
+    soup = BeautifulSoup(html, "html.parser")
+    posts = []
+
+    for msg in soup.select(".tgme_widget_message_wrap")[:30]:
+        text = msg.select_one(".tgme_widget_message_text")
+        link = msg.select_one("a.tgme_widget_message_date")
+        photo = msg.select_one("a.tgme_widget_message_photo_wrap")
+
+        title = text.get_text(" ", strip=True)[:80] if text else "Pathravarthakal Update"
+        desc = text.decode_contents() if text else ""
+        link = link["href"] if link else url
+
+        # 🖼️ Extract image from style (Telegram background-image)
+        img_url = None
+        if photo and "style" in photo.attrs:
+            style = photo["style"]
+            match = re.search(r"url\\(['\"]?(.*?)['\"]?\\)", style)
+            if match:
+                img_url = match.group(1)
+
+        # fallback for <img> tags
+        if not img_url:
+            img_tag = msg.select_one("img")
+            if img_tag and img_tag.get("src"):
+                img_url = img_tag["src"]
+
+        # Proxy image through app
+        if img_url:
+            proxied = request.url_root.rstrip("/") + "/proxy_image?url=" + requests.utils.quote(img_url, safe="")
+            desc = f'<img src="{proxied}" style="max-width:100%;"><br>' + desc
+
+        posts.append({"title": title, "desc": desc, "link": link, "image": img_url})
+    return posts
+
+
 @app.route("/telegram")
+def telegram_html():
+    """HTML preview of Telegram posts"""
+    posts = fetch_telegram_posts()
+    html = "<html><head><title>Pathravarthakal Telegram Feed</title></head><body>"
+    html += "<h2>Pathravarthakal Telegram Feed (Preview)</h2>"
+    for p in posts:
+        html += f"<div style='margin-bottom:25px;'>"
+        html += f"<b>{p['title']}</b><br>"
+        if p['image']:
+            proxied = request.url_root.rstrip('/') + "/proxy_image?url=" + requests.utils.quote(p['image'], safe="")
+            html += f"<img src='{proxied}' width='280' style='border-radius:8px;margin-top:5px;'><br>"
+        html += f"{p['desc']}<br>"
+        html += f"<a href='{p['link']}'>Open Post</a>"
+        html += "<hr></div>"
+    html += "</body></html>"
+    return html
+
+
+@app.route("/telegram/rss")
 def telegram_rss():
+    """RSS feed with image enclosure"""
     try:
-        # ✅ Use cached version (update every 5 min)
         if telegram_cache["rss"] and (time.time() - telegram_cache["time"] < 300):
             return Response(telegram_cache["rss"], mimetype="application/rss+xml")
 
-        url = "https://t.me/s/Pathravarthakal"
-        html = requests.get(url, timeout=10, headers={"User-Agent": "Mozilla/5.0"}).text
-        soup = BeautifulSoup(html, "html.parser")
-
-        items = []
-        for msg in soup.select(".tgme_widget_message_wrap")[:30]:  # limit to 30 posts
-            text = msg.select_one(".tgme_widget_message_text")
-            link = msg.select_one("a.tgme_widget_message_date")
-            photo = msg.select_one("a.tgme_widget_message_photo_wrap")
-
-            title = text.get_text(" ", strip=True)[:80] if text else "Pathravarthakal Update"
-            desc = text.decode_contents() if text else ""
-            link = link["href"] if link else url
-
-            # 🖼️ Extract Telegram background image if available
-            img_url = None
-            if photo and "style" in photo.attrs:
-                style = photo["style"]
-                match = re.search(r"url\\(['\"]?(.*?)['\"]?\\)", style)
-                if match:
-                    img_url = match.group(1)
-
-            # ✅ Proxy image through this Koyeb app
-            if img_url:
-                proxied = request.url_root.rstrip("/") + "/proxy_image?url=" + requests.utils.quote(img_url, safe="")
-                desc = f'<img src="{proxied}" style="max-width:100%;"><br>' + desc
-
-            items.append(f"""
+        posts = fetch_telegram_posts()
+        rss_items = ""
+        for p in posts:
+            enclosure = f"<enclosure url='{p['image']}' type='image/jpeg' />" if p['image'] else ""
+            rss_items += f"""
             <item>
-                <title><![CDATA[{title}]]></title>
-                <link>{link}</link>
-                <description><![CDATA[{desc}]]></description>
-            </item>
-            """)
+                <title><![CDATA[{p['title']}]]></title>
+                <link>{p['link']}</link>
+                <description><![CDATA[{p['desc']}]]></description>
+                {enclosure}
+            </item>"""
 
         rss = f"""<?xml version="1.0" encoding="UTF-8"?>
         <rss version="2.0">
           <channel>
             <title>Pathravarthakal Telegram Feed</title>
-            <link>{url}</link>
+            <link>https://t.me/Pathravarthakal</link>
             <description>Auto-fetched from Telegram (with images)</description>
             <language>ml</language>
-            {''.join(items)}
+            {rss_items}
           </channel>
         </rss>"""
 
@@ -152,13 +187,14 @@ def telegram_rss():
     except Exception as e:
         return Response(f"Error fetching Telegram feed: {e}", mimetype="text/plain")
 
-# ------------------ Routes ------------------
+# ------------------ ePaper Routes ------------------
 @app.route('/')
 def homepage():
     links = [
         ("Today's Editions", "/today"),
         ("Njayar Prabhadham Archive", "/njayar"),
-        ("Pathravarthakal Telegram Feed (RSS)", "/telegram"),
+        ("Pathravarthakal Telegram Feed (HTML)", "/telegram"),
+        ("Pathravarthakal Telegram Feed (RSS)", "/telegram/rss"),
     ]
     cards = ""
     for i, (label, link) in enumerate(links):
