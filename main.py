@@ -98,7 +98,6 @@ def telegram_feed():
     channel_url = "https://t.me/s/Pathravarthakal"
     now = time.time()
 
-    # Cache for 10 minutes
     if telegram_cache.get("rss") and now - telegram_cache.get("time", 0) < 600:
         return Response(telegram_cache["rss"], mimetype="application/rss+xml")
 
@@ -113,25 +112,31 @@ def telegram_feed():
             link_el = post.select_one("a.tgme_widget_message_date")
             date_el = post.select_one("time")
 
-            # --- Extract possible image sources ---
-            img_el = post.select_one("a.tgme_widget_message_photo_wrap img")
-            bg_el = post.select_one("a.tgme_widget_message_photo_wrap")
-            preview_el = post.select_one(".tgme_widget_message_link_preview img")
-            video_thumb = post.select_one(".tgme_widget_message_video_thumb img")
-
+            # --- Extract possible image sources robustly ---
             img_url = ""
+            # <img> direct
+            img_el = post.select_one("img")
             if img_el and img_el.get("src"):
                 img_url = img_el["src"]
-            elif bg_el and "background-image" in bg_el.get("style", ""):
-                m = re.search(r'url\\((.*?)\\)', bg_el["style"])
-                if m:
-                    img_url = m.group(1)
-            elif preview_el and preview_el.get("src"):
-                img_url = preview_el["src"]
-            elif video_thumb and video_thumb.get("src"):
-                img_url = video_thumb["src"]
+            # background-image in style
+            if not img_url:
+                for el in post.find_all(style=True):
+                    match = re.search(r"url\(['\"]?(.*?)['\"]?\)", el["style"])
+                    if match:
+                        img_url = match.group(1)
+                        break
+            # video thumbnail
+            if not img_url:
+                vid = post.select_one("video")
+                if vid and vid.get("poster"):
+                    img_url = vid["poster"]
+            # preview image in link
+            if not img_url:
+                preview = post.select_one(".tgme_widget_message_link_preview img")
+                if preview and preview.get("src"):
+                    img_url = preview["src"]
 
-            # Proxy through Koyeb domain
+            # Proxy image through Koyeb
             if img_url:
                 img_url = f"https://{request.host}/proxy_image?url=" + requests.utils.quote(img_url, safe="")
 
@@ -150,7 +155,7 @@ def telegram_feed():
 
         latest_items = items[:30]
 
-        # --- Build RSS feed ---
+        # --- Build RSS ---
         rss_items = "\n".join(
             f"""
             <item>
