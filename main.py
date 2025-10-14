@@ -5,6 +5,7 @@ import threading
 import datetime
 import requests
 import brotli
+import re
 from flask import Flask, render_template_string, Response
 from bs4 import BeautifulSoup
 
@@ -76,13 +77,14 @@ def update_epaper_json():
         time.sleep(86400)
 
 # ------------------ Telegram ------------------
+
 @app.route("/telegram")
 def telegram_feed():
     """RSS feed output from Telegram channel"""
     channel_url = "https://t.me/s/Pathravarthakal"
     now = time.time()
 
-    # cache for 10 minutes
+    # Cache for 10 minutes
     if telegram_cache.get("rss") and now - telegram_cache.get("time", 0) < 600:
         return Response(telegram_cache["rss"], mimetype="application/rss+xml")
 
@@ -93,14 +95,24 @@ def telegram_feed():
         items = []
         for post in soup.select(".tgme_widget_message_wrap"):
             title_el = post.select_one(".tgme_widget_message_text")
-            img_el = post.select_one("a.tgme_widget_message_photo_wrap img")
             link_el = post.select_one("a.tgme_widget_message_date")
             date_el = post.select_one("time")
+
+            # Extract image from background style
+            photo_wrap = post.select_one("a.tgme_widget_message_photo_wrap, a.tgme_widget_message_video_thumb")
+            img_url = ""
+            if photo_wrap and "style" in photo_wrap.attrs:
+                match = re.search(r"url\(['\"]?(.*?)['\"]?\)", photo_wrap["style"])
+                if match:
+                    img_url = match.group(1)
+
+            # Use proxy for image reliability
+            if img_url:
+                img_url = f"https://{request.host}/proxy_image?url=" + requests.utils.quote(img_url, safe='')
 
             title = title_el.get_text(strip=True) if title_el else "(No text)"
             link = link_el["href"] if link_el else channel_url
             pub_date = date_el["datetime"] if date_el else datetime.datetime.utcnow().isoformat()
-            img_url = img_el["src"] if img_el else ""
 
             desc = title
             if img_url:
@@ -114,7 +126,6 @@ def telegram_feed():
                 "image": img_url
             })
 
-        # Keep only the latest 30
         latest_items = items[:30]
 
         rss_items = "\n".join(
@@ -131,8 +142,7 @@ def telegram_feed():
         )
 
         rss = f"""<?xml version="1.0" encoding="UTF-8"?>
-        <rss version="2.0"
-             xmlns:media="http://search.yahoo.com/mrss/">
+        <rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/">
           <channel>
             <title>Pathravarthakal Telegram Feed</title>
             <link>{channel_url}</link>
@@ -145,12 +155,10 @@ def telegram_feed():
 
         telegram_cache["rss"] = rss
         telegram_cache["time"] = now
-
         return Response(rss, mimetype="application/rss+xml")
 
     except Exception as e:
         return f"Error fetching Telegram feed: {e}", 500
-
 # ------------------ Routes ------------------
 @app.route('/')
 def homepage():
