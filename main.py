@@ -80,7 +80,7 @@ def update_epaper_json():
 @app.route("/telegram")
 def telegram_rss():
     try:
-        # ✅ Use cached version (update every 5 min)
+        # ✅ Cache for 5 min
         if telegram_cache["rss"] and (time.time() - telegram_cache["time"] < 300):
             return Response(telegram_cache["rss"], mimetype="application/rss+xml")
 
@@ -89,23 +89,28 @@ def telegram_rss():
         soup = BeautifulSoup(html, "html.parser")
 
         items = []
-        for msg in soup.select(".tgme_widget_message_wrap")[:30]:  # limit to 30 posts
-            text = msg.select_one(".tgme_widget_message_text")
-            link = msg.select_one("a.tgme_widget_message_date")
-            photo = msg.select_one("a.tgme_widget_message_photo_wrap")
+        for msg in soup.select(".tgme_widget_message_wrap")[:30]:
+            text_el = msg.select_one(".tgme_widget_message_text")
+            date_el = msg.select_one("a.tgme_widget_message_date")
+            title = text_el.get_text(" ", strip=True)[:80] if text_el else "Telegram Update"
+            link = date_el["href"] if date_el else url
+            desc = text_el.decode_contents() if text_el else ""
 
-            title = text.get_text(" ", strip=True)[:80] if text else "Pathravarthakal Update"
-            desc = text.decode_contents() if text else ""
-            link = link["href"] if link else url
-
-            # 🖼️ Extract Telegram background image directly
+            # 🖼️ Extract only real post images, skip channel banner
+            img_el = msg.select_one(".tgme_widget_message_photo_wrap, .tgme_widget_message_video_thumb")
             img_url = None
-            if photo and "style" in photo.attrs:
-                style = photo["style"]
-                match = re.search(r"url\\(['\"]?(.*?)['\"]?\\)", style)
+            if img_el and "style" in img_el.attrs:
+                match = re.search(r"url\\(['\"]?(.*?)['\"]?\\)", img_el["style"])
                 if match:
-                    img_url = match.group(1)
-                    desc = f'<img src="{img_url}" style="max-width:100%;"><br>' + desc
+                    candidate = match.group(1)
+                    # skip Telegram banner icons or placeholders
+                    if "telegram.org/img" not in candidate:
+                        img_url = candidate
+                        desc = f'<img src="{img_url}" style="max-width:100%;"><br>' + desc
+
+            # skip empty
+            if not text_el and not img_url:
+                continue
 
             items.append(f"""
             <item>
@@ -120,7 +125,7 @@ def telegram_rss():
           <channel>
             <title>Pathravarthakal Telegram Feed</title>
             <link>{url}</link>
-            <description>Auto-fetched from Telegram (with images)</description>
+            <description>Auto-fetched from Telegram (with post images only)</description>
             <language>ml</language>
             {''.join(items)}
           </channel>
