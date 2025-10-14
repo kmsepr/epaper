@@ -7,7 +7,7 @@ import datetime
 import requests
 import brotli
 import re
-from flask import Flask, render_template_string, Response
+from flask import Flask, render_template_string, Response, request
 from bs4 import BeautifulSoup
 
 # -------------------- Config --------------------
@@ -25,7 +25,7 @@ RGB_COLORS = [
     "#FF6EC7", "#00C2CB", "#FFA41B", "#845EC2"
 ]
 
-telegram_cache = {"rss": None, "time": 0}
+telegram_cache = {"html": None, "time": 0}
 
 # ------------------ Utility ------------------
 def wrap_grid_page(title, items_html, show_back=True):
@@ -69,7 +69,15 @@ def update_epaper_json():
             print("Fetching latest ePaper data...")
             response = requests.post(url, json={}, headers=headers, timeout=10)
             response.raise_for_status()
-            data = brotli.decompress(response.content).decode('utf-8') if response.headers.get('Content-Encoding') == 'br' else response.text
+
+            try:
+                if response.headers.get('Content-Encoding') == 'br':
+                    data = brotli.decompress(response.content).decode('utf-8')
+                else:
+                    data = response.text
+            except Exception:
+                data = response.text  # fallback if brotli fails
+
             with open(EPAPER_TXT, "w", encoding="utf-8") as f:
                 f.write(data)
             print("✅ epaper.txt updated successfully.")
@@ -77,6 +85,7 @@ def update_epaper_json():
             print(f"[Error updating epaper.txt] {e}")
         time.sleep(8640)
 
+# ------------------ Telegram RSS ------------------
 @app.route("/telegram")
 def telegram_feed_view():
     """Display Pathravarthakal news via RSS feed with images."""
@@ -84,7 +93,7 @@ def telegram_feed_view():
     now = time.time()
 
     # Cache for 10 minutes unless manually refreshed
-    refresh = "refresh" in flask.request.args
+    refresh = "refresh" in request.args
     if not refresh and telegram_cache.get("html") and now - telegram_cache["time"] < 600:
         return telegram_cache["html"]
 
