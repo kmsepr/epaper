@@ -76,14 +76,106 @@ def update_epaper_json():
             print(f"[Error updating epaper.txt] {e}")
         time.sleep(86400)
 
-# ------------------ Telegram RSS Feed ------------------
+# ------------------ Telegram Feed (HTML + RSS optional) ------------------
 @app.route("/telegram")
-def telegram_feed():
-    """Scrape Telegram public channel messages and output as RSS feed (cached 10 min)."""
+def telegram_feed_view():
+    """Visual viewer for the Pathravarthakal Telegram feed (default HTML view)."""
     channel_url = "https://t.me/s/Pathravarthakal"
     now = time.time()
 
-    if telegram_cache["rss"] and now - telegram_cache["time"] < 600:
+    if telegram_cache.get("html") and now - telegram_cache["time"] < 600:
+        return telegram_cache["html"]
+
+    try:
+        html = requests.get(channel_url, timeout=10).text
+        soup = BeautifulSoup(html, "html.parser")
+
+        posts_html = ""
+        for post in soup.select(".tgme_widget_message_wrap"):
+            text_el = post.select_one(".tgme_widget_message_text")
+            img_el = post.select_one("a.tgme_widget_message_photo_wrap img")
+            if not img_el:
+                # fallback for background-image style
+                bg_el = post.select_one(".tgme_widget_message_photo_wrap")
+                if bg_el and "style" in bg_el.attrs:
+                    match = re.search(r"url\\('(.*?)'\\)", bg_el["style"])
+                    if match:
+                        img_el = type("Dummy", (), {"src": match.group(1)})()
+
+            date_el = post.select_one("time")
+            text = text_el.get_text(" ", strip=True) if text_el else "(No text)"
+            img_url = img_el.src if img_el else None
+            date = date_el["datetime"] if date_el else ""
+
+            img_tag = f'<img src="{img_url}" alt="Post image" style="max-width:100%; border-radius:10px; margin-top:10px;">' if img_url else ""
+            posts_html += f"""
+                <div class="post-card">
+                    <p>{text}</p>
+                    {img_tag}
+                    <small style="color:#888;">{date}</small>
+                </div>
+            """
+
+        html_page = f"""
+        <!DOCTYPE html>
+        <html lang="ml">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <meta http-equiv="refresh" content="300">
+            <title>Pathravarthakal Telegram Feed</title>
+            <style>
+                body {{
+                    font-family: 'Segoe UI', sans-serif;
+                    background: #f8f9fa;
+                    color: #333;
+                    margin: 0;
+                    padding: 20px;
+                }}
+                h1 {{
+                    text-align: center;
+                    margin-bottom: 30px;
+                }}
+                .post-card {{
+                    background: white;
+                    padding: 15px 20px;
+                    border-radius: 12px;
+                    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+                    margin-bottom: 20px;
+                    text-align: left;
+                }}
+                a.back {{
+                    display:block;
+                    text-align:center;
+                    margin-top:30px;
+                    text-decoration:underline;
+                    color:#555;
+                }}
+            </style>
+        </head>
+        <body>
+            <h1>📰 Pathravarthakal Telegram Feed</h1>
+            {posts_html if posts_html else "<p style='text-align:center;color:#777;'>No posts found.</p>"}
+            <a class="back" href="/">← Back to Home</a>
+        </body>
+        </html>
+        """
+
+        telegram_cache["html"] = html_page
+        telegram_cache["time"] = now
+        return html_page
+
+    except Exception as e:
+        return f"<p>Error loading Telegram feed: {e}</p>", 500
+
+
+@app.route("/telegram/rss")
+def telegram_feed_rss():
+    """Optional: RSS version of Pathravarthakal feed."""
+    channel_url = "https://t.me/s/Pathravarthakal"
+    now = time.time()
+
+    if telegram_cache.get("rss") and now - telegram_cache["time"] < 600:
         return Response(telegram_cache["rss"], mimetype="application/rss+xml")
 
     try:
@@ -137,84 +229,7 @@ def telegram_feed():
         return Response(rss, mimetype="application/rss+xml")
 
     except Exception as e:
-        return f"Error fetching Telegram feed: {e}", 500
-
-@app.route("/telegram/view")
-def telegram_feed_view():
-    """Visual viewer for the Pathravarthakal Telegram feed."""
-    channel_url = "https://t.me/s/Pathravarthakal"
-    try:
-        html = requests.get(channel_url, timeout=10).text
-        soup = BeautifulSoup(html, "html.parser")
-
-        posts_html = ""
-        for post in soup.select(".tgme_widget_message_wrap"):
-            text_el = post.select_one(".tgme_widget_message_text")
-            img_el = post.select_one("a.tgme_widget_message_photo_wrap img")
-            date_el = post.select_one("time")
-
-            text = text_el.get_text(" ", strip=True) if text_el else "(No text)"
-            img_url = img_el["src"] if img_el else None
-            date = date_el["datetime"] if date_el else ""
-
-            img_tag = f'<img src="{img_url}" alt="Post image" style="max-width:100%; border-radius:10px; margin-top:10px;">' if img_url else ""
-            posts_html += f"""
-                <div class="post-card">
-                    <p>{text}</p>
-                    {img_tag}
-                    <small style="color:#888;">{date}</small>
-                </div>
-            """
-
-        html_page = f"""
-        <!DOCTYPE html>
-        <html lang="ml">
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Pathravarthakal Telegram Feed</title>
-            <style>
-                body {{
-                    font-family: 'Segoe UI', sans-serif;
-                    background: #f8f9fa;
-                    color: #333;
-                    margin: 0;
-                    padding: 20px;
-                }}
-                h1 {{
-                    text-align: center;
-                    margin-bottom: 30px;
-                }}
-                .post-card {{
-                    background: white;
-                    padding: 15px 20px;
-                    border-radius: 12px;
-                    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-                    margin-bottom: 20px;
-                    text-align: left;
-                }}
-                a.back {{
-                    display:block;
-                    text-align:center;
-                    margin-top:30px;
-                    text-decoration:underline;
-                    color:#555;
-                }}
-            </style>
-        </head>
-        <body>
-            <h1>📰 Pathravarthakal Telegram Feed</h1>
-            {posts_html if posts_html else "<p style='text-align:center;color:#777;'>No posts found.</p>"}
-            <a class="back" href="/">← Back to Home</a>
-        </body>
-        </html>
-        """
-
-        return html_page
-
-    except Exception as e:
-        return f"<p>Error loading Telegram feed: {e}</p>", 500
-
+        return f"Error fetching Telegram RSS: {e}", 500
 
 # ------------------ Routes ------------------
 @app.route('/')
