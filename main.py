@@ -89,7 +89,7 @@ def update_epaper_json():
 @app.route("/telegram")
 def telegram_feed_view():
     """Display Pathravarthakal news via RSS feed with images."""
-    rss_url = "https://rsshub.app/telegram/channel/Pathravarthakal"
+    rss_url = "https://fetchrss.com/feed/aO-u9TWwab2VaO-u24TXVDAS.rss"
     now = time.time()
 
     # Cache for 10 minutes unless manually refreshed
