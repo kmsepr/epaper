@@ -1,13 +1,12 @@
 import os
 import time
 import json
-import feedparser
 import threading
 import datetime
 import requests
 import brotli
 import re
-from flask import Flask, render_template_string, Response, request
+from flask import Flask, Response, render_template_string
 from bs4 import BeautifulSoup
 
 # -------------------- Config --------------------
@@ -24,11 +23,6 @@ RGB_COLORS = [
     "#FF6B6B", "#6BCB77", "#4D96FF", "#FFD93D",
     "#FF6EC7", "#00C2CB", "#FFA41B", "#845EC2"
 ]
-
-telegram_cache = {}
-CHANNELS = {
-    "Pathravarthakal": "https://t.me/s/Pathravarthakal"
-}
 
 # ------------------ Utility ------------------
 def wrap_grid_page(title, items_html, show_back=True):
@@ -85,98 +79,56 @@ def update_epaper_json():
             print(f"[Error updating epaper.txt] {e}")
         time.sleep(86400)
 
-# ------------------ Telegram RSS ------------------
-@app.route("/telegram/<channel>")
-def telegram_rss(channel):
-    """RSS-only route for Telegram channels with clean enclosure."""
-    if channel not in CHANNELS:
-        return Response(f"<error>Channel not configured: {channel}</error>", mimetype="application/rss+xml")
+# ------------------ Telegram RSS Feed ------------------
+@app.route("/feed/Pathravarthakal")
+def telegram_rss():
+    url = "https://t.me/s/Pathravarthakal"
+    html = requests.get(url, timeout=10).text
+    soup = BeautifulSoup(html, "html.parser")
 
-    now = time.time()
-    cache_life = 600
+    items = []
+    for post in soup.select(".tgme_widget_message_wrap"):
+        try:
+            text_tag = post.select_one(".tgme_widget_message_text")
+            title = text_tag.get_text(strip=True)[:120] if text_tag else "Pathravarthakal update"
+            link_tag = post.select_one("a.tgme_widget_message_date")
+            link = link_tag["href"] if link_tag else ""
+            img_tag = post.select_one("img")
+            img_url = img_tag["src"] if img_tag else None
 
-    if channel in telegram_cache and now - telegram_cache[channel]["time"] < cache_life and "refresh" not in request.args:
-        return Response(telegram_cache[channel]["xml"], mimetype="application/rss+xml")
-
-    try:
-        url = CHANNELS[channel]
-        r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
-        soup = BeautifulSoup(r.text, "html.parser")
-
-        items = []
-        for msg in soup.select(".tgme_widget_message_wrap")[:40]:
-            date_tag = msg.select_one("a.tgme_widget_message_date")
-            link = date_tag["href"] if date_tag else f"https://t.me/{channel}"
-            text_tag = msg.select_one(".tgme_widget_message_text")
-
-            desc_html = text_tag.decode_contents() if text_tag else ""
-            desc_text = BeautifulSoup(desc_html, "html.parser").get_text().strip()
-            title = desc_text[:80] + "..." if len(desc_text) > 80 else desc_text
-
-            pubDate = datetime.datetime.utcnow().strftime("%a, %d %b %Y %H:%M:%S GMT")
-            if date_tag and date_tag.has_attr("datetime"):
-                try:
-                    pubDate = datetime.datetime.strptime(
-                        date_tag["datetime"], "%Y-%m-%dT%H:%M:%S+00:00"
-                    ).strftime("%a, %d %b %Y %H:%M:%S GMT")
-                except Exception:
-                    pass
-
-            # Image
-            image_url = None
-            style_tag = msg.select_one("a.tgme_widget_message_photo_wrap")
-            if style_tag and "style" in style_tag.attrs:
-                m = re.search(r"url\\(['\"]?(.*?)['\"]?\\)", style_tag["style"])
-                if m:
-                    image_url = m.group(1)
-            if not image_url:
-                img_tag = msg.select_one("img")
-                if img_tag and img_tag.get("src"):
-                    image_url = img_tag["src"]
-
-            enclosure = ""
-            if image_url:
-                enclosure = f"""
-                <enclosure url="{image_url}" type="image/jpeg" length="0"/>
-                <media:content url="{image_url}" type="image/jpeg" medium="image" width="384"/>
-                """
+            desc = f"<![CDATA[{str(text_tag)}]]>" if text_tag else ""
+            img_part = f"<enclosure url='{img_url}' type='image/jpeg' length='0'/><media:content url='{img_url}' type='image/jpeg' medium='image' width='384'/>" if img_url else ""
 
             items.append(f"""
-            <item>
-                <title><![CDATA[{title}]]></title>
-                <link>{link}</link>
-                <guid>{link}</guid>
-                <description><![CDATA[{desc_text}]]></description>
-                <pubDate>{pubDate}</pubDate>
-                {enclosure}
-            </item>
+                <item>
+                    <title><![CDATA[{title}]]></title>
+                    <link>{link}</link>
+                    <guid>{link}</guid>
+                    <description>{desc}</description>
+                    {img_part}
+                </item>
             """)
+        except Exception:
+            continue
 
-        rss = f"""<?xml version="1.0" encoding="UTF-8"?>
-        <rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/">
-          <channel>
-            <title>{channel} Telegram Feed</title>
-            <link>{CHANNELS[channel]}</link>
-            <description>Latest posts from @{channel}</description>
-            <language>ml</language>
-            {''.join(items)}
-          </channel>
-        </rss>"""
+    rss = f"""<?xml version="1.0" encoding="UTF-8"?>
+    <rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/">
+    <channel>
+        <title>Pathravarthakal Telegram Feed</title>
+        <link>{url}</link>
+        <description>Latest posts from @Pathravarthakal Telegram channel</description>
+        <language>ml</language>
+        {''.join(items)}
+    </channel></rss>"""
 
-        telegram_cache[channel] = {"xml": rss, "time": now}
-        return Response(rss, mimetype="application/rss+xml")
+    return Response(rss, mimetype="application/rss+xml")
 
-    except Exception as e:
-        print(f"[Error fetching Telegram RSS] {e}")
-        return Response(f"<error>{e}</error>", mimetype="application/rss+xml")
-
-# ------------------ ePaper routes ------------------
+# ------------------ Routes ------------------
 @app.route('/')
 def homepage():
     links = [
         ("Today's Editions", "/today"),
         ("Njayar Prabhadham Archive", "/njayar"),
-        ("Pathravarthakal RSS", "/telegram/Pathravarthakal"),
     ]
     cards = ""
     for i, (label, link) in enumerate(links):
