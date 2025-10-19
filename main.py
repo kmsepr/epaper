@@ -25,7 +25,7 @@ RGB_COLORS = [
     "#FF6EC7", "#00C2CB", "#FFA41B", "#845EC2"
 ]
 
-telegram_cache = {"html": None, "time": 0}
+telegram_cache = {"rss": None, "time": 0}
 
 # ------------------ Utility ------------------
 def wrap_grid_page(title, items_html, show_back=True):
@@ -70,13 +70,10 @@ def update_epaper_json():
             response = requests.post(url, json={}, headers=headers, timeout=10)
             response.raise_for_status()
 
-            try:
-                if response.headers.get('Content-Encoding') == 'br':
-                    data = brotli.decompress(response.content).decode('utf-8')
-                else:
-                    data = response.text
-            except Exception:
-                data = response.text  # fallback if brotli fails
+            if response.headers.get('Content-Encoding') == 'br':
+                data = brotli.decompress(response.content).decode('utf-8')
+            else:
+                data = response.text
 
             with open(EPAPER_TXT, "w", encoding="utf-8") as f:
                 f.write(data)
@@ -85,143 +82,136 @@ def update_epaper_json():
             print(f"[Error updating epaper.txt] {e}")
         time.sleep(8640)
 
-# ------------------ Telegram RSS ------------------
-@app.route("/telegram")
-def telegram_feed_view():
-    """Display Pathravarthakal news via RSS feed with images."""
-    rss_url = "https://fetchrss.com/feed/aO-u9TWwab2VaO-u24TXVDAS.rss"
+# ------------------ Telegram RSS (self-hosted) ------------------
+@app.route("/Pathravarthakal/rss")
+def telegram_rss():
+    """Generate RSS feed directly from Telegram channel with images."""
+    channel = "Pathravarthakal"
+    cache_life = 600  # 10 minutes cache
     now = time.time()
 
-    # Cache for 10 minutes unless manually refreshed
-    refresh = "refresh" in request.args
-    if not refresh and telegram_cache.get("html") and now - telegram_cache["time"] < 600:
-        return telegram_cache["html"]
+    # Serve cached feed
+    if telegram_cache["rss"] and now - telegram_cache["time"] < cache_life and "refresh" not in request.args:
+        return Response(telegram_cache["rss"], mimetype="application/rss+xml")
 
     try:
-        feed = feedparser.parse(rss_url)
-        posts_html = ""
+        url = f"https://t.me/s/{channel}"
+        r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+        soup = BeautifulSoup(r.text, "html.parser")
 
-        # Limit to latest 50 posts
-        entries = feed.entries[:50]
+        items = []
+        for msg in soup.select(".tgme_widget_message_wrap")[:25]:
+            date_tag = msg.select_one("a.tgme_widget_message_date")
+            link = date_tag["href"] if date_tag else f"https://t.me/{channel}"
+            text_tag = msg.select_one(".tgme_widget_message_text")
+            title = (text_tag.text.strip()[:80] + "...") if text_tag else "Telegram Post"
+            desc = str(text_tag) if text_tag else ""
 
-        for entry in entries:
-            title = entry.get("title", "")
-            link = entry.get("link", "#")
-            date = entry.get("published", "")
-            imgs = []
+            # Extract image or video thumbnail
+            img_url = None
+            style_tag = msg.select_one("a.tgme_widget_message_photo_wrap")
+            if style_tag and "style" in style_tag.attrs:
+                m = re.search(r"url\\(['\"]?(.*?)['\"]?\\)", style_tag["style"])
+                if m:
+                    img_url = m.group(1)
 
-            if "media_content" in entry:
-                imgs.extend(m.get("url", "") for m in entry.media_content)
-            if "media_thumbnail" in entry:
-                imgs.extend(m.get("url", "") for m in entry.media_thumbnail)
+            # Fallback: img tag
+            if not img_url:
+                img_tag = msg.select_one("img")
+                if img_tag and img_tag.get("src"):
+                    img_url = img_tag["src"]
 
-            img_tags = "".join(f'<img src="{src}" alt="Post image">' for src in imgs)
+            # Add image to description
+            if img_url:
+                desc = f'<img src="{img_url}" width="100%"><br>{desc}'
 
-            posts_html += f"""
-            <div class="post">
-                <a href="{link}" target="_blank" class="title">{title}</a>
-                <div class="images">{img_tags}</div>
-                <div class="time">{date}</div>
-            </div>
+            item = f"""
+            <item>
+                <title><![CDATA[{title}]]></title>
+                <link>{link}</link>
+                <guid>{link}</guid>
+                <description><![CDATA[{desc}]]></description>
+                {"<enclosure url='"+img_url+"' type='image/jpeg' />" if img_url else ""}
+            </item>
             """
+            items.append(item)
 
-        html_page = f"""
-        <!DOCTYPE html>
-        <html lang="ml">
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <meta http-equiv="refresh" content="600">
-            <title>📰 Pathravarthakal RSS Feed</title>
-            <style>
-                body {{
-                    font-family: system-ui, sans-serif;
-                    background: #f5f7fa;
-                    margin: 0;
-                    padding: 15px;
-                    color: #333;
-                }}
-                h1 {{
-                    text-align: center;
-                    color: #0078cc;
-                    margin-bottom: 12px;
-                }}
-                .topbar {{
-                    display: flex;
-                    justify-content: center;
-                    gap: 10px;
-                    margin-bottom: 20px;
-                }}
-                .refresh {{
-                    display: inline-block;
-                    background: #0078cc;
-                    color: white;
-                    padding: 8px 12px;
-                    border-radius: 6px;
-                    text-decoration: none;
-                    font-size: 0.9em;
-                }}
-                .post {{
-                    background: #fff;
-                    border-radius: 10px;
-                    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-                    padding: 12px 15px;
-                    margin-bottom: 16px;
-                    text-align: left;
-                }}
-                .title {{
-                    font-size: 1.05em;
-                    font-weight: 600;
-                    color: #0078cc;
-                    text-decoration: none;
-                    display: block;
-                    margin-bottom: 6px;
-                    line-height: 1.4;
-                }}
-                .title:hover {{
-                    text-decoration: underline;
-                }}
-                .images {{
-                    display: grid;
-                    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-                    gap: 6px;
-                    margin-top: 8px;
-                }}
-                .images img {{
-                    width: 100%;
-                    border-radius: 6px;
-                }}
-                .time {{
-                    font-size: 0.8em;
-                    color: #777;
-                    margin-top: 6px;
-                }}
-                a.back {{
-                    display:block;
-                    text-align:center;
-                    margin-top:30px;
-                    text-decoration:underline;
-                    color:#555;
-                }}
-            </style>
-        </head>
-        <body>
-            <h1>📰 Pathravarthakal RSS Feed</h1>
-            <div class="topbar">
-                <a href="/telegram?refresh=1" class="refresh">🔄 Refresh</a>
-                <a href="/" class="refresh" style="background:#555;">🏠 Home</a>
-            </div>
-            {posts_html if posts_html else "<p style='text-align:center;color:#777;'>No posts found.</p>"}
-        </body>
-        </html>
-        """
+        rss = f"""<?xml version="1.0" encoding="UTF-8"?>
+        <rss version="2.0">
+        <channel>
+            <title>Pathravarthakal Telegram Feed</title>
+            <link>https://t.me/{channel}</link>
+            <description>Latest posts from @{channel}</description>
+            {''.join(items)}
+        </channel>
+        </rss>"""
 
-        telegram_cache["html"] = html_page
+        telegram_cache["rss"] = rss
         telegram_cache["time"] = now
-        return html_page
+        return Response(rss, mimetype="application/rss+xml")
 
     except Exception as e:
-        return f"<p>Error loading RSS feed: {e}</p>", 500
+        return f"<p>Error generating Telegram RSS: {e}</p>", 500
+
+# ------------------ Telegram Web View ------------------
+@app.route("/telegram")
+def telegram_feed_view():
+    """Visual web page for Pathravarthakal feed (uses /Pathravarthakal/rss)."""
+    feed_url = request.url_root.rstrip("/") + "/Pathravarthakal/rss"
+    html = f"""
+    <!DOCTYPE html>
+    <html lang="ml">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>📰 Pathravarthakal Feed</title>
+        <style>
+            body {{
+                font-family: system-ui, sans-serif;
+                background: #f5f7fa;
+                margin: 0;
+                padding: 15px;
+                color: #333;
+            }}
+            h1 {{
+                text-align: center;
+                color: #0078cc;
+                margin-bottom: 12px;
+            }}
+            .topbar {{
+                display: flex;
+                justify-content: center;
+                gap: 10px;
+                margin-bottom: 20px;
+            }}
+            .btn {{
+                background: #0078cc;
+                color: white;
+                padding: 8px 12px;
+                border-radius: 6px;
+                text-decoration: none;
+                font-size: 0.9em;
+            }}
+            iframe {{
+                width: 100%;
+                height: 85vh;
+                border: none;
+                background: white;
+                border-radius: 8px;
+            }}
+        </style>
+    </head>
+    <body>
+        <h1>📰 Pathravarthakal Feed</h1>
+        <div class="topbar">
+            <a href="/Pathravarthakal/rss?refresh=1" class="btn">🔄 Refresh RSS</a>
+            <a href="/" class="btn" style="background:#555;">🏠 Home</a>
+        </div>
+        <iframe src="{feed_url}"></iframe>
+    </body>
+    </html>
+    """
+    return html
 
 # ------------------ Routes ------------------
 @app.route('/')
