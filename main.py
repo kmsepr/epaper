@@ -88,11 +88,13 @@ def update_epaper_json():
 # ------------------ Telegram RSS (XML backend) ------------------
 @app.route("/telegram/<channel>")
 def telegram_rss(channel):
+    """Universal backend RSS feed with images for Telegram channels."""
     if channel not in CHANNELS:
         return Response(f"<error>Channel not configured: {channel}</error>", mimetype="application/rss+xml")
 
     now = time.time()
     cache_life = 600
+
     if (
         channel in telegram_cache
         and now - telegram_cache[channel]["time"] < cache_life
@@ -111,13 +113,16 @@ def telegram_rss(channel):
             link = date_tag["href"] if date_tag else f"https://t.me/{channel}"
             text_tag = msg.select_one(".tgme_widget_message_text")
 
+            # Title (plain text)
             if text_tag:
                 full_text = text_tag.text.strip().replace('\n', ' ')
                 title = (full_text[:80].rsplit(' ', 1)[0] + "...") if len(full_text) > 80 else full_text
+                description_text = full_text
             else:
                 title = "Telegram Post"
+                description_text = ""
 
-            desc = str(text_tag) if text_tag else ""
+            # Image if exists
             img_url = None
             style_tag = msg.select_one("a.tgme_widget_message_photo_wrap")
             if style_tag and "style" in style_tag.attrs:
@@ -128,26 +133,24 @@ def telegram_rss(channel):
                 img_tag = msg.select_one("img")
                 if img_tag and img_tag.get("src"):
                     img_url = img_tag["src"]
-            if img_url:
-                image_enclosure = f"<media:content url='{img_url}' medium='image' />"
-                desc = f'<img src="{img_url}" width="100%"><br>{desc}'
-            else:
-                image_enclosure = ""
 
-            # 🔗 Local post link
+            desc_html = f"<p>{description_text}</p>"
+            if img_url:
+                desc_html = f'<img src="{img_url}" width="100%"><br>{desc_html}'
+
             local_link = f"{request.url_root.rstrip('/')}/post/{i}?channel={channel}"
 
             items.append(f"""
             <item>
-                <title><![CDATA[<a href="{local_link}">{title}</a>]]></title>
+                <title>{title}</title>
                 <link>{local_link}</link>
                 <guid>{link}</guid>
-                <description><![CDATA[{desc}]]></description>
-                {image_enclosure}
+                <description><![CDATA[{desc_html}]]></description>
+                {'<media:content url="' + img_url + '" medium="image" />' if img_url else ''}
             </item>
             """)
 
-        # 🔹 Show latest first
+        # Latest first
         items.reverse()
 
         rss = f"""<?xml version="1.0" encoding="UTF-8"?>
