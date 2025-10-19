@@ -25,7 +25,12 @@ RGB_COLORS = [
     "#FF6EC7", "#00C2CB", "#FFA41B", "#845EC2"
 ]
 
-telegram_cache = {"rss": None, "time": 0}
+telegram_cache = {}
+CHANNELS = {
+    "Pathravarthakal": "https://t.me/s/Pathravarthakal",
+    # Add more channels here later:
+    # "AnotherChannel": "https://t.me/s/AnotherChannel"
+}
 
 # ------------------ Utility ------------------
 def wrap_grid_page(title, items_html, show_back=True):
@@ -82,32 +87,36 @@ def update_epaper_json():
             print(f"[Error updating epaper.txt] {e}")
         time.sleep(86400)
 
-# ------------------ Telegram RSS ------------------
-@app.route("/Pathravarthakal/rss")
-def telegram_rss():
-    """Generate RSS feed directly from Telegram channel with images."""
-    channel = "Pathravarthakal"
-    cache_life = 600  # 10 minutes
-    now = time.time()
+# ------------------ Telegram RSS (XML backend) ------------------
+@app.route("/telegram/<channel>")
+def telegram_rss(channel):
+    """Universal backend RSS feed with images for Telegram channels."""
+    if channel not in CHANNELS:
+        return Response(f"<error>Channel not configured: {channel}</error>", mimetype="application/rss+xml")
 
-    # Serve cached feed
-    if telegram_cache["rss"] and now - telegram_cache["time"] < cache_life and "refresh" not in request.args:
-        return Response(telegram_cache["rss"], mimetype="application/rss+xml")
+    now = time.time()
+    cache_life = 600
+
+    if (
+        channel in telegram_cache
+        and now - telegram_cache[channel]["time"] < cache_life
+        and "refresh" not in request.args
+    ):
+        return Response(telegram_cache[channel]["xml"], mimetype="application/rss+xml")
 
     try:
-        url = f"https://t.me/s/{channel}"
+        url = CHANNELS[channel]
         r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
         soup = BeautifulSoup(r.text, "html.parser")
 
         items = []
-        for msg in soup.select(".tgme_widget_message_wrap")[:30]:
+        for msg in soup.select(".tgme_widget_message_wrap")[:40]:
             date_tag = msg.select_one("a.tgme_widget_message_date")
             link = date_tag["href"] if date_tag else f"https://t.me/{channel}"
             text_tag = msg.select_one(".tgme_widget_message_text")
             title = (text_tag.text.strip()[:80] + "...") if text_tag else "Telegram Post"
             desc = str(text_tag) if text_tag else ""
 
-            # Extract image thumbnail
             img_url = None
             style_tag = msg.select_one("a.tgme_widget_message_photo_wrap")
             if style_tag and "style" in style_tag.attrs:
@@ -120,11 +129,10 @@ def telegram_rss():
                 if img_tag and img_tag.get("src"):
                     img_url = img_tag["src"]
 
-            # Add image to description
             if img_url:
                 desc = f'<img src="{img_url}" width="100%"><br>{desc}'
 
-            item = f"""
+            items.append(f"""
             <item>
                 <title><![CDATA[{title}]]></title>
                 <link>{link}</link>
@@ -132,82 +140,78 @@ def telegram_rss():
                 <description><![CDATA[{desc}]]></description>
                 {"<enclosure url='"+img_url+"' type='image/jpeg' />" if img_url else ""}
             </item>
-            """
-            items.append(item)
+            """)
 
         rss = f"""<?xml version="1.0" encoding="UTF-8"?>
         <rss version="2.0">
         <channel>
-            <title>Pathravarthakal Telegram Feed</title>
+            <title>{channel} Telegram Feed</title>
             <link>https://t.me/{channel}</link>
             <description>Latest posts from @{channel}</description>
             {''.join(items)}
         </channel>
         </rss>"""
 
-        telegram_cache["rss"] = rss
-        telegram_cache["time"] = now
+        telegram_cache[channel] = {"xml": rss, "time": now}
         return Response(rss, mimetype="application/rss+xml")
 
     except Exception as e:
-        return f"<p>Error generating Telegram RSS: {e}</p>", 500
+        return Response(f"<error>{e}</error>", mimetype="application/rss+xml")
 
-# ------------------ Telegram Web View ------------------
-@app.route("/telegram")
-def telegram_feed_view():
-    """Visual web page for Pathravarthakal feed."""
-    feed_url = request.url_root.rstrip("/") + "/Pathravarthakal/rss"
-    html = f"""
-    <!DOCTYPE html>
-    <html lang="ml">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>📰 Pathravarthakal Feed</title>
-        <style>
-            body {{
-                font-family: system-ui, sans-serif;
-                background: #f5f7fa;
-                margin: 0;
-                padding: 10px;
-            }}
-            h1 {{
-                text-align: center;
-                color: #0078cc;
-            }}
-            .topbar {{
-                display: flex;
-                justify-content: center;
-                gap: 10px;
-                margin-bottom: 15px;
-            }}
-            .btn {{
-                background: #0078cc;
-                color: white;
-                padding: 8px 12px;
-                border-radius: 6px;
-                text-decoration: none;
-            }}
-            iframe {{
-                width: 100%;
-                height: 85vh;
-                border: none;
-                background: white;
-                border-radius: 8px;
-            }}
-        </style>
-    </head>
-    <body>
-        <h1>📰 Pathravarthakal Feed</h1>
-        <div class="topbar">
-            <a href="/Pathravarthakal/rss?refresh=1" class="btn">🔄 Refresh RSS</a>
-            <a href="/" class="btn" style="background:#444;">🏠 Home</a>
+# ------------------ Telegram HTML Frontend ------------------
+@app.route("/Pathravarthakal")
+def pathravarthakal_html():
+    """Frontend display for Pathravarthakal feed."""
+    channel = "Pathravarthakal"
+    url = f"/telegram/{channel}"
+    rss_url = request.url_root.rstrip("/") + url
+    try:
+        r = requests.get(rss_url)
+        feed = feedparser.parse(r.text)
+    except Exception as e:
+        return f"<p>Failed to load feed: {e}</p>"
+
+    html_items = ""
+    for entry in feed.entries[:40]:
+        title = entry.get("title", "")
+        link = entry.get("link", "")
+        desc = entry.get("summary", "")
+        image = None
+
+        if "media_content" in entry:
+            for m in entry.media_content:
+                if "url" in m:
+                    image = m["url"]
+                    break
+        elif "media_thumbnail" in entry:
+            for m in entry.media_thumbnail:
+                if "url" in m:
+                    image = m["url"]
+                    break
+
+        html_items += f"""
+        <div style='margin:10px;padding:10px;background:#fff;border-radius:12px;
+                     box-shadow:0 2px 6px rgba(0,0,0,0.1);text-align:left;'>
+            {'<img src="'+image+'" style="width:100%;border-radius:12px;">' if image else ''}
+            <h3><a href="{link}" target="_blank" style="color:#0078cc;text-decoration:none;">{title}</a></h3>
+            <p style="color:#444;font-size:14px;">{desc}</p>
         </div>
-        <iframe src="{feed_url}"></iframe>
+        """
+
+    return f"""
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>{channel} Feed</title>
+    </head>
+    <body style="font-family:sans-serif;background:#f5f7fa;margin:0;padding:10px;">
+        <h2 style="text-align:center;color:#0078cc;">📰 {channel} Telegram Feed</h2>
+        <div style="max-width:600px;margin:auto;">{html_items}</div>
+        <p style="text-align:center;">📡 RSS: <a href="{url}" target="_blank">{rss_url}</a></p>
     </body>
     </html>
     """
-    return html
 
 # ------------------ Home ------------------
 @app.route('/')
@@ -215,7 +219,7 @@ def homepage():
     links = [
         ("Today's Editions", "/today"),
         ("Njayar Prabhadham Archive", "/njayar"),
-        ("Pathravarthakal", "/telegram"),
+        ("Pathravarthakal Feed", "/Pathravarthakal"),
     ]
     cards = ""
     for i, (label, link) in enumerate(links):
