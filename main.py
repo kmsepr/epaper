@@ -88,7 +88,7 @@ def update_epaper_json():
         time.sleep(86400)
 
 # ------------------ Telegram RSS (XML backend) ------------------
-@app.route("/feed/<channel>")
+@app.route("/telegram/<channel>")
 def telegram_rss(channel):
     """Universal backend RSS feed with images for Telegram channels."""
     if channel not in CHANNELS:
