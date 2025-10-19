@@ -62,7 +62,7 @@ def wrap_grid_page(title, items_html, show_back=True):
 # ------------------ ePaper ------------------
 def get_url_for_location(location, dt_obj=None):
     if dt_obj is None:
-        dt_obj = datetime.date.today() # Use date.today() as only date is needed
+        dt_obj = datetime.date.today()
     date_str = dt_obj.strftime('%Y-%m-%d')
     return f"https://epaper.suprabhaatham.com/details/{location}/{date_str}/1"
 
@@ -115,7 +115,7 @@ def telegram_rss(channel):
             link = date_tag["href"] if date_tag else f"https://t.me/{channel}"
             text_tag = msg.select_one(".tgme_widget_message_text")
             
-            # Use slightly more robust title extraction
+            # Robust title extraction
             if text_tag:
                 full_text = text_tag.text.strip().replace('\n', ' ')
                 title = (full_text[:80].rsplit(' ', 1)[0] + "...") if len(full_text) > 80 else full_text
@@ -128,7 +128,6 @@ def telegram_rss(channel):
             style_tag = msg.select_one("a.tgme_widget_message_photo_wrap")
             if style_tag and "style" in style_tag.attrs:
                 # FIX: Corrected regex for extracting URL from CSS url() function.
-                # Removed double backslashes (\\) which were likely causing the issue.
                 m = re.search(r"url\(['\"]?(.*?)['\"]?\)", style_tag["style"])
                 if m:
                     img_url = m.group(1)
@@ -139,12 +138,12 @@ def telegram_rss(channel):
                     img_url = img_tag["src"]
 
             if img_url:
-                # Use a specific image tag for better RSS compatibility
-                image_enclosure = f"<media:content url='{img_url}' medium='image' />"
+                # Add image to description for HTML frontend to show image without external JS
                 desc = f'<img src="{img_url}" width="100%"><br>{desc}'
+                # Add image as media:content for proper RSS readers
+                image_enclosure = f"<media:content url='{img_url}' medium='image' />"
             else:
                 image_enclosure = ""
-
 
             items.append(f"""
             <item>
@@ -193,24 +192,24 @@ def pathravarthakal_html():
         desc = entry.get("summary", "")
         image = None
 
-        # Check for media:content from the updated RSS generation
+        # 1. Get the image from media tags
         if "media_content" in entry:
             for m in entry.media_content:
                 if "url" in m:
                     image = m["url"]
                     break
-        # Fallback (original logic)
         elif "media_thumbnail" in entry:
             for m in entry.media_thumbnail:
                 if "url" in m:
                     image = m["url"]
                     break
         
-        # Simple check for image link inside description (last resort)
-        if not image:
-            match = re.search(r'<img\s+src="([^"]+)"', desc)
-            if match:
-                image = match.group(1)
+        # 2. FIX: If an image URL was found via the media tags, 
+        # remove the manually embedded <img> tag from the description
+        if image and desc:
+            # This regex removes the leading <img> tag and any subsequent <br> that the backend added.
+            desc = re.sub(r'<img[^>]+><br>', '', desc, 1).strip()
+
 
         html_items += f"""
         <div style='margin:10px;padding:10px;background:#fff;border-radius:12px;
@@ -276,14 +275,7 @@ def show_njayar_archive():
             sundays.append(current)
         current -= datetime.timedelta(days=7) # Go back one week
 
-    cards = ""
-    for i, d in enumerate(reversed(sundays)):
-        url = get_url_for_location("Njayar Prabhadham", d)
-        date_str = d.strftime('%Y-%m-%d')
-        color = RGB_COLORS[i % len(RGB_COLORS)]
-        cards += f'<div class="card" style="background-color:{color};"><a href="{url}" target="_blank">{date_str}</a></div>'
-    
-    # Reverse the list of dates again before rendering to show newest first
+    # Display newest first (sundays is already in reverse chronological order from the loop logic)
     cards = ""
     for i, d in enumerate(sundays):
         url = get_url_for_location("Njayar Prabhadham", d)
