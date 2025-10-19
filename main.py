@@ -90,12 +90,13 @@ def update_epaper_json():
 # ------------------ Telegram RSS (XML backend) ------------------
 @app.route("/telegram/<channel>")
 def telegram_rss(channel):
-    """Universal backend RSS feed with images for Telegram channels."""
+    """Universal backend RSS feed with images for Telegram channels. Cached for 2 hours."""
     if channel not in CHANNELS:
         return Response(f"<error>Channel not configured: {channel}</error>", mimetype="application/rss+xml")
 
     now = time.time()
-    cache_life = 600
+    # Cache life set to 7200 seconds (2 hours)
+    cache_life = 7200 
 
     if (
         channel in telegram_cache
@@ -127,8 +128,7 @@ def telegram_rss(channel):
             img_url = None
             style_tag = msg.select_one("a.tgme_widget_message_photo_wrap")
             if style_tag and "style" in style_tag.attrs:
-                # FIX: Corrected regex for extracting URL from CSS url() function.
-                # Removed double backslashes (\\) which were likely causing the issue.
+                # Corrected regex for extracting URL from CSS url() function.
                 m = re.search(r"url\(['\"]?(.*?)['\"]?\)", style_tag["style"])
                 if m:
                     img_url = m.group(1)
@@ -173,76 +173,13 @@ def telegram_rss(channel):
         print(f"[Error fetching Telegram RSS] {e}")
         return Response(f"<error>{e}</error>", mimetype="application/rss+xml")
 
-# ------------------ Telegram HTML Frontend ------------------
-@app.route("/Pathravarthakal")
-def pathravarthakal_html():
-    """Frontend display for Pathravarthakal feed."""
-    channel = "Pathravarthakal"
-    url = f"/telegram/{channel}"
-    rss_url = request.url_root.rstrip("/") + url
-    try:
-        r = requests.get(rss_url)
-        feed = feedparser.parse(r.text)
-    except Exception as e:
-        return f"<p>Failed to load feed: {e}</p>"
-
-    html_items = ""
-    for entry in feed.entries[:40]:
-        title = entry.get("title", "")
-        link = entry.get("link", "")
-        desc = entry.get("summary", "")
-        image = None
-
-        # Check for media:content from the updated RSS generation
-        if "media_content" in entry:
-            for m in entry.media_content:
-                if "url" in m:
-                    image = m["url"]
-                    break
-        # Fallback (original logic)
-        elif "media_thumbnail" in entry:
-            for m in entry.media_thumbnail:
-                if "url" in m:
-                    image = m["url"]
-                    break
-        
-        # Simple check for image link inside description (last resort)
-        if not image:
-            match = re.search(r'<img\s+src="([^"]+)"', desc)
-            if match:
-                image = match.group(1)
-
-        html_items += f"""
-        <div style='margin:10px;padding:10px;background:#fff;border-radius:12px;
-                     box-shadow:0 2px 6px rgba(0,0,0,0.1);text-align:left;'>
-            {'<img src="'+image+'" style="width:100%;border-radius:12px;">' if image else ''}
-            <h3><a href="{link}" target="_blank" style="color:#0078cc;text-decoration:none;">{title}</a></h3>
-            <div style="color:#444;font-size:14px;">{desc}</div>
-        </div>
-        """
-
-    return f"""
-    <html>
-    <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <title>{channel} Feed</title>
-    </head>
-    <body style="font-family:sans-serif;background:#f5f7fa;margin:0;padding:10px;">
-        <h2 style="text-align:center;color:#0078cc;">📰 {channel} Telegram Feed</h2>
-        <div style="max-width:600px;margin:auto;">{html_items}</div>
-        <p style="text-align:center;">📡 RSS: <a href="{url}" target="_blank">{rss_url}</a></p>
-    </body>
-    </html>
-    """
-
 # ------------------ Home ------------------
 @app.route('/')
 def homepage():
+    # Removed "Pathravarthakal Feed" link from the homepage
     links = [
         ("Today's Editions", "/today"),
         ("Njayar Prabhadham Archive", "/njayar"),
-        ("Pathravarthakal Feed", "/Pathravarthakal"),
     ]
     cards = ""
     for i, (label, link) in enumerate(links):
@@ -276,14 +213,6 @@ def show_njayar_archive():
             sundays.append(current)
         current -= datetime.timedelta(days=7) # Go back one week
 
-    cards = ""
-    for i, d in enumerate(reversed(sundays)):
-        url = get_url_for_location("Njayar Prabhadham", d)
-        date_str = d.strftime('%Y-%m-%d')
-        color = RGB_COLORS[i % len(RGB_COLORS)]
-        cards += f'<div class="card" style="background-color:{color};"><a href="{url}" target="_blank">{date_str}</a></div>'
-    
-    # Reverse the list of dates again before rendering to show newest first
     cards = ""
     for i, d in enumerate(sundays):
         url = get_url_for_location("Njayar Prabhadham", d)
