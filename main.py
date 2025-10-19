@@ -62,7 +62,7 @@ def wrap_grid_page(title, items_html, show_back=True):
 # ------------------ ePaper ------------------
 def get_url_for_location(location, dt_obj=None):
     if dt_obj is None:
-        dt_obj = datetime.datetime.now()
+        dt_obj = datetime.date.today() # Use date.today() as only date is needed
     date_str = dt_obj.strftime('%Y-%m-%d')
     return f"https://epaper.suprabhaatham.com/details/{location}/{date_str}/1"
 
@@ -114,13 +114,22 @@ def telegram_rss(channel):
             date_tag = msg.select_one("a.tgme_widget_message_date")
             link = date_tag["href"] if date_tag else f"https://t.me/{channel}"
             text_tag = msg.select_one(".tgme_widget_message_text")
-            title = (text_tag.text.strip()[:80] + "...") if text_tag else "Telegram Post"
+            
+            # Use slightly more robust title extraction
+            if text_tag:
+                full_text = text_tag.text.strip().replace('\n', ' ')
+                title = (full_text[:80].rsplit(' ', 1)[0] + "...") if len(full_text) > 80 else full_text
+            else:
+                title = "Telegram Post"
+            
             desc = str(text_tag) if text_tag else ""
 
             img_url = None
             style_tag = msg.select_one("a.tgme_widget_message_photo_wrap")
             if style_tag and "style" in style_tag.attrs:
-                m = re.search(r"url\\(['\"]?(.*?)['\"]?\\)", style_tag["style"])
+                # FIX: Corrected regex for extracting URL from CSS url() function.
+                # Removed double backslashes (\\) which were likely causing the issue.
+                m = re.search(r"url\(['\"]?(.*?)['\"]?\)", style_tag["style"])
                 if m:
                     img_url = m.group(1)
 
@@ -130,7 +139,12 @@ def telegram_rss(channel):
                     img_url = img_tag["src"]
 
             if img_url:
+                # Use a specific image tag for better RSS compatibility
+                image_enclosure = f"<media:content url='{img_url}' medium='image' />"
                 desc = f'<img src="{img_url}" width="100%"><br>{desc}'
+            else:
+                image_enclosure = ""
+
 
             items.append(f"""
             <item>
@@ -138,15 +152,15 @@ def telegram_rss(channel):
                 <link>{link}</link>
                 <guid>{link}</guid>
                 <description><![CDATA[{desc}]]></description>
-                {"<enclosure url='"+img_url+"' type='image/jpeg' />" if img_url else ""}
+                {image_enclosure}
             </item>
             """)
 
         rss = f"""<?xml version="1.0" encoding="UTF-8"?>
-        <rss version="2.0">
+        <rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/">
         <channel>
             <title>{channel} Telegram Feed</title>
-            <link>https://t.me/{channel}</link>
+            <link>{CHANNELS[channel]}</link>
             <description>Latest posts from @{channel}</description>
             {''.join(items)}
         </channel>
@@ -156,6 +170,7 @@ def telegram_rss(channel):
         return Response(rss, mimetype="application/rss+xml")
 
     except Exception as e:
+        print(f"[Error fetching Telegram RSS] {e}")
         return Response(f"<error>{e}</error>", mimetype="application/rss+xml")
 
 # ------------------ Telegram HTML Frontend ------------------
@@ -178,23 +193,31 @@ def pathravarthakal_html():
         desc = entry.get("summary", "")
         image = None
 
+        # Check for media:content from the updated RSS generation
         if "media_content" in entry:
             for m in entry.media_content:
                 if "url" in m:
                     image = m["url"]
                     break
+        # Fallback (original logic)
         elif "media_thumbnail" in entry:
             for m in entry.media_thumbnail:
                 if "url" in m:
                     image = m["url"]
                     break
+        
+        # Simple check for image link inside description (last resort)
+        if not image:
+            match = re.search(r'<img\s+src="([^"]+)"', desc)
+            if match:
+                image = match.group(1)
 
         html_items += f"""
         <div style='margin:10px;padding:10px;background:#fff;border-radius:12px;
                      box-shadow:0 2px 6px rgba(0,0,0,0.1);text-align:left;'>
             {'<img src="'+image+'" style="width:100%;border-radius:12px;">' if image else ''}
             <h3><a href="{link}" target="_blank" style="color:#0078cc;text-decoration:none;">{title}</a></h3>
-            <p style="color:#444;font-size:14px;">{desc}</p>
+            <div style="color:#444;font-size:14px;">{desc}</div>
         </div>
         """
 
@@ -242,11 +265,16 @@ def show_njayar_archive():
     today = datetime.date.today()
     cutoff = datetime.date(2024, 6, 30)
     sundays = []
-    current = start_date
-    while current <= today:
+    
+    # Start checking from the last Sunday on or before today
+    current = today
+    while current.weekday() != 6: # 6 is Sunday
+        current -= datetime.timedelta(days=1)
+
+    while current >= start_date:
         if current >= cutoff:
             sundays.append(current)
-        current += datetime.timedelta(days=7)
+        current -= datetime.timedelta(days=7) # Go back one week
 
     cards = ""
     for i, d in enumerate(reversed(sundays)):
@@ -254,9 +282,21 @@ def show_njayar_archive():
         date_str = d.strftime('%Y-%m-%d')
         color = RGB_COLORS[i % len(RGB_COLORS)]
         cards += f'<div class="card" style="background-color:{color};"><a href="{url}" target="_blank">{date_str}</a></div>'
+    
+    # Reverse the list of dates again before rendering to show newest first
+    cards = ""
+    for i, d in enumerate(sundays):
+        url = get_url_for_location("Njayar Prabhadham", d)
+        date_str = d.strftime('%Y-%m-%d')
+        color = RGB_COLORS[i % len(RGB_COLORS)]
+        cards += f'<div class="card" style="background-color:{color};"><a href="{url}" target="_blank">{date_str}</a></div>'
+        
     return render_template_string(wrap_grid_page("Njayar Prabhadham - Sunday Editions", cards))
 
 # ------------------ Main ------------------
 if __name__ == '__main__':
+    # Create the static directory if it doesn't exist
+    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+    
     threading.Thread(target=update_epaper_json, daemon=True).start()
     app.run(host='0.0.0.0', port=8000)
