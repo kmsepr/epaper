@@ -189,28 +189,13 @@ def show_channel_feed(channel):
     for i, entry in enumerate(feed.entries[:40]):
         title = entry.get("title", "")
         desc = entry.get("summary", "")
-        image = None
 
-        if "media_content" in entry:
-            for m in entry.media_content:
-                if "url" in m:
-                    image = m["url"]
-                    break
-        elif "media_thumbnail" in entry:
-            for m in entry.media_thumbnail:
-                if "url" in m:
-                    image = m["url"]
-                    break
-        elif not image:
-            match = re.search(r'<img\s+src="([^"]+)"', desc)
-            if match:
-                image = match.group(1)
-
+        # Remove duplicate image extraction — keep only description image
         html_items += f"""
         <div style='margin:10px;padding:10px;background:#fff;border-radius:12px;
                      box-shadow:0 2px 6px rgba(0,0,0,0.1);text-align:left;'>
-            {'<img src="'+image+'" style="width:100%;border-radius:12px;">' if image else ''}
             <h3><a href="/post/{i}?channel={channel}" style="color:#0078cc;text-decoration:none;">{title}</a></h3>
+            <div style="color:#444;font-size:15px;">{desc}</div>
         </div>
         """
 
