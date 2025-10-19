@@ -80,14 +80,14 @@ def update_epaper_json():
             print("✅ epaper.txt updated successfully.")
         except Exception as e:
             print(f"[Error updating epaper.txt] {e}")
-        time.sleep(8640)
+        time.sleep(86400)
 
-# ------------------ Telegram RSS (self-hosted) ------------------
+# ------------------ Telegram RSS ------------------
 @app.route("/Pathravarthakal/rss")
 def telegram_rss():
     """Generate RSS feed directly from Telegram channel with images."""
     channel = "Pathravarthakal"
-    cache_life = 600  # 10 minutes cache
+    cache_life = 600  # 10 minutes
     now = time.time()
 
     # Serve cached feed
@@ -100,14 +100,14 @@ def telegram_rss():
         soup = BeautifulSoup(r.text, "html.parser")
 
         items = []
-        for msg in soup.select(".tgme_widget_message_wrap")[:25]:
+        for msg in soup.select(".tgme_widget_message_wrap")[:30]:
             date_tag = msg.select_one("a.tgme_widget_message_date")
             link = date_tag["href"] if date_tag else f"https://t.me/{channel}"
             text_tag = msg.select_one(".tgme_widget_message_text")
             title = (text_tag.text.strip()[:80] + "...") if text_tag else "Telegram Post"
             desc = str(text_tag) if text_tag else ""
 
-            # Extract image or video thumbnail
+            # Extract image thumbnail
             img_url = None
             style_tag = msg.select_one("a.tgme_widget_message_photo_wrap")
             if style_tag and "style" in style_tag.attrs:
@@ -115,7 +115,6 @@ def telegram_rss():
                 if m:
                     img_url = m.group(1)
 
-            # Fallback: img tag
             if not img_url:
                 img_tag = msg.select_one("img")
                 if img_tag and img_tag.get("src"):
@@ -156,7 +155,7 @@ def telegram_rss():
 # ------------------ Telegram Web View ------------------
 @app.route("/telegram")
 def telegram_feed_view():
-    """Visual web page for Pathravarthakal feed (uses /Pathravarthakal/rss)."""
+    """Visual web page for Pathravarthakal feed."""
     feed_url = request.url_root.rstrip("/") + "/Pathravarthakal/rss"
     html = f"""
     <!DOCTYPE html>
@@ -170,19 +169,17 @@ def telegram_feed_view():
                 font-family: system-ui, sans-serif;
                 background: #f5f7fa;
                 margin: 0;
-                padding: 15px;
-                color: #333;
+                padding: 10px;
             }}
             h1 {{
                 text-align: center;
                 color: #0078cc;
-                margin-bottom: 12px;
             }}
             .topbar {{
                 display: flex;
                 justify-content: center;
                 gap: 10px;
-                margin-bottom: 20px;
+                margin-bottom: 15px;
             }}
             .btn {{
                 background: #0078cc;
@@ -190,7 +187,6 @@ def telegram_feed_view():
                 padding: 8px 12px;
                 border-radius: 6px;
                 text-decoration: none;
-                font-size: 0.9em;
             }}
             iframe {{
                 width: 100%;
@@ -205,7 +201,7 @@ def telegram_feed_view():
         <h1>📰 Pathravarthakal Feed</h1>
         <div class="topbar">
             <a href="/Pathravarthakal/rss?refresh=1" class="btn">🔄 Refresh RSS</a>
-            <a href="/" class="btn" style="background:#555;">🏠 Home</a>
+            <a href="/" class="btn" style="background:#444;">🏠 Home</a>
         </div>
         <iframe src="{feed_url}"></iframe>
     </body>
@@ -213,7 +209,7 @@ def telegram_feed_view():
     """
     return html
 
-# ------------------ Routes ------------------
+# ------------------ Home ------------------
 @app.route('/')
 def homepage():
     links = [
