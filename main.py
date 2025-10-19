@@ -30,8 +30,6 @@ feed_cache = {}
 
 CHANNELS = {
     "Pathravarthakal": "https://t.me/s/Pathravarthakal",
-    # Add more channels here:
-    # "AnotherChannel": "https://t.me/s/AnotherChannel"
 }
 
 # ------------------ Utility ------------------
@@ -112,7 +110,7 @@ def telegram_rss(channel):
         soup = BeautifulSoup(r.text, "html.parser")
 
         items = []
-        for msg in soup.select(".tgme_widget_message_wrap")[:40]:
+        for i, msg in enumerate(soup.select(".tgme_widget_message_wrap")[:40]):
             date_tag = msg.select_one("a.tgme_widget_message_date")
             link = date_tag["href"] if date_tag else f"https://t.me/{channel}"
             text_tag = msg.select_one(".tgme_widget_message_text")
@@ -143,10 +141,13 @@ def telegram_rss(channel):
             else:
                 image_enclosure = ""
 
+            # 🔗 Add local HTML post link in title
+            local_link = f"{request.url_root.rstrip('/')}/post/{i}?channel={channel}"
+
             items.append(f"""
             <item>
-                <title><![CDATA[{title}]]></title>
-                <link>{link}</link>
+                <title><![CDATA[<a href="{local_link}">{title}</a>]]></title>
+                <link>{local_link}</link>
                 <guid>{link}</guid>
                 <description><![CDATA[{desc}]]></description>
                 {image_enclosure}
@@ -173,7 +174,6 @@ def telegram_rss(channel):
 # ------------------ Universal Telegram HTML Frontend ------------------
 @app.route("/<channel>")
 def show_channel_feed(channel):
-    """Generic frontend for any configured Telegram channel."""
     if channel not in CHANNELS:
         return "<p>Channel not found or not configured.</p>"
 
@@ -189,8 +189,6 @@ def show_channel_feed(channel):
     for i, entry in enumerate(feed.entries[:40]):
         title = entry.get("title", "")
         desc = entry.get("summary", "")
-
-        # Remove duplicate image extraction — keep only description image
         html_items += f"""
         <div style='margin:10px;padding:10px;background:#fff;border-radius:12px;
                      box-shadow:0 2px 6px rgba(0,0,0,0.1);text-align:left;'>
@@ -216,7 +214,6 @@ def show_channel_feed(channel):
 
 @app.route("/post/<int:index>")
 def show_post(index):
-    """Show detailed Telegram post view for any channel."""
     channel = request.args.get("channel")
     if not channel or channel not in feed_cache or index >= len(feed_cache[channel]):
         return f"<p>Post not found or expired. Please <a href='/{channel}'>reload feed</a>.</p>"
@@ -226,11 +223,9 @@ def show_post(index):
     link = entry.get("link", "")
     desc = entry.get("summary", "")
 
-    # Extract image if available inside description
     match = re.search(r'<img\s+src="([^"]+)"', desc)
     image = match.group(1) if match else None
 
-    # Wrap the post in styled layout like your other RSS feeds
     return f"""
     <!DOCTYPE html>
     <html lang="en">
@@ -315,7 +310,7 @@ def show_today_links():
     for i, loc in enumerate(LOCATIONS):
         url = get_url_for_location(loc)
         color = RGB_COLORS[i % len(RGB_COLORS)]
-        cards += f'<div class="card" style="background-color:{color};"><a href="{url}" target="_blank">{loc}</a></div>'
+        cards += f'<div class="card" style="background-color:{color};'><a href="{url}" target="_blank">{loc}</a></div>'
     return render_template_string(wrap_grid_page("Today's Suprabhaatham ePaper Links", cards))
 
 @app.route('/njayar')
@@ -339,7 +334,7 @@ def show_njayar_archive():
         url = get_url_for_location("Njayar Prabhadham", d)
         date_str = d.strftime('%Y-%m-%d')
         color = RGB_COLORS[i % len(RGB_COLORS)]
-        cards += f'<div class="card" style="background-color:{color};"><a href="{url}" target="_blank">{date_str}</a></div>'
+        cards += f'<div class="card" style="background-color:{color};'><a href="{url}" target="_blank">{date_str}</a></div>'
 
     return render_template_string(wrap_grid_page("Njayar Prabhadham - Sunday Editions", cards))
 
