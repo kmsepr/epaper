@@ -134,9 +134,10 @@ def telegram_rss(channel):
                 if img_tag and img_tag.get("src"):
                     img_url = img_tag["src"]
 
+            # ✅ Make image larger for RSS feed
             desc_html = f"<p>{description_text}</p>"
             if img_url:
-                desc_html = f'<img src="{img_url}" width="100%"><br>{desc_html}'
+                desc_html = f'<img src="{img_url}" style="max-width:600px;width:100%;height:auto;margin-bottom:10px;"><br>{desc_html}'
 
             local_link = f"{request.url_root.rstrip('/')}/post/{i}?channel={channel}"
 
