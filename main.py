@@ -225,38 +225,71 @@ def show_post(index):
     title = entry.get("title", "")
     link = entry.get("link", "")
     desc = entry.get("summary", "")
-    image = None
 
-    if "media_content" in entry:
-        for m in entry.media_content:
-            if "url" in m:
-                image = m["url"]
-                break
-    elif "media_thumbnail" in entry:
-        for m in entry.media_thumbnail:
-            if "url" in m:
-                image = m["url"]
-                break
-    elif not image:
-        match = re.search(r'<img\s+src="([^"]+)"', desc)
-        if match:
-            image = match.group(1)
+    # Extract image if available inside description
+    match = re.search(r'<img\s+src="([^"]+)"', desc)
+    image = match.group(1) if match else None
 
+    # Wrap the post in styled layout like your other RSS feeds
     return f"""
-    <html>
+    <!DOCTYPE html>
+    <html lang="en">
     <head>
-        <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
         <title>{title}</title>
+        <style>
+            body {{
+                font-family: 'Segoe UI', sans-serif;
+                background: #f5f7fa;
+                margin: 0;
+                padding: 15px;
+                color: #333;
+            }}
+            .container {{
+                max-width: 700px;
+                margin: auto;
+                background: #fff;
+                border-radius: 12px;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+                padding: 20px;
+            }}
+            h2 {{
+                color: #0078cc;
+                margin-top: 0;
+                font-size: 1.3em;
+                line-height: 1.4;
+            }}
+            img {{
+                width: 100%;
+                border-radius: 12px;
+                margin: 15px 0;
+            }}
+            a {{
+                color: #0078cc;
+                text-decoration: none;
+            }}
+            .desc {{
+                font-size: 16px;
+                line-height: 1.5;
+                color: #444;
+            }}
+            .footer {{
+                text-align: center;
+                margin-top: 25px;
+                font-size: 0.9em;
+            }}
+        </style>
     </head>
-    <body style="font-family:sans-serif;background:#f5f7fa;margin:0;padding:15px;">
-        <div style="max-width:600px;margin:auto;background:#fff;padding:20px;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.1);">
-            <h2 style="color:#0078cc;">{title}</h2>
-            {'<img src="'+image+'" style="width:100%;border-radius:12px;margin-bottom:15px;">' if image else ''}
-            <div style="color:#444;font-size:15px;">{desc}</div>
-            <p style="margin-top:20px;text-align:center;">
-                <a href="/{channel}" style="color:#0078cc;text-decoration:none;">← Back to Feed</a> |
-                <a href="{link}" target="_blank" style="color:#0078cc;text-decoration:none;">Open Original</a>
-            </p>
+    <body>
+        <div class="container">
+            <h2>{title}</h2>
+            {f'<img src="{image}">' if image else ''}
+            <div class="desc">{desc}</div>
+            <div class="footer">
+                <p><a href="/{channel}">← Back to Feed</a> |
+                   <a href="{link}" target="_blank">🔗 Open Original</a></p>
+            </div>
         </div>
     </body>
     </html>
