@@ -128,7 +128,7 @@ def telegram_rss(channel):
             img_url = None
             style_tag = msg.select_one("a.tgme_widget_message_photo_wrap")
             if style_tag and "style" in style_tag.attrs:
-                m = re.search(r"url\\(['\"]?(.*?)['\"]?\\)", style_tag["style"])
+                m = re.search(r"url\(['\"]?(.*?)['\"]?\)", style_tag["style"])
                 if m:
                     img_url = m.group(1)
 
@@ -189,6 +189,8 @@ def show_channel_feed(channel):
     for i, entry in enumerate(feed.entries[:40]):
         title = entry.get("title", "")
         desc = entry.get("summary", "")
+
+        # Remove duplicate image extraction — keep only description image
         html_items += f"""
         <div style='margin:10px;padding:10px;background:#fff;border-radius:12px;
                      box-shadow:0 2px 6px rgba(0,0,0,0.1);text-align:left;'>
@@ -212,10 +214,9 @@ def show_channel_feed(channel):
     </html>
     """
 
-# ------------------ Post View with CSS Lightbox ------------------
 @app.route("/post/<int:index>")
 def show_post(index):
-    """Show detailed Telegram post view with fullscreen image."""
+    """Show detailed Telegram post view for any channel."""
     channel = request.args.get("channel")
     if not channel or channel not in feed_cache or index >= len(feed_cache[channel]):
         return f"<p>Post not found or expired. Please <a href='/{channel}'>reload feed</a>.</p>"
@@ -225,9 +226,11 @@ def show_post(index):
     link = entry.get("link", "")
     desc = entry.get("summary", "")
 
-    match = re.search(r'<img\\s+src="([^"]+)"', desc)
+    # Extract image if available inside description
+    match = re.search(r'<img\s+src="([^"]+)"', desc)
     image = match.group(1) if match else None
 
+    # Wrap the post in styled layout like your other RSS feeds
     return f"""
     <!DOCTYPE html>
     <html lang="en">
@@ -261,34 +264,27 @@ def show_post(index):
                 width: 100%;
                 border-radius: 12px;
                 margin: 15px 0;
-                cursor: zoom-in;
             }}
-            .lightbox {{
-                display: none;
-                position: fixed;
-                z-index: 999;
-                left: 0; top: 0;
-                width: 100%; height: 100%;
-                background: rgba(0,0,0,0.9);
+            a {{
+                color: #0078cc;
+                text-decoration: none;
+            }}
+            .desc {{
+                font-size: 16px;
+                line-height: 1.5;
+                color: #444;
+            }}
+            .footer {{
                 text-align: center;
+                margin-top: 25px;
+                font-size: 0.9em;
             }}
-            .lightbox img {{
-                max-width: 95%;
-                max-height: 95%;
-                margin-top: 2%;
-                border-radius: 8px;
-                cursor: zoom-out;
-            }}
-            .lightbox:target {{display: block;}}
-            a {{color: #0078cc; text-decoration: none;}}
-            .desc {{font-size: 16px; line-height: 1.5; color: #444;}}
-            .footer {{text-align: center; margin-top: 25px; font-size: 0.9em;}}
         </style>
     </head>
     <body>
         <div class="container">
             <h2>{title}</h2>
-            {f'<a href="#img1"><img src="{image}" alt="Image"></a><div id="img1" class="lightbox"><a href="#"><img src="{image}" alt=""></a></div>' if image else ''}
+            {f'<img src="{image}">' if image else ''}
             <div class="desc">{desc}</div>
             <div class="footer">
                 <p><a href="/{channel}">← Back to Feed</a> |
