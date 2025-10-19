@@ -74,12 +74,10 @@ def update_epaper_json():
             print("Fetching latest ePaper data...")
             response = requests.post(url, json={}, headers=headers, timeout=10)
             response.raise_for_status()
-
             if response.headers.get('Content-Encoding') == 'br':
                 data = brotli.decompress(response.content).decode('utf-8')
             else:
                 data = response.text
-
             with open(EPAPER_TXT, "w", encoding="utf-8") as f:
                 f.write(data)
             print("✅ epaper.txt updated successfully.")
@@ -90,13 +88,11 @@ def update_epaper_json():
 # ------------------ Telegram RSS (XML backend) ------------------
 @app.route("/telegram/<channel>")
 def telegram_rss(channel):
-    """Universal backend RSS feed with images for Telegram channels."""
     if channel not in CHANNELS:
         return Response(f"<error>Channel not configured: {channel}</error>", mimetype="application/rss+xml")
 
     now = time.time()
     cache_life = 600
-
     if (
         channel in telegram_cache
         and now - telegram_cache[channel]["time"] < cache_life
@@ -122,26 +118,23 @@ def telegram_rss(channel):
                 title = "Telegram Post"
 
             desc = str(text_tag) if text_tag else ""
-
             img_url = None
             style_tag = msg.select_one("a.tgme_widget_message_photo_wrap")
             if style_tag and "style" in style_tag.attrs:
                 m = re.search(r"url\(['\"]?(.*?)['\"]?\)", style_tag["style"])
                 if m:
                     img_url = m.group(1)
-
             if not img_url:
                 img_tag = msg.select_one("img")
                 if img_tag and img_tag.get("src"):
                     img_url = img_tag["src"]
-
             if img_url:
                 image_enclosure = f"<media:content url='{img_url}' medium='image' />"
                 desc = f'<img src="{img_url}" width="100%"><br>{desc}'
             else:
                 image_enclosure = ""
 
-            # 🔗 Add local HTML post link in title
+            # 🔗 Local post link
             local_link = f"{request.url_root.rstrip('/')}/post/{i}?channel={channel}"
 
             items.append(f"""
@@ -153,6 +146,9 @@ def telegram_rss(channel):
                 {image_enclosure}
             </item>
             """)
+
+        # 🔹 Show latest first
+        items.reverse()
 
         rss = f"""<?xml version="1.0" encoding="UTF-8"?>
         <rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/">
@@ -181,12 +177,13 @@ def show_channel_feed(channel):
     try:
         r = requests.get(rss_url)
         feed = feedparser.parse(r.text)
-        feed_cache[channel] = feed.entries
+        # 🔹 Latest first
+        feed_cache[channel] = list(reversed(feed.entries[:40]))
     except Exception as e:
         return f"<p>Failed to load feed: {e}</p>"
 
     html_items = ""
-    for i, entry in enumerate(feed.entries[:40]):
+    for i, entry in enumerate(feed_cache[channel]):
         title = entry.get("title", "")
         desc = entry.get("summary", "")
         html_items += f"""
@@ -310,7 +307,7 @@ def show_today_links():
     for i, loc in enumerate(LOCATIONS):
         url = get_url_for_location(loc)
         color = RGB_COLORS[i % len(RGB_COLORS)]
-        cards += f'<div class="card" style="background-color:{color};'><a href="{url}" target="_blank">{loc}</a></div>'
+        cards += f'<div class="card" style="background-color:{color};"><a href="{url}" target="_blank">{loc}</a></div>'
     return render_template_string(wrap_grid_page("Today's Suprabhaatham ePaper Links", cards))
 
 @app.route('/njayar')
@@ -334,7 +331,7 @@ def show_njayar_archive():
         url = get_url_for_location("Njayar Prabhadham", d)
         date_str = d.strftime('%Y-%m-%d')
         color = RGB_COLORS[i % len(RGB_COLORS)]
-        cards += f'<div class="card" style="background-color:{color};'><a href="{url}" target="_blank">{date_str}</a></div>'
+        cards += f'<div class="card" style="background-color:{color};"><a href="{url}" target="_blank">{date_str}</a></div>'
 
     return render_template_string(wrap_grid_page("Njayar Prabhadham - Sunday Editions", cards))
 
