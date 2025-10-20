@@ -156,8 +156,7 @@ def telegram_rss(channel):
             </item>
             """)
 
-        # Reverse → latest first
-        items.reverse()
+        # 🩵 Keep natural order; handle reversing in feed view only
         last_build = format_datetime(datetime.datetime.utcnow())
 
         rss = f"""<?xml version="1.0" encoding="UTF-8"?>
@@ -186,10 +185,13 @@ def show_channel_feed(channel):
         return "<p>Channel not found or not configured.</p>"
 
     rss_url = request.url_root.rstrip("/") + f"/feed/{channel}"
+    if "refresh" in request.args:
+        rss_url += "?refresh=1"
+
     try:
         r = requests.get(rss_url)
         feed = feedparser.parse(r.text)
-        feed_cache[channel] = feed.entries[:40]
+        feed_cache[channel] = list(reversed(feed.entries[:40]))  # ✅ latest first
     except Exception as e:
         return f"<p>Failed to load feed: {e}</p>"
 
@@ -215,6 +217,9 @@ def show_channel_feed(channel):
     </head>
     <body style="font-family:sans-serif;background:#f5f7fa;margin:0;padding:10px;">
         <h2 style="text-align:center;color:#0078cc;">📰 {channel} Telegram Feed</h2>
+        <p style="text-align:center;">
+            <a href="/{channel}?refresh=1" style="color:#0078cc;text-decoration:none;font-weight:bold;">↻ Refresh Feed</a>
+        </p>
         <div style="max-width:600px;margin:auto;">{html_items}</div>
         <p style="text-align:center;">📡 RSS: <a href="{rss_url}" target="_blank">{rss_url}</a></p>
         <p style="text-align:center;"><a href="/" style="color:#0078cc;">🏠 Back to Home</a></p>
