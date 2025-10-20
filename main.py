@@ -9,6 +9,7 @@ import brotli
 import re
 from flask import Flask, render_template_string, Response, request
 from bs4 import BeautifulSoup
+from email.utils import format_datetime
 
 # -------------------- Config --------------------
 app = Flask(__name__)
@@ -92,7 +93,7 @@ def telegram_feed_pathravarthakal():
 
 @app.route("/telegram/<channel>")
 def telegram_rss(channel):
-    """RSS feed with correct Telegram post images."""
+    """Advanced RSS feed with correct Telegram post images and metadata."""
     if channel not in CHANNELS:
         return Response(f"<error>Channel not configured: {channel}</error>", mimetype="application/rss+xml")
 
@@ -111,11 +112,19 @@ def telegram_rss(channel):
         for i, msg in enumerate(soup.select(".tgme_widget_message_wrap")[:40]):
             date_tag = msg.select_one("a.tgme_widget_message_date")
             link = date_tag["href"] if date_tag else f"https://t.me/{channel}"
-            text_tag = msg.select_one(".tgme_widget_message_text")
 
+            # Extract post time
+            time_tag = date_tag.select_one("time") if date_tag else None
+            if time_tag and time_tag.has_attr("datetime"):
+                pub_time = datetime.datetime.fromisoformat(time_tag["datetime"].replace("Z", "+00:00"))
+            else:
+                pub_time = datetime.datetime.utcnow()
+            pub_date = format_datetime(pub_time)
+
+            text_tag = msg.select_one(".tgme_widget_message_text")
             if text_tag:
                 full_text = text_tag.text.strip().replace('\n', ' ')
-                title = (full_text[:80].rsplit(' ', 1)[0] + "...") if len(full_text) > 80 else full_text
+                title = (full_text[:100].rsplit(' ', 1)[0] + "...") if len(full_text) > 100 else full_text
                 description_text = text_tag.decode_contents()
             else:
                 title = "Telegram Post"
@@ -133,23 +142,23 @@ def telegram_rss(channel):
 
             desc_html = f"<p>{description_text}</p>"
             if img_url:
-                desc_html = f'<img src="{img_url}" style="max-width:600px;width:100%;height:auto;margin-bottom:10px;"><br>{desc_html}'
-
-            local_link = f"{request.url_root.rstrip('/')}/post/{i}?channel={channel}"
+                desc_html = f'<p><img src="{img_url}" style="max-width:100%;border-radius:8px;"></p>{desc_html}'
 
             items.append(f"""
             <item>
                 <title><![CDATA[{title}]]></title>
-                <link>{local_link}</link>
-                <guid>{link}</guid>
+                <link>{link}</link>
+                <guid isPermaLink="true">{link}</guid>
+                <author>@{channel}</author>
+                <pubDate>{pub_date}</pubDate>
                 <description><![CDATA[{desc_html}]]></description>
                 {'<media:content url="' + img_url + '" medium="image" />' if img_url else ''}
-                <pubDate>{datetime.datetime.utcnow().strftime('%a, %d %b %Y %H:%M:%S GMT')}</pubDate>
             </item>
             """)
 
-        # Reverse order → latest first
+        # Reverse → latest first
         items.reverse()
+        last_build = format_datetime(datetime.datetime.utcnow())
 
         rss = f"""<?xml version="1.0" encoding="UTF-8"?>
         <rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/">
@@ -157,6 +166,9 @@ def telegram_rss(channel):
             <title>{channel} Telegram Feed</title>
             <link>{CHANNELS[channel]}</link>
             <description>Latest posts from @{channel}</description>
+            <language>en</language>
+            <lastBuildDate>{last_build}</lastBuildDate>
+            <generator>Suprabhaatham RSS Generator</generator>
             {''.join(items)}
         </channel>
         </rss>"""
@@ -185,10 +197,12 @@ def show_channel_feed(channel):
     for i, entry in enumerate(feed_cache[channel]):
         title = entry.get("title", "")
         desc = entry.get("summary", "")
+        pub = entry.get("published", "")
         html_items += f"""
         <div style='margin:10px;padding:10px;background:#fff;border-radius:12px;
                      box-shadow:0 2px 6px rgba(0,0,0,0.1);text-align:left;'>
             <h3><a href="/post/{i}?channel={channel}" style="color:#0078cc;text-decoration:none;">{title}</a></h3>
+            <small style="color:#888;">{pub}</small>
             <div style="color:#444;font-size:15px;">{desc}</div>
         </div>
         """
@@ -245,15 +259,8 @@ def show_post(index):
                 box-shadow: 0 2px 8px rgba(0,0,0,0.1);
                 padding: 20px;
             }}
-            h2 {{
-                color: #0078cc;
-                margin-top: 0;
-            }}
-            img {{
-                width: 100%;
-                border-radius: 12px;
-                margin: 15px 0;
-            }}
+            h2 {{ color: #0078cc; margin-top: 0; }}
+            img {{ width: 100%; border-radius: 12px; margin: 15px 0; }}
         </style>
     </head>
     <body>
