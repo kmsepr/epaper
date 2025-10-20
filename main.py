@@ -1,16 +1,19 @@
 import os
 import time
+import json
+import feedparser
 import threading
 import datetime
 import requests
+import brotli
 import re
 from flask import Flask, render_template_string, Response, request
 from bs4 import BeautifulSoup
-import feedparser
 
 # -------------------- Config --------------------
 app = Flask(__name__)
 UPLOAD_FOLDER = "static"
+EPAPER_TXT = "epaper.txt"
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 LOCATIONS = [
@@ -63,9 +66,38 @@ def get_url_for_location(location, dt_obj=None):
     date_str = dt_obj.strftime('%Y-%m-%d')
     return f"https://epaper.suprabhaatham.com/details/{location}/{date_str}/1"
 
-# ------------------ Telegram RSS Fetcher ------------------
-def fetch_telegram_rss(channel):
-    """Fetch latest Telegram posts and cache them."""
+def update_epaper_json():
+    url = "https://api2.suprabhaatham.com/api/ePaper"
+    headers = {"Content-Type": "application/json", "Accept-Encoding": "br"}
+    while True:
+        try:
+            print("Fetching latest ePaper data...")
+            response = requests.post(url, json={}, headers=headers, timeout=10)
+            response.raise_for_status()
+            if response.headers.get('Content-Encoding') == 'br':
+                data = brotli.decompress(response.content).decode('utf-8')
+            else:
+                data = response.text
+            with open(EPAPER_TXT, "w", encoding="utf-8") as f:
+                f.write(data)
+            print("✅ epaper.txt updated successfully.")
+        except Exception as e:
+            print(f"[Error updating epaper.txt] {e}")
+        time.sleep(86400)  # update daily
+
+# ------------------ Telegram RSS ------------------
+@app.route("/telegram/<channel>")
+def telegram_rss(channel):
+    """RSS feed with correct post images."""
+    if channel not in CHANNELS:
+        return Response(f"<error>Channel not configured: {channel}</error>", mimetype="application/rss+xml")
+
+    now = time.time()
+    cache_life = 600  # 10 min
+
+    if channel in telegram_cache and now - telegram_cache[channel]["time"] < cache_life and "refresh" not in request.args:
+        return Response(telegram_cache[channel]["xml"], mimetype="application/rss+xml")
+
     try:
         url = CHANNELS[channel]
         r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
@@ -76,63 +108,178 @@ def fetch_telegram_rss(channel):
             date_tag = msg.select_one("a.tgme_widget_message_date")
             link = date_tag["href"] if date_tag else f"https://t.me/{channel}"
             text_tag = msg.select_one(".tgme_widget_message_text")
-            full_text = text_tag.text.strip().replace('\n', ' ') if text_tag else ""
-            title = (full_text[:80].rsplit(' ', 1)[0] + "...") if len(full_text) > 80 else full_text
 
-            # Image
+            if text_tag:
+                full_text = text_tag.text.strip().replace('\n', ' ')
+                title = (full_text[:80].rsplit(' ', 1)[0] + "...") if len(full_text) > 80 else full_text
+                description_text = full_text
+            else:
+                title = "Telegram Post"
+                description_text = ""
+
+            # Extract only post image, not channel logo
             img_url = None
-            style_tag = msg.select_one("a.tgme_widget_message_photo_wrap")
-            if style_tag and "style" in style_tag.attrs:
-                m = re.search(r"url['\"]?(.*?)['\"]?", style_tag["style"])
-                if m: img_url = m.group(1)
-            if not img_url:
-                img_tag = msg.select_one("img")
-                if img_tag and img_tag.get("src"): img_url = img_tag["src"]
+            photo_wrap = msg.select_one("a.tgme_widget_message_photo_wrap")
+            if photo_wrap and "style" in photo_wrap.attrs:
+                m = re.search(r'url\(["\']?(.*?)["\']?\)', photo_wrap["style"])
+                if m:
+                    img_url = m.group(1)
+            elif photo_wrap and photo_wrap.select_one("img"):
+                img_url = photo_wrap.select_one("img")["src"]
 
-            desc_html = f"<p>{full_text}</p>"
+            desc_html = f"<p>{description_text}</p>"
             if img_url:
                 desc_html = f'<img src="{img_url}" style="max-width:600px;width:100%;height:auto;margin-bottom:10px;"><br>{desc_html}'
 
-            local_link = f"/post/{i}?channel={channel}"
-            items.append({"title": title, "link": local_link, "guid": link, "description": desc_html, "image": img_url})
+            local_link = f"{request.url_root.rstrip('/')}/post/{i}?channel={channel}"
+
+            items.append(f"""
+            <item>
+                <title>{title}</title>
+                <link>{local_link}</link>
+                <guid>{link}</guid>
+                <description><![CDATA[{desc_html}]]></description>
+                {'<media:content url="' + img_url + '" medium="image" />' if img_url else ''}
+            </item>
+            """)
 
         items.reverse()  # Latest first
-
-        rss_items = ""
-        for item in items:
-            rss_items += f"""
-            <item>
-                <title>{item['title']}</title>
-                <link>{request.url_root.rstrip('/')}{item['link']}</link>
-                <guid>{item['guid']}</guid>
-                <description><![CDATA[{item['description']}]]></description>
-                {'<media:content url="' + item['image'] + '" medium="image" />' if item['image'] else ''}
-            </item>"""
-
         rss = f"""<?xml version="1.0" encoding="UTF-8"?>
         <rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/">
         <channel>
             <title>{channel} Telegram Feed</title>
             <link>{CHANNELS[channel]}</link>
             <description>Latest posts from @{channel}</description>
-            {rss_items}
+            {''.join(items)}
         </channel>
         </rss>"""
 
-        telegram_cache[channel] = {"xml": rss, "items": items, "time": time.time()}
-        print(f"✅ Cached RSS for {channel}")
-
+        telegram_cache[channel] = {"xml": rss, "time": now}
+        return Response(rss, mimetype="application/rss+xml")
     except Exception as e:
-        print(f"[Error fetching {channel} RSS] {e}")
+        print(f"[Error fetching Telegram RSS] {e}")
+        return Response(f"<error>{e}</error>", mimetype="application/rss+xml")
 
-def background_fetch():
-    """Continuously fetch RSS for all channels in background."""
-    while True:
-        for channel in CHANNELS:
-            fetch_telegram_rss(channel)
-        time.sleep(600)  # every 10 minutes
+# ------------------ HTML Frontend ------------------
+@app.route("/<channel>")
+def show_channel_feed(channel):
+    if channel not in CHANNELS:
+        return "<p>Channel not found or not configured.</p>"
 
-# ------------------ Routes ------------------
+    rss_url = request.url_root.rstrip("/") + f"/telegram/{channel}"
+    try:
+        r = requests.get(rss_url)
+        feed = feedparser.parse(r.text)
+        feed_cache[channel] = list(reversed(feed.entries[:40]))
+    except Exception as e:
+        return f"<p>Failed to load feed: {e}</p>"
+
+    html_items = ""
+    for i, entry in enumerate(feed_cache[channel]):
+        title = entry.get("title", "")
+        desc = entry.get("summary", "")
+        html_items += f"""
+        <div style='margin:10px;padding:10px;background:#fff;border-radius:12px;
+                     box-shadow:0 2px 6px rgba(0,0,0,0.1);text-align:left;'>
+            <h3><a href="/post/{i}?channel={channel}" style="color:#0078cc;text-decoration:none;">{title}</a></h3>
+            <div style="color:#444;font-size:15px;">{desc}</div>
+        </div>
+        """
+
+    return f"""
+    <html>
+    <head>
+        <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>{channel} Feed</title>
+    </head>
+    <body style="font-family:sans-serif;background:#f5f7fa;margin:0;padding:10px;">
+        <h2 style="text-align:center;color:#0078cc;">📰 {channel} Telegram Feed</h2>
+        <div style="max-width:600px;margin:auto;">{html_items}</div>
+        <p style="text-align:center;">📡 RSS: <a href="/telegram/{channel}" target="_blank">{rss_url}</a></p>
+        <p style="text-align:center;"><a href="/" style="color:#0078cc;">🏠 Back to Home</a></p>
+    </body>
+    </html>
+    """
+
+@app.route("/post/<int:index>")
+def show_post(index):
+    channel = request.args.get("channel")
+    if not channel or channel not in feed_cache or index >= len(feed_cache[channel]):
+        return f"<p>Post not found or expired. Please <a href='/{channel}'>reload feed</a>.</p>"
+
+    entry = feed_cache[channel][index]
+    title = entry.get("title", "")
+    link = entry.get("link", "")
+    desc = entry.get("summary", "")
+
+    match = re.search(r'<img\s+src="([^"]+)"', desc)
+    image = match.group(1) if match else None
+
+    return f"""
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>{title}</title>
+        <style>
+            body {{
+                font-family: 'Segoe UI', sans-serif;
+                background: #f5f7fa;
+                margin: 0;
+                padding: 15px;
+                color: #333;
+            }}
+            .container {{
+                max-width: 700px;
+                margin: auto;
+                background: #fff;
+                border-radius: 12px;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+                padding: 20px;
+            }}
+            h2 {{
+                color: #0078cc;
+                margin-top: 0;
+                font-size: 1.3em;
+                line-height: 1.4;
+            }}
+            img {{
+                width: 100%;
+                border-radius: 12px;
+                margin: 15px 0;
+            }}
+            a {{
+                color: #0078cc;
+                text-decoration: none;
+            }}
+            .desc {{
+                font-size: 16px;
+                line-height: 1.5;
+                color: #444;
+            }}
+            .footer {{
+                text-align: center;
+                margin-top: 25px;
+                font-size: 0.9em;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h2>{title}</h2>
+            {f'<img src="{image}">' if image else ''}
+            <div class="desc">{desc}</div>
+            <div class="footer">
+                <p><a href="/{channel}">← Back to Feed</a> |
+                   <a href="{link}" target="_blank">🔗 Open Original</a></p>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+
+# ------------------ Home ------------------
 @app.route('/')
 def homepage():
     links = [
@@ -165,8 +312,10 @@ def show_njayar_archive():
     current = today
     while current.weekday() != 6:
         current -= datetime.timedelta(days=1)
+
     while current >= start_date:
-        if current >= cutoff: sundays.append(current)
+        if current >= cutoff:
+            sundays.append(current)
         current -= datetime.timedelta(days=7)
 
     cards = ""
@@ -175,85 +324,14 @@ def show_njayar_archive():
         date_str = d.strftime('%Y-%m-%d')
         color = RGB_COLORS[i % len(RGB_COLORS)]
         cards += f'<div class="card" style="background-color:{color};"><a href="{url}" target="_blank">{date_str}</a></div>'
+
     return render_template_string(wrap_grid_page("Njayar Prabhadham - Sunday Editions", cards))
 
-@app.route("/telegram/<channel>")
-def telegram_rss(channel):
-    if channel not in CHANNELS:
-        return Response(f"<error>Channel not configured</error>", mimetype="application/rss+xml")
-    if channel not in telegram_cache:
-        fetch_telegram_rss(channel)
-    return Response(telegram_cache[channel]["xml"], mimetype="application/rss+xml")
-
-@app.route("/<channel>")
-def show_channel_feed(channel):
-    if channel not in CHANNELS: return "<p>Channel not found.</p>"
-    if channel not in telegram_cache: fetch_telegram_rss(channel)
-
-    html_items = ""
-    for i, entry in enumerate(telegram_cache[channel]["items"]):
-        html_items += f"""
-        <div style='margin:10px;padding:10px;background:#fff;border-radius:12px;
-                    box-shadow:0 2px 6px rgba(0,0,0,0.1);text-align:left;'>
-            <h3><a href="/post/{i}?channel={channel}" style="color:#0078cc;text-decoration:none;">{entry['title']}</a></h3>
-            <div style="color:#444;font-size:15px;">{entry['description']}</div>
-        </div>"""
-    return f"""
-    <html>
-    <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{channel} Feed</title></head>
-    <body style="font-family:sans-serif;background:#f5f7fa;margin:0;padding:10px;">
-        <h2 style="text-align:center;color:#0078cc;">📰 {channel} Telegram Feed</h2>
-        <div style="max-width:600px;margin:auto;">{html_items}</div>
-        <p style="text-align:center;">📡 RSS: <a href="/telegram/{channel}" target="_blank">Link</a></p>
-        <p style="text-align:center;"><a href="/" style="color:#0078cc;">🏠 Back to Home</a></p>
-    </body>
-    </html>
-    """
-
-@app.route("/post/<int:index>")
-def show_post(index):
-    channel = request.args.get("channel")
-    if not channel or channel not in telegram_cache or index >= len(telegram_cache[channel]["items"]):
-        return f"<p>Post not found. <a href='/{channel}'>Reload feed</a></p>"
-
-    entry = telegram_cache[channel]["items"][index]
-    return f"""
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <title>{entry['title']}</title>
-        <style>
-            body {{font-family: 'Segoe UI', sans-serif;background:#f5f7fa;margin:0;padding:15px;color:#333;}}
-            .container {{max-width:700px;margin:auto;background:#fff;border-radius:12px;
-                        box-shadow:0 2px 8px rgba(0,0,0,0.1);padding:20px;}}
-            h2 {{color:#0078cc;margin-top:0;font-size:1.3em;line-height:1.4;}}
-            img {{width:100%;border-radius:12px;margin:15px 0;}}
-            a {{color:#0078cc;text-decoration:none;}}
-            .desc {{font-size:16px;line-height:1.5;color:#444;}}
-            .footer {{text-align:center;margin-top:25px;font-size:0.9em;}}
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h2>{entry['title']}</h2>
-            {f'<img src="{entry["image"]}">' if entry["image"] else ''}
-            <div class="desc">{entry['description']}</div>
-            <div class="footer">
-                <p><a href="/{channel}">← Back to Feed</a> |
-                   <a href="{entry['link']}" target="_blank">🔗 Open Original</a></p>
-            </div>
-        </div>
-    </body>
-    </html>
-    """
-
 # ------------------ Main ------------------
-if __name__ == "__main__":
+if __name__ == '__main__':
     os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-    threading.Thread(target=background_fetch, daemon=True).start()
-
-    port = int(os.environ.get("PORT", 8000))  # Use platform port if provided
+    # Background thread for ePaper
+    threading.Thread(target=update_epaper_json, daemon=True).start()
+    # Use dynamic port for cloud deployment
+    port = int(os.environ.get("PORT", 8000))
     app.run(host="0.0.0.0", port=port)
