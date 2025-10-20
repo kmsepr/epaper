@@ -1,330 +1,103 @@
 import os
 import time
 import json
-import feedparser
 import threading
 import datetime
 import requests
-import brotli
 import re
-from flask import Flask, render_template_string, Response, request
+import feedparser
+from flask import Flask, Response, render_template_string, request
 from bs4 import BeautifulSoup
-from email.utils import format_datetime
 
 # -------------------- Config --------------------
 app = Flask(__name__)
 UPLOAD_FOLDER = "static"
 EPAPER_TXT = "epaper.txt"
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 
-LOCATIONS = [
-    "Kozhikode", "Malappuram", "Kannur", "Thrissur",
-    "Kochi", "Thiruvananthapuram", "Palakkal", "Gulf"
-]
-RGB_COLORS = [
-    "#FF6B6B", "#6BCB77", "#4D96FF", "#FFD93D",
-    "#FF6EC7", "#00C2CB", "#FFA41B", "#845EC2"
-]
+# -------------------- Telegram RSS --------------------
+def fetch_telegram_feed(channel="suprabhathamdaily"):
+    """Fetch and parse Telegram channel feed"""
+    url = f"https://t.me/s/{channel}"
+    r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"})
+    soup = BeautifulSoup(r.text, "html.parser")
+    items = []
 
-telegram_cache = {}
-feed_cache = {}
+    for msg in soup.select(".tgme_widget_message_wrap"):
+        text_el = msg.select_one(".tgme_widget_message_text")
+        if not text_el:
+            continue
+        title = text_el.get_text(strip=True)[:100]
+        link_el = msg.select_one("a.tgme_widget_message_date")
+        if not link_el:
+            continue
+        link = link_el["href"]
 
-CHANNELS = {
-    "Pathravarthakal": "https://t.me/s/Pathravarthakal",
-}
+        # --- Get proper post image (not channel logo) ---
+        img_url = None
+        photo_wrap = msg.select_one("a.tgme_widget_message_photo_wrap")
+        if photo_wrap and "style" in photo_wrap.attrs:
+            m = re.search(r'url\(["\']?(.*?)["\']?\)', photo_wrap["style"])
+            if m:
+                img_url = m.group(1)
+        elif msg.select_one(".tgme_widget_message_photo_wrap img"):
+            img_url = msg.select_one(".tgme_widget_message_photo_wrap img")["src"]
 
-# ------------------ Utility ------------------
-def wrap_grid_page(title, items_html, show_back=True):
-    back_html = '<p><a class="back" href="/">Back</a></p>' if show_back else ''
-    return f"""
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>{title}</title>
-        <style>
-            body {{font-family: 'Segoe UI', sans-serif;background:#f0f2f5;margin:0;padding:40px 20px;color:#333;text-align:center;}}
-            h1 {{font-size:2em;margin-bottom:30px;}}
-            .grid {{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:20px;max-width:1000px;margin:auto;}}
-            .card {{padding:25px 15px;border-radius:16px;box-shadow:0 2px 8px rgba(0,0,0,0.1);transition:transform .2s;}}
-            .card:hover {{transform:translateY(-4px);}}
-            .card a {{text-decoration:none;font-size:1.1em;color:#fff;font-weight:bold;display:block;}}
-            a.back {{display:inline-block;margin-top:40px;font-size:1em;color:#555;text-decoration:underline;}}
-        </style>
-    </head>
-    <body>
-        <h1>{title}</h1>
-        <div class="grid">{items_html}</div>
-        {back_html}
-    </body>
-    </html>
-    """
+        desc = f"<p>{text_el.decode_contents()}</p>"
+        if img_url:
+            desc += f'<p><img src="{img_url}" style="max-width:100%"></p>'
 
-# ------------------ ePaper ------------------
-def get_url_for_location(location, dt_obj=None):
-    if dt_obj is None:
-        dt_obj = datetime.date.today()
-    date_str = dt_obj.strftime('%Y-%m-%d')
-    return f"https://epaper.suprabhaatham.com/details/{location}/{date_str}/1"
+        items.append({
+            "title": title,
+            "link": link,
+            "description": desc,
+            "pubDate": datetime.datetime.utcnow().strftime("%a, %d %b %Y %H:%M:%S GMT")
+        })
 
-def update_epaper_json():
-    url = "https://api2.suprabhaatham.com/api/ePaper"
-    headers = {"Content-Type": "application/json", "Accept-Encoding": "br"}
-    while True:
-        try:
-            print("Fetching latest ePaper data...")
-            response = requests.post(url, json={}, headers=headers, timeout=10)
-            response.raise_for_status()
-            if response.headers.get('Content-Encoding') == 'br':
-                data = brotli.decompress(response.content).decode('utf-8')
-            else:
-                data = response.text
-            with open(EPAPER_TXT, "w", encoding="utf-8") as f:
-                f.write(data)
-            print("✅ epaper.txt updated successfully.")
-        except Exception as e:
-            print(f"[Error updating epaper.txt] {e}")
-        time.sleep(86400)  # update daily
+    return items
 
-# ------------------ Telegram RSS ------------------
 @app.route("/feed/Pathravarthakal")
-def telegram_feed_pathravarthakal():
-    return telegram_rss("Pathravarthakal")
+def telegram_rss():
+    channel = request.args.get("ch", "suprabhathamdaily")
+    items = fetch_telegram_feed(channel)
+    rss = '<?xml version="1.0" encoding="UTF-8"?>\n'
+    rss += '<rss version="2.0"><channel>'
+    rss += f"<title>{channel} Telegram Feed</title>"
+    rss += f"<link>https://t.me/{channel}</link>"
+    rss += f"<description>Latest posts from @{channel}</description>"
 
-@app.route("/telegram/<channel>")
-def telegram_rss(channel):
-    """Advanced RSS feed with correct Telegram post images and metadata."""
-    if channel not in CHANNELS:
-        return Response(f"<error>Channel not configured: {channel}</error>", mimetype="application/rss+xml")
+    for i in items:
+        rss += "<item>"
+        rss += f"<title><![CDATA[{i['title']}]]></title>"
+        rss += f"<link>{i['link']}</link>"
+        rss += f"<description><![CDATA[{i['description']}]]></description>"
+        rss += f"<pubDate>{i['pubDate']}</pubDate>"
+        rss += "</item>"
 
-    now = time.time()
-    cache_life = 600  # 10 minutes
+    rss += "</channel></rss>"
+    return Response(rss, mimetype="application/rss+xml")
 
-    if channel in telegram_cache and now - telegram_cache[channel]["time"] < cache_life and "refresh" not in request.args:
-        return Response(telegram_cache[channel]["xml"], mimetype="application/rss+xml")
+# -------------------- Other Routes --------------------
+@app.route("/")
+def home():
+    return render_template_string("""
+        <h2>Suprabhaatham Server</h2>
+        <ul>
+            <li><a href="/njayar">Njayar Prabhadham</a></li>
+            <li><a href="/today">Today's Epaper</a></li>
+            <li><a href="/feed/Pathravarthakal">RSS Feed (Telegram)</a></li>
+        </ul>
+    """)
 
-    try:
-        url = CHANNELS[channel]
-        r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
-        soup = BeautifulSoup(r.text, "html.parser")
+@app.route("/njayar")
+def njayar():
+    return "Njayar Prabhadham archive route working."
 
-        items = []
-        for i, msg in enumerate(soup.select(".tgme_widget_message_wrap")[:40]):
-            date_tag = msg.select_one("a.tgme_widget_message_date")
-            link = date_tag["href"] if date_tag else f"https://t.me/{channel}"
+@app.route("/today")
+def today():
+    return "Today's ePaper route working."
 
-            # Extract post time
-            time_tag = date_tag.select_one("time") if date_tag else None
-            if time_tag and time_tag.has_attr("datetime"):
-                pub_time = datetime.datetime.fromisoformat(time_tag["datetime"].replace("Z", "+00:00"))
-            else:
-                pub_time = datetime.datetime.utcnow()
-            pub_date = format_datetime(pub_time)
-
-            text_tag = msg.select_one(".tgme_widget_message_text")
-            if text_tag:
-                full_text = text_tag.text.strip().replace('\n', ' ')
-                title = (full_text[:100].rsplit(' ', 1)[0] + "...") if len(full_text) > 100 else full_text
-                description_text = text_tag.decode_contents()
-            else:
-                title = "Telegram Post"
-                description_text = ""
-
-            # ✅ Extract post image, not channel logo
-            img_url = None
-            photo_wrap = msg.select_one("a.tgme_widget_message_photo_wrap")
-            if photo_wrap and "style" in photo_wrap.attrs:
-                m = re.search(r'url\(["\']?(.*?)["\']?\)', photo_wrap["style"])
-                if m:
-                    img_url = m.group(1)
-            elif photo_wrap and photo_wrap.select_one("img"):
-                img_url = photo_wrap.select_one("img")["src"]
-
-            desc_html = f"<p>{description_text}</p>"
-            if img_url:
-                desc_html = f'<p><img src="{img_url}" style="max-width:100%;border-radius:8px;"></p>{desc_html}'
-
-            items.append(f"""
-            <item>
-                <title><![CDATA[{title}]]></title>
-                <link>{link}</link>
-                <guid isPermaLink="true">{link}</guid>
-                <author>@{channel}</author>
-                <pubDate>{pub_date}</pubDate>
-                <description><![CDATA[{desc_html}]]></description>
-                {'<media:content url="' + img_url + '" medium="image" />' if img_url else ''}
-            </item>
-            """)
-
-        # Reverse → latest first
-        items.reverse()
-        last_build = format_datetime(datetime.datetime.utcnow())
-
-        rss = f"""<?xml version="1.0" encoding="UTF-8"?>
-        <rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/">
-        <channel>
-            <title>{channel} Telegram Feed</title>
-            <link>{CHANNELS[channel]}</link>
-            <description>Latest posts from @{channel}</description>
-            <language>en</language>
-            <lastBuildDate>{last_build}</lastBuildDate>
-            <generator>Suprabhaatham RSS Generator</generator>
-            {''.join(items)}
-        </channel>
-        </rss>"""
-
-        telegram_cache[channel] = {"xml": rss, "time": now}
-        return Response(rss, mimetype="application/rss+xml")
-    except Exception as e:
-        print(f"[Error fetching Telegram RSS] {e}")
-        return Response(f"<error>{e}</error>", mimetype="application/rss+xml")
-
-# ------------------ HTML Feed ------------------
-@app.route("/<channel>")
-def show_channel_feed(channel):
-    if channel not in CHANNELS:
-        return "<p>Channel not found or not configured.</p>"
-
-    rss_url = request.url_root.rstrip("/") + f"/feed/{channel}"
-    try:
-        r = requests.get(rss_url)
-        feed = feedparser.parse(r.text)
-        feed_cache[channel] = feed.entries[:40]
-    except Exception as e:
-        return f"<p>Failed to load feed: {e}</p>"
-
-    html_items = ""
-    for i, entry in enumerate(feed_cache[channel]):
-        title = entry.get("title", "")
-        desc = entry.get("summary", "")
-        pub = entry.get("published", "")
-        html_items += f"""
-        <div style='margin:10px;padding:10px;background:#fff;border-radius:12px;
-                     box-shadow:0 2px 6px rgba(0,0,0,0.1);text-align:left;'>
-            <h3><a href="/post/{i}?channel={channel}" style="color:#0078cc;text-decoration:none;">{title}</a></h3>
-            <small style="color:#888;">{pub}</small>
-            <div style="color:#444;font-size:15px;">{desc}</div>
-        </div>
-        """
-
-    return f"""
-    <html>
-    <head>
-        <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-        <title>{channel} Feed</title>
-    </head>
-    <body style="font-family:sans-serif;background:#f5f7fa;margin:0;padding:10px;">
-        <h2 style="text-align:center;color:#0078cc;">📰 {channel} Telegram Feed</h2>
-        <div style="max-width:600px;margin:auto;">{html_items}</div>
-        <p style="text-align:center;">📡 RSS: <a href="{rss_url}" target="_blank">{rss_url}</a></p>
-        <p style="text-align:center;"><a href="/" style="color:#0078cc;">🏠 Back to Home</a></p>
-    </body>
-    </html>
-    """
-
-# ------------------ Single Post ------------------
-@app.route("/post/<int:index>")
-def show_post(index):
-    channel = request.args.get("channel")
-    if not channel or channel not in feed_cache or index >= len(feed_cache[channel]):
-        return f"<p>Post not found or expired. Please <a href='/{channel}'>reload feed</a>.</p>"
-
-    entry = feed_cache[channel][index]
-    title = entry.get("title", "")
-    link = entry.get("link", "")
-    desc = entry.get("summary", "")
-
-    match = re.search(r'<img\s+src="([^"]+)"', desc)
-    image = match.group(1) if match else None
-
-    return f"""
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-        <title>{title}</title>
-        <style>
-            body {{
-                font-family: 'Segoe UI', sans-serif;
-                background: #f5f7fa;
-                margin: 0;
-                padding: 15px;
-                color: #333;
-            }}
-            .container {{
-                max-width: 700px;
-                margin: auto;
-                background: #fff;
-                border-radius: 12px;
-                box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-                padding: 20px;
-            }}
-            h2 {{ color: #0078cc; margin-top: 0; }}
-            img {{ width: 100%; border-radius: 12px; margin: 15px 0; }}
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h2>{title}</h2>
-            {f'<img src="{image}">' if image else ''}
-            <div>{desc}</div>
-            <p style="text-align:center;"><a href="/{channel}">← Back to Feed</a> | <a href="{link}" target="_blank">🔗 Open Original</a></p>
-        </div>
-    </body>
-    </html>
-    """
-
-# ------------------ Home ------------------
-@app.route('/')
-def homepage():
-    links = [
-        ("Today's Editions", "/today"),
-        ("Njayar Prabhadham Archive", "/njayar"),
-        ("Pathravarthakal Feed", "/Pathravarthakal"),
-    ]
-    cards = ""
-    for i, (label, link) in enumerate(links):
-        color = RGB_COLORS[i % len(RGB_COLORS)]
-        cards += f'<div class="card" style="background-color:{color};"><a href="{link}">{label}</a></div>'
-    return render_template_string(wrap_grid_page("Suprabhaatham ePaper", cards, show_back=False))
-
-@app.route('/today')
-def show_today_links():
-    cards = ""
-    for i, loc in enumerate(LOCATIONS):
-        url = get_url_for_location(loc)
-        color = RGB_COLORS[i % len(RGB_COLORS)]
-        cards += f'<div class="card" style="background-color:{color};"><a href="{url}" target="_blank">{loc}</a></div>'
-    return render_template_string(wrap_grid_page("Today's Suprabhaatham ePaper Links", cards))
-
-@app.route('/njayar')
-def show_njayar_archive():
-    start_date = datetime.date(2019, 1, 6)
-    today = datetime.date.today()
-    cutoff = datetime.date(2024, 6, 30)
-    sundays = []
-
-    current = today
-    while current.weekday() != 6:
-        current -= datetime.timedelta(days=1)
-
-    while current >= start_date:
-        if current >= cutoff:
-            sundays.append(current)
-        current -= datetime.timedelta(days=7)
-
-    cards = ""
-    for i, d in enumerate(sundays):
-        url = get_url_for_location("Njayar Prabhadham", d)
-        date_str = d.strftime('%Y-%m-%d')
-        color = RGB_COLORS[i % len(RGB_COLORS)]
-        cards += f'<div class="card" style="background-color:{color};"><a href="{url}" target="_blank">{date_str}</a></div>'
-
-    return render_template_string(wrap_grid_page("Njayar Prabhadham - Sunday Editions", cards))
-
-# ------------------ Main ------------------
-if __name__ == '__main__':
-    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-    threading.Thread(target=update_epaper_json, daemon=True).start()
+# -------------------- Run --------------------
+if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
     app.run(host="0.0.0.0", port=port)
