@@ -254,4 +254,6 @@ def show_post(index):
 if __name__ == "__main__":
     os.makedirs(UPLOAD_FOLDER, exist_ok=True)
     threading.Thread(target=background_fetch, daemon=True).start()
-    app.run
+
+    port = int(os.environ.get("PORT", 8000))  # Use platform port if provided
+    app.run(host="0.0.0.0", port=port)
