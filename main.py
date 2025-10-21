@@ -31,6 +31,8 @@ feed_cache = {}
 
 CHANNELS = {
     "Pathravarthakal": "https://t.me/s/Pathravarthakal",
+
+"Dailyca": "https://t.me/s/DailyCAMalayalam",
 }
 
 # ------------------ Utility ------------------
