@@ -33,6 +33,8 @@ CHANNELS = {
     "Pathravarthakal": "https://t.me/s/Pathravarthakal",
 
 "Dailyca": "https://t.me/s/DailyCAMalayalam",
+
+"Pyq": "https://t.me/Prayaanam_innalakalilude",
 }
 
 # ------------------ Utility ------------------
