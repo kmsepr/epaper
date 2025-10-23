@@ -1,6 +1,6 @@
-flask
+Flask
 requests
-gunicorn
 brotli
+beautifulsoup4
 feedparser
 yt-dlp
