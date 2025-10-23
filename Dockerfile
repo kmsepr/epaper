@@ -8,7 +8,14 @@ ENV PYTHONUNBUFFERED=1
 # Set working directory
 WORKDIR /app
 
-# Install dependencies
+# Install system dependencies (for yt-dlp, ffmpeg, etc.)
+RUN apt-get update && apt-get install -y \
+    ffmpeg \
+    curl \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements and install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
@@ -18,5 +25,5 @@ COPY main.py .
 # Expose the port Flask runs on
 EXPOSE 8000
 
-# Run the Flask app
+# Command to run the Flask app
 CMD ["python", "main.py"]
