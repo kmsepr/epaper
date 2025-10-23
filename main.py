@@ -12,14 +12,18 @@ from collections import deque
 from flask import Flask, Response, render_template_string, request, redirect, url_for, stream_with_context, abort
 from bs4 import BeautifulSoup
 from email.utils import format_datetime
-
-# -------------------- CONFIG & LOGGING --------------------
 import logging
 from logging.handlers import RotatingFileHandler
 
-LOG_PATH = "radio_epaper.log"
-os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True)
+# -----------------------------
+# DIRECTORIES & FILE PATHS
+# -----------------------------
+DATA_DIR = "data"
+LOG_DIR = "logs"
+os.makedirs(DATA_DIR, exist_ok=True)
+os.makedirs(LOG_DIR, exist_ok=True)
 
+LOG_PATH = os.path.join(LOG_DIR, "app.log")
 handler = RotatingFileHandler(LOG_PATH, maxBytes=5*1024*1024, backupCount=3)
 logging.basicConfig(
     level=logging.INFO,
@@ -27,13 +31,19 @@ logging.basicConfig(
     handlers=[logging.StreamHandler(), handler]
 )
 
+# -----------------------------
+# FLASK APP
+# -----------------------------
 app = Flask(__name__)
 
-# -------------------- YouTube Radio Config --------------------
-COOKIES_PATH = "cookies.txt"
-CACHE_FILE = "playlist_cache.json"
-PLAYLISTS_FILE = "playlists.json"
+# -----------------------------
+# YOUTUBE RADIO FILES
+# -----------------------------
+COOKIES_PATH = os.path.join(DATA_DIR, "cookies.txt")
+CACHE_FILE = os.path.join(DATA_DIR, "playlist_cache.json")
+PLAYLISTS_FILE = os.path.join(DATA_DIR, "playlists.json")
 MAX_QUEUE_SIZE = 100
+
 
 # Default Playlists
 def load_playlists():
