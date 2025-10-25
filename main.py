@@ -7,8 +7,9 @@ import datetime
 import requests
 import brotli
 import re
-from flask import Flask, render_template_string, Response, request
+from flask import Flask, render_template_string, Response, request, abort
 from bs4 import BeautifulSoup
+import xml.etree.ElementTree as ET
 
 # -------------------- Config --------------------
 app = Flask(__name__)
@@ -25,7 +26,14 @@ RGB_COLORS = [
     "#FF6EC7", "#00C2CB", "#FFA41B", "#845EC2"
 ]
 
-telegram_cache = {"html": None, "time": 0}
+# ------------------ Telegram Channels ------------------
+TELEGRAM_CHANNELS = {
+    "Pathravarthakal": "https://t.me/s/Pathravarthakal",
+    "AnotherChannel": "https://t.me/s/AnotherChannel"
+}
+XML_FOLDER = "telegram_xml"
+os.makedirs(XML_FOLDER, exist_ok=True)
+telegram_cache = {}  # HTML cache per channel
 
 # ------------------ Utility ------------------
 def wrap_grid_page(title, items_html, show_back=True):
@@ -76,7 +84,7 @@ def update_epaper_json():
                 else:
                     data = response.text
             except Exception:
-                data = response.text  # fallback if brotli fails
+                data = response.text
 
             with open(EPAPER_TXT, "w", encoding="utf-8") as f:
                 f.write(data)
@@ -85,158 +93,140 @@ def update_epaper_json():
             print(f"[Error updating epaper.txt] {e}")
         time.sleep(8640)
 
-# ------------------ Telegram RSS ------------------
-@app.route("/telegram")
-def telegram_feed_view():
-    """Display Pathravarthakal news via RSS feed with images."""
-    rss_url = "https://fetchrss.com/feed/aO-u9TWwab2VaO-u24TXVDAS.rss"
-    now = time.time()
+# ------------------ Telegram XML & HTML ------------------
+def fetch_telegram_xml(channel_name, url):
+    try:
+        r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+        soup = BeautifulSoup(r.text, "html.parser")
 
-    # Cache for 10 minutes unless manually refreshed
-    refresh = "refresh" in request.args
-    if not refresh and telegram_cache.get("html") and now - telegram_cache["time"] < 600:
-        return telegram_cache["html"]
+        rss_root = ET.Element("rss", version="2.0")
+        channel = ET.SubElement(rss_root, "channel")
+        ET.SubElement(channel, "title").text = f"{channel_name} Telegram Feed"
+        ET.SubElement(channel, "link").text = url
+        ET.SubElement(channel, "description").text = f"Latest posts from @{channel_name}"
+
+        for msg in soup.select(".tgme_widget_message_wrap")[:50]:
+            date_tag = msg.select_one("a.tgme_widget_message_date")
+            link = date_tag["href"] if date_tag else url
+            text_tag = msg.select_one(".tgme_widget_message_text")
+            desc_html = text_tag.decode_contents() if text_tag else ""
+            pub_date = date_tag["datetime"] if date_tag and date_tag.has_attr("datetime") else ""
+
+            item = ET.SubElement(channel, "item")
+            ET.SubElement(item, "title").text = BeautifulSoup(desc_html, "html.parser").get_text(strip=True)[:80]
+            ET.SubElement(item, "link").text = link
+            ET.SubElement(item, "guid").text = link
+            ET.SubElement(item, "description").text = desc_html
+            ET.SubElement(item, "pubDate").text = pub_date
+
+            image_url = None
+            style_tag = msg.select_one("a.tgme_widget_message_photo_wrap")
+            if style_tag and "style" in style_tag.attrs:
+                m = re.search(r"url\(['\"]?(.*?)['\"]?\)", style_tag["style"])
+                if m:
+                    image_url = m.group(1)
+            if not image_url:
+                img_tag = msg.select_one("img")
+                if img_tag:
+                    image_url = img_tag.get("src") or img_tag.get("data-thumb")
+            if image_url:
+                ET.SubElement(item, "enclosure", url=image_url, type="image/jpeg")
+
+        xml_path = os.path.join(XML_FOLDER, f"{channel_name}.xml")
+        tree = ET.ElementTree(rss_root)
+        tree.write(xml_path, encoding="utf-8", xml_declaration=True)
+        print(f"✅ {channel_name} XML updated")
+    except Exception as e:
+        print(f"[Error fetching {channel_name} XML] {e}")
+
+def telegram_updater():
+    while True:
+        for name, url in TELEGRAM_CHANNELS.items():
+            fetch_telegram_xml(name, url)
+        time.sleep(600)  # every 10 minutes
+
+@app.route("/telegram/<channel_name>")
+def show_telegram_html(channel_name):
+    if channel_name not in TELEGRAM_CHANNELS:
+        return abort(404, description="Channel not found")
+
+    xml_path = os.path.join(XML_FOLDER, f"{channel_name}.xml")
+    if not os.path.exists(xml_path):
+        fetch_telegram_xml(channel_name, TELEGRAM_CHANNELS[channel_name])
+
+    now = time.time()
+    cache = telegram_cache.get(channel_name, {})
+    if cache.get("html") and now - cache.get("time", 0) < 600:
+        return cache["html"]
 
     try:
-        feed = feedparser.parse(rss_url)
+        tree = ET.parse(xml_path)
+        root = tree.getroot()
         posts_html = ""
-
-        # Limit to latest 50 posts
-        entries = feed.entries[:50]
-
-        for entry in entries:
-            title = entry.get("title", "")
-            link = entry.get("link", "#")
-            date = entry.get("published", "")
-            imgs = []
-
-            if "media_content" in entry:
-                imgs.extend(m.get("url", "") for m in entry.media_content)
-            if "media_thumbnail" in entry:
-                imgs.extend(m.get("url", "") for m in entry.media_thumbnail)
-
-            img_tags = "".join(f'<img src="{src}" alt="Post image">' for src in imgs)
-
+        for item in root.findall("./channel/item"):
+            title = item.find("title").text or ""
+            desc_html = item.find("description").text or ""
+            link = item.find("link").text or "#"
+            pub_date = item.find("pubDate").text or ""
+            enclosure = item.find("enclosure")
+            img_html = f'<img src="{enclosure.attrib["url"]}" style="width:100%;border-radius:12px;margin-bottom:10px;">' if enclosure is not None else ""
             posts_html += f"""
             <div class="post">
-                <a href="{link}" target="_blank" class="title">{title}</a>
-                <div class="images">{img_tags}</div>
-                <div class="time">{date}</div>
+                {img_html}
+                <div class="content">{desc_html}</div>
+                <p><small>{pub_date}</small></p>
+                <p><a href="{link}" target="_blank">🔗 Open in Telegram</a></p>
             </div>
             """
 
-        html_page = f"""
+        html = f"""
         <!DOCTYPE html>
         <html lang="ml">
         <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <meta http-equiv="refresh" content="600">
-            <title>📰 Pathravarthakal RSS Feed</title>
+            <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>{channel_name} Feed</title>
             <style>
-                body {{
-                    font-family: system-ui, sans-serif;
-                    background: #f5f7fa;
-                    margin: 0;
-                    padding: 15px;
-                    color: #333;
-                }}
-                h1 {{
-                    text-align: center;
-                    color: #0078cc;
-                    margin-bottom: 12px;
-                }}
-                .topbar {{
-                    display: flex;
-                    justify-content: center;
-                    gap: 10px;
-                    margin-bottom: 20px;
-                }}
-                .refresh {{
-                    display: inline-block;
-                    background: #0078cc;
-                    color: white;
-                    padding: 8px 12px;
-                    border-radius: 6px;
-                    text-decoration: none;
-                    font-size: 0.9em;
-                }}
-                .post {{
-                    background: #fff;
-                    border-radius: 10px;
-                    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-                    padding: 12px 15px;
-                    margin-bottom: 16px;
-                    text-align: left;
-                }}
-                .title {{
-                    font-size: 1.05em;
-                    font-weight: 600;
-                    color: #0078cc;
-                    text-decoration: none;
-                    display: block;
-                    margin-bottom: 6px;
-                    line-height: 1.4;
-                }}
-                .title:hover {{
-                    text-decoration: underline;
-                }}
-                .images {{
-                    display: grid;
-                    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-                    gap: 6px;
-                    margin-top: 8px;
-                }}
-                .images img {{
-                    width: 100%;
-                    border-radius: 6px;
-                }}
-                .time {{
-                    font-size: 0.8em;
-                    color: #777;
-                    margin-top: 6px;
-                }}
-                a.back {{
-                    display:block;
-                    text-align:center;
-                    margin-top:30px;
-                    text-decoration:underline;
-                    color:#555;
-                }}
+                body {{font-family: 'Segoe UI', sans-serif; background:#f0f2f5; margin:0; padding:20px; color:#333;}}
+                h1 {{text-align:center; margin-bottom:30px;}}
+                .post {{background:#fff; padding:20px; border-radius:16px; box-shadow:0 2px 8px rgba(0,0,0,0.1); margin-bottom:20px; max-width:700px; margin-left:auto; margin-right:auto;}}
+                .content {{font-size:1.05em; line-height:1.6em; text-align:left;}}
+                a {{color:#007bff; text-decoration:none;}}
+                a:hover {{text-decoration:underline;}}
             </style>
         </head>
         <body>
-            <h1>📰 Pathravarthakal RSS Feed</h1>
-            <div class="topbar">
-                <a href="/telegram?refresh=1" class="refresh">🔄 Refresh</a>
-                <a href="/" class="refresh" style="background:#555;">🏠 Home</a>
-            </div>
-            {posts_html if posts_html else "<p style='text-align:center;color:#777;'>No posts found.</p>"}
+            <h1>@{channel_name} - Latest Posts</h1>
+            {posts_html}
+            <p style="text-align:center;"><a href="/">← Back Home</a></p>
         </body>
         </html>
         """
 
-        telegram_cache["html"] = html_page
-        telegram_cache["time"] = now
-        return html_page
-
+        telegram_cache[channel_name] = {"html": html, "time": now}
+        return html
     except Exception as e:
-        return f"<p>Error loading RSS feed: {e}</p>", 500
+        return f"<p>Error displaying {channel_name} HTML: {e}</p>"
 
-# ------------------ Routes ------------------
-@app.route('/')
+# ------------------ Homepage ------------------
+@app.route("/")
 def homepage():
     links = [
         ("Today's Editions", "/today"),
         ("Njayar Prabhadham Archive", "/njayar"),
-        ("Pathravarthakal", "/telegram"),
     ]
     cards = ""
     for i, (label, link) in enumerate(links):
         color = RGB_COLORS[i % len(RGB_COLORS)]
         cards += f'<div class="card" style="background-color:{color};"><a href="{link}">{label}</a></div>'
+
+    # Telegram channels
+    for i, (name, _) in enumerate(TELEGRAM_CHANNELS.items()):
+        color = RGB_COLORS[(i+len(links)) % len(RGB_COLORS)]
+        cards += f'<div class="card" style="background-color:{color};"><a href="/telegram/{name}">{name}</a></div>'
+
     return render_template_string(wrap_grid_page("Suprabhaatham ePaper", cards, show_back=False))
 
+# ------------------ /today ------------------
 @app.route('/today')
 def show_today_links():
     cards = ""
@@ -246,6 +236,7 @@ def show_today_links():
         cards += f'<div class="card" style="background-color:{color};"><a href="{url}" target="_blank">{loc}</a></div>'
     return render_template_string(wrap_grid_page("Today's Suprabhaatham ePaper Links", cards))
 
+# ------------------ /njayar ------------------
 @app.route('/njayar')
 def show_njayar_archive():
     start_date = datetime.date(2019, 1, 6)
@@ -269,4 +260,5 @@ def show_njayar_archive():
 # ------------------ Main ------------------
 if __name__ == '__main__':
     threading.Thread(target=update_epaper_json, daemon=True).start()
+    threading.Thread(target=telegram_updater, daemon=True).start()
     app.run(host='0.0.0.0', port=8000)
