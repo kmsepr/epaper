@@ -221,3 +221,9 @@ def homepage():
         color = RGB_COLORS[i % len(RGB_COLORS)]
         cards += f'<div class="card" style="background-color:{color};"><a href="{link}">{label}</a></div>'
     return render_template_string(wrap_grid_page("Suprabhaatham ePaper", cards, show_back=False))
+
+# ------------------ Main ------------------
+if __name__ == '__main__':
+    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+    threading.Thread(target=update_epaper_json, daemon=True).start()
+    app.run(host='0.0.0.0', port=8000)
