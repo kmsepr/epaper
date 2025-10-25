@@ -25,10 +25,7 @@ RGB_COLORS = [
     "#FF6EC7", "#00C2CB", "#FFA41B", "#845EC2"
 ]
 
-telegram_cache = {}
-CHANNELS = {
-    "Pathravarthakal": "https://t.me/s/Pathravarthakal"
-}
+CHANNEL_URL = "https://t.me/Pathravarthakal"
 
 # ------------------ Utility ------------------
 def wrap_grid_page(title, items_html, show_back=True):
@@ -85,46 +82,23 @@ def update_epaper_json():
             print(f"[Error updating epaper.txt] {e}")
         time.sleep(86400)
 
-# ------------------ Telegram RSS ------------------
-# ------------------ Telegram RSS + Reader View ------------------
-@app.route("/telegram/<channel>")
-def telegram_rss(channel):
-    """RSS-only route for Telegram channels with clean enclosure."""
-    if channel not in CHANNELS:
-        return Response(f"<error>Channel not configured: {channel}</error>", mimetype="application/rss+xml")
-
-    now = time.time()
-    cache_life = 600
-
-    # Use cached version if available
-    if channel in telegram_cache and now - telegram_cache[channel]["time"] < cache_life and "refresh" not in request.args:
-        return Response(telegram_cache[channel]["xml"], mimetype="application/rss+xml")
-
+# ------------------ NEW: Telegram HTML Feed ------------------
+@app.route("/telegram")
+def show_telegram_feed():
+    channel_name = "Pathravarthakal"
     try:
-        url = CHANNELS[channel]
-        r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+        r = requests.get(CHANNEL_URL, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
         soup = BeautifulSoup(r.text, "html.parser")
 
-        items, posts = [], []
+        posts_html = ""
         for msg in soup.select(".tgme_widget_message_wrap")[:40]:
             date_tag = msg.select_one("a.tgme_widget_message_date")
-            link = date_tag["href"] if date_tag else f"https://t.me/{channel}"
+            link = date_tag["href"] if date_tag else CHANNEL_URL
             text_tag = msg.select_one(".tgme_widget_message_text")
-
             desc_html = text_tag.decode_contents() if text_tag else ""
-            desc_text = BeautifulSoup(desc_html, "html.parser").get_text().strip()
-            title = desc_text[:80] + "..." if len(desc_text) > 80 else desc_text
+            date_str = date_tag["datetime"] if date_tag and date_tag.has_attr("datetime") else ""
 
-            pubDate = datetime.datetime.utcnow().strftime("%a, %d %b %Y %H:%M:%S GMT")
-            if date_tag and date_tag.has_attr("datetime"):
-                try:
-                    pubDate = datetime.datetime.strptime(
-                        date_tag["datetime"], "%Y-%m-%dT%H:%M:%S+00:00"
-                    ).strftime("%a, %d %b %Y %H:%M:%S GMT")
-                except Exception:
-                    pass
-
-            # Find image
+            # Extract image (either style background or <img>)
             image_url = None
             style_tag = msg.select_one("a.tgme_widget_message_photo_wrap")
             if style_tag and "style" in style_tag.attrs:
@@ -136,101 +110,61 @@ def telegram_rss(channel):
                 if img_tag:
                     image_url = img_tag.get("src") or img_tag.get("data-thumb")
 
-            enclosure = ""
-            if image_url:
-                enclosure = f"""
-                <enclosure url="{image_url}" type="image/jpeg" length="0"/>
-                <media:content url="{image_url}" type="image/jpeg" medium="image" width="384"/>
-                """
+            img_html = f'<img src="{image_url}" style="width:100%;border-radius:12px;margin-bottom:10px;">' if image_url else ""
+            posts_html += f"""
+            <div class="post">
+                {img_html}
+                <div class="content">{desc_html}</div>
+                <p><small>{date_str}</small></p>
+                <p><a href="{link}" target="_blank">🔗 Open in Telegram</a></p>
+            </div>
+            """
 
-            items.append(f"""
-            <item>
-                <title><![CDATA[{title}]]></title>
-                <link>{link}</link>
-                <guid>{link}</guid>
-                <description><![CDATA[{desc_text}]]></description>
-                <pubDate>{pubDate}</pubDate>
-                {enclosure}
-            </item>
-            """)
-
-            posts.append({
-                "title": title,
-                "text": desc_html,
-                "link": link,
-                "image": image_url,
-                "pubDate": pubDate
-            })
-
-        rss = f"""<?xml version="1.0" encoding="UTF-8"?>
-        <rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/">
-          <channel>
-            <title>{channel} Telegram Feed</title>
-            <link>{CHANNELS[channel]}</link>
-            <description>Latest posts from @{channel}</description>
-            <language>ml</language>
-            {''.join(items)}
-          </channel>
-        </rss>"""
-
-        telegram_cache[channel] = {"xml": rss, "time": now, "posts": posts}
-        return Response(rss, mimetype="application/rss+xml")
+        html = f"""
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>@{channel_name} Telegram Feed</title>
+            <style>
+                body {{
+                    font-family: 'Segoe UI', sans-serif;
+                    background:#f0f2f5;
+                    margin:0;
+                    padding:20px;
+                    color:#333;
+                }}
+                h1 {{text-align:center;margin-bottom:30px;}}
+                .post {{
+                    background:#fff;
+                    padding:20px;
+                    border-radius:16px;
+                    box-shadow:0 2px 8px rgba(0,0,0,0.1);
+                    margin-bottom:20px;
+                    max-width:700px;
+                    margin-left:auto;
+                    margin-right:auto;
+                }}
+                .content {{
+                    font-size:1.05em;
+                    line-height:1.6em;
+                    text-align:left;
+                }}
+                a {{color:#007bff;text-decoration:none;}}
+                a:hover {{text-decoration:underline;}}
+            </style>
+        </head>
+        <body>
+            <h1>@{channel_name} - Latest Posts</h1>
+            {posts_html}
+            <p style="text-align:center;"><a href="/">← Back Home</a></p>
+        </body>
+        </html>
+        """
+        return Response(html, mimetype="text/html")
 
     except Exception as e:
-        print(f"[Error fetching Telegram RSS] {e}")
-        return Response(f"<error>{e}</error>", mimetype="application/rss+xml")
-
-
-@app.route("/view/<channel>")
-def telegram_view(channel):
-    """Full HTML reader view for a Telegram channel."""
-    if channel not in telegram_cache:
-        # trigger a fresh fetch if not cached
-        telegram_rss(channel)
-
-    posts = telegram_cache.get(channel, {}).get("posts", [])
-    if not posts:
-        return "<p>No posts available right now. Try again later.</p>"
-
-    cards = ""
-    for p in posts:
-        image_html = f'<img src="{p["image"]}" style="width:100%;border-radius:12px;margin-bottom:10px;">' if p["image"] else ""
-        cards += f"""
-        <div class="post">
-            {image_html}
-            <div class="content">{p["text"]}</div>
-            <p><small>{p["pubDate"]}</small></p>
-            <p><a href="{p["link"]}" target="_blank">🔗 Open in Telegram</a></p>
-        </div>
-        """
-
-    html = f"""
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>{channel} - Reader View</title>
-        <style>
-            body {{font-family: 'Segoe UI', sans-serif; background:#f0f2f5; margin:0; padding:20px; color:#333;}}
-            h1 {{text-align:center; margin-bottom:30px;}}
-            .post {{
-                background:#fff; padding:20px; border-radius:16px;
-                box-shadow:0 2px 8px rgba(0,0,0,0.1); margin-bottom:20px;
-                max-width:700px; margin-left:auto; margin-right:auto;
-            }}
-            .content {{font-size:1.05em; line-height:1.6em; text-align:left;}}
-            a {{color:#007bff; text-decoration:none;}}
-            a:hover {{text-decoration:underline;}}
-        </style>
-    </head>
-    <body>
-        <h1>@{channel} - Latest Posts</h1>
-        {cards}
-        <p style="text-align:center;"><a href="/">← Back Home</a></p>
-    </body>
-    </html>
-    """
-    return Response(html, mimetype="text/html")
+        return f"<p>Error loading Telegram feed: {e}</p>"
 
 # ------------------ ePaper routes ------------------
 @app.route('/')
@@ -238,7 +172,7 @@ def homepage():
     links = [
         ("Today's Editions", "/today"),
         ("Njayar Prabhadham Archive", "/njayar"),
-        ("Pathravarthakal RSS", "/telegram/Pathravarthakal"),
+        ("Pathravarthakal Telegram", "/telegram"),
     ]
     cards = ""
     for i, (label, link) in enumerate(links):
