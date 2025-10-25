@@ -1,19 +1,19 @@
 import os
 import time
-import json
-import feedparser
-import threading
 import datetime
+import threading
 import requests
 import brotli
-import re
-from flask import Flask, render_template_string, Response, request
+from flask import Flask, render_template_string, Response
 from bs4 import BeautifulSoup
+import xml.etree.ElementTree as ET
+import re
 
 # -------------------- Config --------------------
 app = Flask(__name__)
 UPLOAD_FOLDER = "static"
 EPAPER_TXT = "epaper.txt"
+TELEGRAM_XML = "/mnt/data/telegram_feed.xml"
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 LOCATIONS = [
@@ -25,7 +25,8 @@ RGB_COLORS = [
     "#FF6EC7", "#00C2CB", "#FFA41B", "#845EC2"
 ]
 
-CHANNEL_URL = "https://t.me/Pathravarthakal"
+TELEGRAM_CHANNEL = "Pathravarthakal"
+TELEGRAM_URL = "https://t.me/Pathravarthakal"
 
 # ------------------ Utility ------------------
 def wrap_grid_page(title, items_html, show_back=True):
@@ -82,40 +83,82 @@ def update_epaper_json():
             print(f"[Error updating epaper.txt] {e}")
         time.sleep(86400)
 
-# ------------------ NEW: Telegram HTML Feed ------------------
-@app.route("/telegram")
-def show_telegram_feed():
-    channel_name = "Pathravarthakal"
+# ------------------ Telegram XML Generator ------------------
+def fetch_telegram_xml():
+    """Fetch Telegram posts and save as XML."""
     try:
-        r = requests.get(CHANNEL_URL, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+        r = requests.get(TELEGRAM_URL, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
         soup = BeautifulSoup(r.text, "html.parser")
 
-        posts_html = ""
+        rss_root = ET.Element("rss", version="2.0")
+        channel = ET.SubElement(rss_root, "channel")
+        ET.SubElement(channel, "title").text = TELEGRAM_CHANNEL + " Telegram Feed"
+        ET.SubElement(channel, "link").text = TELEGRAM_URL
+        ET.SubElement(channel, "description").text = f"Latest posts from @{TELEGRAM_CHANNEL}"
+
         for msg in soup.select(".tgme_widget_message_wrap")[:40]:
             date_tag = msg.select_one("a.tgme_widget_message_date")
-            link = date_tag["href"] if date_tag else CHANNEL_URL
+            link = date_tag["href"] if date_tag else TELEGRAM_URL
             text_tag = msg.select_one(".tgme_widget_message_text")
             desc_html = text_tag.decode_contents() if text_tag else ""
-            date_str = date_tag["datetime"] if date_tag and date_tag.has_attr("datetime") else ""
+            pub_date = date_tag["datetime"] if date_tag and date_tag.has_attr("datetime") else ""
 
-            # Extract image (either style background or <img>)
+            item = ET.SubElement(channel, "item")
+            ET.SubElement(item, "title").text = BeautifulSoup(desc_html, "html.parser").get_text(strip=True)[:80]
+            ET.SubElement(item, "link").text = link
+            ET.SubElement(item, "guid").text = link
+            ET.SubElement(item, "description").text = desc_html
+            ET.SubElement(item, "pubDate").text = pub_date
+
+            # Image
             image_url = None
             style_tag = msg.select_one("a.tgme_widget_message_photo_wrap")
             if style_tag and "style" in style_tag.attrs:
-                m = re.search(r"url\\(['\"]?(.*?)['\"]?\\)", style_tag["style"])
+                m = re.search(r"url['\"]?(.*?)['\"]?", style_tag["style"])
                 if m:
                     image_url = m.group(1)
             if not image_url:
                 img_tag = msg.select_one("img")
                 if img_tag:
                     image_url = img_tag.get("src") or img_tag.get("data-thumb")
+            if image_url:
+                ET.SubElement(item, "enclosure", url=image_url, type="image/jpeg")
 
-            img_html = f'<img src="{image_url}" style="width:100%;border-radius:12px;margin-bottom:10px;">' if image_url else ""
+        tree = ET.ElementTree(rss_root)
+        os.makedirs(os.path.dirname(TELEGRAM_XML), exist_ok=True)
+        tree.write(TELEGRAM_XML, encoding="utf-8", xml_declaration=True)
+        print("✅ Telegram XML feed updated.")
+    except Exception as e:
+        print(f"[Error fetching Telegram XML] {e}")
+
+def start_telegram_updater():
+    while True:
+        fetch_telegram_xml()
+        time.sleep(600)  # every 10 minutes
+
+# ------------------ Telegram HTML View ------------------
+@app.route("/telegram")
+def show_telegram_html():
+    """Parse the XML and display HTML to users."""
+    if not os.path.exists(TELEGRAM_XML):
+        fetch_telegram_xml()
+
+    try:
+        tree = ET.parse(TELEGRAM_XML)
+        root = tree.getroot()
+        posts_html = ""
+        for item in root.findall("./channel/item"):
+            title = item.find("title").text or ""
+            desc_html = item.find("description").text or ""
+            link = item.find("link").text or "#"
+            pub_date = item.find("pubDate").text or ""
+            enclosure = item.find("enclosure")
+            img_html = f'<img src="{enclosure.attrib["url"]}" style="width:100%;border-radius:12px;margin-bottom:10px;">' if enclosure is not None else ""
             posts_html += f"""
             <div class="post">
                 {img_html}
                 <div class="content">{desc_html}</div>
-                <p><small>{date_str}</small></p>
+                <p><small>{pub_date}</small></p>
                 <p><a href="{link}" target="_blank">🔗 Open in Telegram</a></p>
             </div>
             """
@@ -125,7 +168,7 @@ def show_telegram_feed():
         <html lang="en">
         <head>
             <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>@{channel_name} Telegram Feed</title>
+            <title>{TELEGRAM_CHANNEL} Feed</title>
             <style>
                 body {{
                     font-family: 'Segoe UI', sans-serif;
@@ -155,16 +198,15 @@ def show_telegram_feed():
             </style>
         </head>
         <body>
-            <h1>@{channel_name} - Latest Posts</h1>
+            <h1>@{TELEGRAM_CHANNEL} - Latest Posts</h1>
             {posts_html}
             <p style="text-align:center;"><a href="/">← Back Home</a></p>
         </body>
         </html>
         """
         return Response(html, mimetype="text/html")
-
     except Exception as e:
-        return f"<p>Error loading Telegram feed: {e}</p>"
+        return f"<p>Error displaying Telegram HTML: {e}</p>"
 
 # ------------------ ePaper routes ------------------
 @app.route('/')
@@ -178,43 +220,4 @@ def homepage():
     for i, (label, link) in enumerate(links):
         color = RGB_COLORS[i % len(RGB_COLORS)]
         cards += f'<div class="card" style="background-color:{color};"><a href="{link}">{label}</a></div>'
-    return render_template_string(wrap_grid_page("Suprabhaatham ePaper", cards, show_back=False))
-
-@app.route('/today')
-def show_today_links():
-    cards = ""
-    for i, loc in enumerate(LOCATIONS):
-        url = get_url_for_location(loc)
-        color = RGB_COLORS[i % len(RGB_COLORS)]
-        cards += f'<div class="card" style="background-color:{color};"><a href="{url}" target="_blank">{loc}</a></div>'
-    return render_template_string(wrap_grid_page("Today's Suprabhaatham ePaper Links", cards))
-
-@app.route('/njayar')
-def show_njayar_archive():
-    start_date = datetime.date(2019, 1, 6)
-    today = datetime.date.today()
-    cutoff = datetime.date(2024, 6, 30)
-    sundays = []
-
-    current = today
-    while current.weekday() != 6:
-        current -= datetime.timedelta(days=1)
-    while current >= start_date:
-        if current >= cutoff:
-            sundays.append(current)
-        current -= datetime.timedelta(days=7)
-
-    cards = ""
-    for i, d in enumerate(sundays):
-        url = get_url_for_location("Njayar Prabhadham", d)
-        date_str = d.strftime('%Y-%m-%d')
-        color = RGB_COLORS[i % len(RGB_COLORS)]
-        cards += f'<div class="card" style="background-color:{color};"><a href="{url}" target="_blank">{date_str}</a></div>'
-
-    return render_template_string(wrap_grid_page("Njayar Prabhadham - Sunday Editions", cards))
-
-# ------------------ Main ------------------
-if __name__ == '__main__':
-    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-    threading.Thread(target=update_epaper_json, daemon=True).start()
-    app.run(host='0.0.0.0', port=8000)
+    return render_template_string(wrap_grid_page("Suprabhaatham ePaper", cards,
