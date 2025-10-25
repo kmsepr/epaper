@@ -146,67 +146,81 @@ def telegram_updater():
         time.sleep(600)  # every 10 minutes
 
 @app.route("/telegram/<channel_name>")
-def show_telegram_html(channel_name):
+def telegram_html_view(channel_name):
     if channel_name not in TELEGRAM_CHANNELS:
-        return abort(404, description="Channel not found")
+        return "<p>Channel not found</p>", 404
 
-    xml_path = os.path.join(XML_FOLDER, f"{channel_name}.xml")
-    if not os.path.exists(xml_path):
+    rss_xml_path = os.path.join(XML_FOLDER, f"{channel_name}.xml")
+    if not os.path.exists(rss_xml_path):
         fetch_telegram_xml(channel_name, TELEGRAM_CHANNELS[channel_name])
 
-    now = time.time()
-    cache = telegram_cache.get(channel_name, {})
-    if cache.get("html") and now - cache.get("time", 0) < 600:
-        return cache["html"]
-
+    # Parse XML to display in HTML
     try:
-        tree = ET.parse(xml_path)
-        root = tree.getroot()
+        with open(rss_xml_path, "r", encoding="utf-8") as f:
+            xml_content = f.read()
+        feed = feedparser.parse(xml_content)
         posts_html = ""
-        for item in root.findall("./channel/item"):
-            title = item.find("title").text or ""
-            desc_html = item.find("description").text or ""
-            link = item.find("link").text or "#"
-            pub_date = item.find("pubDate").text or ""
-            enclosure = item.find("enclosure")
-            img_html = f'<img src="{enclosure.attrib["url"]}" style="width:100%;border-radius:12px;margin-bottom:10px;">' if enclosure is not None else ""
+
+        # Latest posts first
+        entries = feed.entries[:30]
+
+        for entry in reversed(entries):  # newest at top
+            title = entry.get("title", "")
+            link = entry.get("link", "#")
+            pubDate = entry.get("published", "")
+            img_tags = ""
+
+            if hasattr(entry, "media_content"):
+                for m in entry.media_content:
+                    img_tags += f'<img src="{m.get("url","")}" alt="Post image">'
+            if hasattr(entry, "media_thumbnail"):
+                for m in entry.media_thumbnail:
+                    img_tags += f'<img src="{m.get("url","")}" alt="Post image">'
+
             posts_html += f"""
             <div class="post">
-                {img_html}
-                <div class="content">{desc_html}</div>
-                <p><small>{pub_date}</small></p>
-                <p><a href="{link}" target="_blank">🔗 Open in Telegram</a></p>
+                <a href="{link}" target="_blank" class="title">{title}</a>
+                <div class="images">{img_tags}</div>
+                <div class="time">{pubDate}</div>
             </div>
             """
 
-        html = f"""
+        html_page = f"""
         <!DOCTYPE html>
         <html lang="ml">
         <head>
-            <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>{channel_name} Feed</title>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>{channel_name} News Feed</title>
             <style>
-                body {{font-family: 'Segoe UI', sans-serif; background:#f0f2f5; margin:0; padding:20px; color:#333;}}
-                h1 {{text-align:center; margin-bottom:30px;}}
-                .post {{background:#fff; padding:20px; border-radius:16px; box-shadow:0 2px 8px rgba(0,0,0,0.1); margin-bottom:20px; max-width:700px; margin-left:auto; margin-right:auto;}}
-                .content {{font-size:1.05em; line-height:1.6em; text-align:left;}}
-                a {{color:#007bff; text-decoration:none;}}
-                a:hover {{text-decoration:underline;}}
+                body {{font-family: system-ui, sans-serif; background:#f5f7fa; margin:0; padding:15px; color:#333;}}
+                h1 {{text-align:center; color:#0078cc; margin-bottom:12px;}}
+                .topbar {{display:flex; justify-content:center; gap:10px; margin-bottom:20px;}}
+                .refresh {{background:#0078cc; color:white; padding:8px 12px; border-radius:6px; text-decoration:none; font-size:0.9em;}}
+                .post {{background:#fff; border-radius:10px; box-shadow:0 2px 6px rgba(0,0,0,0.1); padding:12px 15px; margin-bottom:16px;}}
+                .title {{font-size:1.05em; font-weight:600; color:#0078cc; text-decoration:none; display:block; margin-bottom:6px; line-height:1.4;}}
+                .title:hover {{text-decoration:underline;}}
+                .images {{display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:6px; margin-top:8px;}}
+                .images img {{width:100%; border-radius:6px;}}
+                .time {{font-size:0.8em; color:#777; margin-top:6px;}}
+                a.back {{display:block; text-align:center; margin-top:30px; text-decoration:underline; color:#555;}}
             </style>
         </head>
         <body>
-            <h1>@{channel_name} - Latest Posts</h1>
-            {posts_html}
-            <p style="text-align:center;"><a href="/">← Back Home</a></p>
+            <h1>{channel_name} Latest Posts</h1>
+            <div class="topbar">
+                <a href="/telegram/{channel_name}?refresh=1" class="refresh">🔄 Refresh</a>
+                <a href="/" class="refresh" style="background:#555;">🏠 Home</a>
+                <a href="/telegram/{channel_name}.xml" class="refresh" style="background:#444;">XML</a>
+            </div>
+            {posts_html if posts_html else "<p style='text-align:center;color:#777;'>No posts found.</p>"}
         </body>
         </html>
         """
+        return html_page
 
-        telegram_cache[channel_name] = {"html": html, "time": now}
-        return html
     except Exception as e:
-        return f"<p>Error displaying {channel_name} HTML: {e}</p>"
-
+        return f"<p>Error loading feed: {e}</p>", 500
 # ------------------ Homepage ------------------
 @app.route("/")
 def homepage():
