@@ -86,6 +86,7 @@ def update_epaper_json():
         time.sleep(86400)
 
 # ------------------ Telegram RSS ------------------
+# ------------------ Telegram RSS + Reader View ------------------
 @app.route("/telegram/<channel>")
 def telegram_rss(channel):
     """RSS-only route for Telegram channels with clean enclosure."""
@@ -95,6 +96,7 @@ def telegram_rss(channel):
     now = time.time()
     cache_life = 600
 
+    # Use cached version if available
     if channel in telegram_cache and now - telegram_cache[channel]["time"] < cache_life and "refresh" not in request.args:
         return Response(telegram_cache[channel]["xml"], mimetype="application/rss+xml")
 
@@ -103,7 +105,7 @@ def telegram_rss(channel):
         r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
         soup = BeautifulSoup(r.text, "html.parser")
 
-        items = []
+        items, posts = [], []
         for msg in soup.select(".tgme_widget_message_wrap")[:40]:
             date_tag = msg.select_one("a.tgme_widget_message_date")
             link = date_tag["href"] if date_tag else f"https://t.me/{channel}"
@@ -122,7 +124,7 @@ def telegram_rss(channel):
                 except Exception:
                     pass
 
-            # Image
+            # Find image
             image_url = None
             style_tag = msg.select_one("a.tgme_widget_message_photo_wrap")
             if style_tag and "style" in style_tag.attrs:
@@ -131,8 +133,8 @@ def telegram_rss(channel):
                     image_url = m.group(1)
             if not image_url:
                 img_tag = msg.select_one("img")
-                if img_tag and img_tag.get("src"):
-                    image_url = img_tag["src"]
+                if img_tag:
+                    image_url = img_tag.get("src") or img_tag.get("data-thumb")
 
             enclosure = ""
             if image_url:
@@ -152,6 +154,14 @@ def telegram_rss(channel):
             </item>
             """)
 
+            posts.append({
+                "title": title,
+                "text": desc_html,
+                "link": link,
+                "image": image_url,
+                "pubDate": pubDate
+            })
+
         rss = f"""<?xml version="1.0" encoding="UTF-8"?>
         <rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/">
           <channel>
@@ -163,12 +173,64 @@ def telegram_rss(channel):
           </channel>
         </rss>"""
 
-        telegram_cache[channel] = {"xml": rss, "time": now}
+        telegram_cache[channel] = {"xml": rss, "time": now, "posts": posts}
         return Response(rss, mimetype="application/rss+xml")
 
     except Exception as e:
         print(f"[Error fetching Telegram RSS] {e}")
         return Response(f"<error>{e}</error>", mimetype="application/rss+xml")
+
+
+@app.route("/view/<channel>")
+def telegram_view(channel):
+    """Full HTML reader view for a Telegram channel."""
+    if channel not in telegram_cache:
+        # trigger a fresh fetch if not cached
+        telegram_rss(channel)
+
+    posts = telegram_cache.get(channel, {}).get("posts", [])
+    if not posts:
+        return "<p>No posts available right now. Try again later.</p>"
+
+    cards = ""
+    for p in posts:
+        image_html = f'<img src="{p["image"]}" style="width:100%;border-radius:12px;margin-bottom:10px;">' if p["image"] else ""
+        cards += f"""
+        <div class="post">
+            {image_html}
+            <div class="content">{p["text"]}</div>
+            <p><small>{p["pubDate"]}</small></p>
+            <p><a href="{p["link"]}" target="_blank">🔗 Open in Telegram</a></p>
+        </div>
+        """
+
+    html = f"""
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>{channel} - Reader View</title>
+        <style>
+            body {{font-family: 'Segoe UI', sans-serif; background:#f0f2f5; margin:0; padding:20px; color:#333;}}
+            h1 {{text-align:center; margin-bottom:30px;}}
+            .post {{
+                background:#fff; padding:20px; border-radius:16px;
+                box-shadow:0 2px 8px rgba(0,0,0,0.1); margin-bottom:20px;
+                max-width:700px; margin-left:auto; margin-right:auto;
+            }}
+            .content {{font-size:1.05em; line-height:1.6em; text-align:left;}}
+            a {{color:#007bff; text-decoration:none;}}
+            a:hover {{text-decoration:underline;}}
+        </style>
+    </head>
+    <body>
+        <h1>@{channel} - Latest Posts</h1>
+        {cards}
+        <p style="text-align:center;"><a href="/">← Back Home</a></p>
+    </body>
+    </html>
+    """
+    return Response(html, mimetype="text/html")
 
 # ------------------ ePaper routes ------------------
 @app.route('/')
