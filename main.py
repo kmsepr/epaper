@@ -220,4 +220,4 @@ def homepage():
     for i, (label, link) in enumerate(links):
         color = RGB_COLORS[i % len(RGB_COLORS)]
         cards += f'<div class="card" style="background-color:{color};"><a href="{link}">{label}</a></div>'
-    return render_template_string(wrap_grid_page("Suprabhaatham ePaper", cards,
+    return render_template_string(wrap_grid_page("Suprabhaatham ePaper", cards, show_back=False))
