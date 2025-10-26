@@ -224,21 +224,205 @@ def telegram_html_view(channel_name):
 # ------------------ Homepage ------------------
 @app.route("/")
 def homepage():
-    links = [
+    # Static links
+    default_links = [
         ("Today's Editions", "/today"),
         ("Njayar Prabhadham Archive", "/njayar"),
     ]
-    cards = ""
-    for i, (label, link) in enumerate(links):
+
+    # Build HTML for default and Telegram cards
+    static_cards = ""
+    for i, (label, link) in enumerate(default_links):
         color = RGB_COLORS[i % len(RGB_COLORS)]
-        cards += f'<div class="card" style="background-color:{color};"><a href="{link}">{label}</a></div>'
+        static_cards += f'<div class="card" style="background-color:{color};"><a href="{link}">{label}</a></div>'
 
-    # Telegram channels
     for i, (name, _) in enumerate(TELEGRAM_CHANNELS.items()):
-        color = RGB_COLORS[(i+len(links)) % len(RGB_COLORS)]
-        cards += f'<div class="card" style="background-color:{color};"><a href="/telegram/{name}">{name}</a></div>'
+        color = RGB_COLORS[(i + len(default_links)) % len(RGB_COLORS)]
+        static_cards += f'<div class="card" style="background-color:{color};"><a href="/telegram/{name}">{name}</a></div>'
 
-    return render_template_string(wrap_grid_page("Suprabhaatham ePaper", cards, show_back=False))
+    # Add "Add New Grid" button at the end
+    html = f"""
+    <!DOCTYPE html>
+    <html lang="ml">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Suprabhaatham ePaper</title>
+        <style>
+            body {{
+                font-family: 'Segoe UI', sans-serif;
+                background:#f0f2f5;
+                margin:0;
+                padding:30px 20px;
+                color:#333;
+                text-align:center;
+            }}
+            h1 {{font-size:2em;margin-bottom:25px;}}
+            .grid {{
+                display:grid;
+                grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+                gap:20px;
+                max-width:1000px;
+                margin:auto;
+            }}
+            .card {{
+                padding:25px 15px;
+                border-radius:16px;
+                box-shadow:0 2px 8px rgba(0,0,0,0.1);
+                transition:transform .2s;
+                position:relative;
+            }}
+            .card:hover {{transform:translateY(-4px);}}
+            .card a {{
+                text-decoration:none;
+                font-size:1.1em;
+                color:#fff;
+                font-weight:bold;
+                display:block;
+            }}
+            .add-card {{
+                background:#999;
+                color:white;
+                cursor:pointer;
+                display:flex;
+                align-items:center;
+                justify-content:center;
+                font-size:2em;
+                font-weight:bold;
+            }}
+            .edit-btn, .delete-btn {{
+                position:absolute;
+                top:8px;
+                right:8px;
+                background:rgba(255,255,255,0.8);
+                border:none;
+                border-radius:5px;
+                cursor:pointer;
+                font-size:0.8em;
+                padding:3px 6px;
+            }}
+            .delete-btn {{ right:40px; }}
+            #addModal {{
+                position:fixed;
+                top:0;left:0;width:100%;height:100%;
+                background:rgba(0,0,0,0.5);
+                display:none;
+                justify-content:center;
+                align-items:center;
+            }}
+            #addModal .modal {{
+                background:#fff;
+                padding:20px;
+                border-radius:10px;
+                width:90%;
+                max-width:350px;
+                text-align:left;
+            }}
+            input[type=text] {{
+                width:100%;
+                padding:8px;
+                margin-bottom:10px;
+                border:1px solid #ccc;
+                border-radius:6px;
+            }}
+            button {{
+                background:#0078cc;
+                color:white;
+                border:none;
+                padding:8px 12px;
+                border-radius:6px;
+                cursor:pointer;
+            }}
+        </style>
+    </head>
+    <body>
+        <h1>Suprabhaatham ePaper</h1>
+        <div class="grid" id="grid">
+            {static_cards}
+            <div class="card add-card" onclick="openAddModal()">+</div>
+        </div>
+
+        <!-- Add/Edit Modal -->
+        <div id="addModal">
+            <div class="modal">
+                <h3 id="modalTitle">Add New Grid</h3>
+                <input type="text" id="gridName" placeholder="Grid Name">
+                <input type="text" id="gridURL" placeholder="Grid URL (https://...)">
+                <button onclick="saveGrid()">Save</button>
+                <button onclick="closeAddModal()" style="background:#777;">Cancel</button>
+            </div>
+        </div>
+
+        <script>
+            let editIndex = null;
+
+            function openAddModal(index=null) {{
+                editIndex = index;
+                document.getElementById('modalTitle').textContent = index === null ? 'Add New Grid' : 'Edit Grid';
+                const modal = document.getElementById('addModal');
+                modal.style.display = 'flex';
+                if (index !== null) {{
+                    const grids = JSON.parse(localStorage.getItem('customGrids') || '[]');
+                    document.getElementById('gridName').value = grids[index].name;
+                    document.getElementById('gridURL').value = grids[index].url;
+                }} else {{
+                    document.getElementById('gridName').value = '';
+                    document.getElementById('gridURL').value = '';
+                }}
+            }}
+
+            function closeAddModal() {{
+                document.getElementById('addModal').style.display = 'none';
+            }}
+
+            function saveGrid() {{
+                const name = document.getElementById('gridName').value.trim();
+                const url = document.getElementById('gridURL').value.trim();
+                if (!name || !url) return alert('Please fill name and URL');
+                let grids = JSON.parse(localStorage.getItem('customGrids') || '[]');
+                if (editIndex !== null) {{
+                    grids[editIndex] = {{name, url}};
+                }} else {{
+                    grids.push({{name, url}});
+                }}
+                localStorage.setItem('customGrids', JSON.stringify(grids));
+                closeAddModal();
+                renderCustomGrids();
+            }}
+
+            function deleteGrid(index) {{
+                if (!confirm('Delete this grid?')) return;
+                let grids = JSON.parse(localStorage.getItem('customGrids') || '[]');
+                grids.splice(index, 1);
+                localStorage.setItem('customGrids', JSON.stringify(grids));
+                renderCustomGrids();
+            }}
+
+            function renderCustomGrids() {{
+                const gridEl = document.getElementById('grid');
+                const defaultCards = gridEl.querySelectorAll('.card:not(.custom)');
+                document.querySelectorAll('.custom').forEach(c => c.remove());
+                const grids = JSON.parse(localStorage.getItem('customGrids') || '[]');
+                grids.forEach((g, i) => {{
+                    const color = "{RGB_COLORS[0]}";
+                    const div = document.createElement('div');
+                    div.className = 'card custom';
+                    div.style.backgroundColor = '{RGB_COLORS[2]}';
+                    div.innerHTML = `
+                        <a href="${{g.url}}" target="_blank">${{g.name}}</a>
+                        <button class="delete-btn" onclick="deleteGrid(${{i}})">✕</button>
+                        <button class="edit-btn" onclick="openAddModal(${{i}})">✎</button>
+                    `;
+                    gridEl.insertBefore(div, gridEl.lastElementChild);
+                }});
+            }}
+
+            window.onload = renderCustomGrids;
+        </script>
+    </body>
+    </html>
+    """
+    return html
 
 # ------------------ /today ------------------
 @app.route('/today')
