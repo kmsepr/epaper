@@ -1,503 +1,418 @@
 import os
 import time
 import json
-import feedparser
 import threading
-import datetime
-import requests
-import brotli
-import re
-from flask import Flask, render_template_string, Response, request, abort
-from bs4 import BeautifulSoup
-import xml.etree.ElementTree as ET
+import logging
+import subprocess
+import random
+from collections import deque
+from flask import Flask, Response, render_template_string, abort, stream_with_context, request, redirect, url_for
+from logging.handlers import RotatingFileHandler
+
+# -----------------------------
+# CONFIG & LOGGING
+# -----------------------------
+LOG_PATH = "/mnt/data/radio.log"
+os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True)
+
+handler = RotatingFileHandler(LOG_PATH, maxBytes=5*1024*1024, backupCount=3)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers=[logging.StreamHandler(), handler]
+)
 
 app = Flask(__name__)
 
-# -------------------- Config --------------------
-UPLOAD_FOLDER = "static"
-EPAPER_TXT = "epaper.txt"
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+COOKIES_PATH = "/mnt/data/cookies.txt"
+CACHE_FILE = "/mnt/data/playlist_cache.json"
+PLAYLISTS_FILE = "/mnt/data/playlists.json"  # stores all user playlists
+MAX_QUEUE_SIZE = 100  # chunks
 
-LOCATIONS = [
-    "Kozhikode", "Malappuram", "Kannur", "Thrissur",
-    "Kochi", "Thiruvananthapuram", "Palakkal", "Gulf"
-]
-RGB_COLORS = [
-    "#FF6B6B", "#6BCB77", "#4D96FF", "#FFD93D",
-    "#FF6EC7", "#00C2CB", "#FFA41B", "#845EC2"
-]
+# -----------------------------
+# LOAD & SAVE PLAYLIST DATA
+# -----------------------------
+def load_playlists():
+    if os.path.exists(PLAYLISTS_FILE):
+        try:
+            with open(PLAYLISTS_FILE, "r") as f:
+                data = json.load(f)
+                return data.get("playlists", {}), set(data.get("shuffle", []))
+        except Exception as e:
+            logging.error(f"Failed to load playlists: {e}")
+    # Default playlists
+    return {
+        "Malayalam": "https://youtube.com/playlist?list=PLs0evDzPiKwAyJDAbmMOg44iuNLPaI4nn",
+        "Hindi": "https://youtube.com/playlist?list=PLlXSv-ic4-yJj2djMawc8XqqtCn1BVAc2",
+    }, {"Malayalam", "Hindi"}
 
-TELEGRAM_CHANNELS = {
-    "Pathravarthakal": "https://t.me/s/Pathravarthakal",
-    "DailyCa": "https://t.me/s/DailyCAMalayalam"
+def save_playlists():
+    try:
+        with open(PLAYLISTS_FILE, "w") as f:
+            json.dump({"playlists": PLAYLISTS, "shuffle": list(SHUFFLE_PLAYLISTS)}, f)
+    except Exception as e:
+        logging.error(f"Failed to save playlists: {e}")
+
+PLAYLISTS, SHUFFLE_PLAYLISTS = load_playlists()
+STREAMS = {}  # { name: {VIDEO_IDS, INDEX, QUEUE, LOCK, LAST_REFRESH} }
+
+# -----------------------------
+# HTML
+# -----------------------------
+HOME_HTML = """
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>YouTube Radio</title>
+<style>
+body { background:#000;color:#0f0;text-align:center;font-family:sans-serif; }
+a { color:#0f0; text-decoration:none; }
+.playlist-link {
+    display:inline-block; padding:10px; border:1px solid #0f0;
+    margin:10px; border-radius:10px; width:60%;
 }
-XML_FOLDER = "telegram_xml"
-os.makedirs(XML_FOLDER, exist_ok=True)
+.delete-btn {
+    color:#f00; font-weight:bold; margin-left:10px; text-decoration:none;
+    border:1px solid #f00; padding:6px 10px; border-radius:6px;
+}
+.delete-btn:hover {
+    background:#f00; color:#000;
+}
+input, button { padding:8px; margin:5px; border-radius:5px; border:none; }
+input { width:70%; }
+button { background:#0f0;color:#000; font-weight:bold; cursor:pointer; }
+.tip {
+    color:#888;
+    font-size:14px;
+    margin-top:30px;
+}
+</style>
+</head>
+<body>
+<h2>🎧 YouTube Mp3</h2>
 
-# ------------------ Utility ------------------
-def get_url_for_location(location, dt_obj=None):
-    if dt_obj is None:
-        dt_obj = datetime.datetime.now()
-    date_str = dt_obj.strftime('%Y-%m-%d')
-    return f"https://epaper.suprabhaatham.com/details/{location}/{date_str}/1"
+{% for name in playlists %}
+<div style="margin:10px;">
+  <a class="playlist-link" href="/listen/{{name}}">
+    ▶️ {{name|capitalize}} Radio {% if name in shuffle_playlists %} 🔀 {% endif %}
+  </a>
+  <a class="delete-btn" href="/delete/{{name}}" title="Delete Playlist" onclick="return confirm('Delete {{name}}?')">🗑️</a>
+</div>
+{% endfor %}
 
-# ------------------ Threads ------------------
-def update_epaper_json():
-    url = "https://api2.suprabhaatham.com/api/ePaper"
-    headers = {"Content-Type": "application/json", "Accept-Encoding": "br"}
+<h3>Add New Playlist</h3>
+<form method="POST" action="/add_playlist">
+    <input type="text" name="name" placeholder="Playlist Name" required>
+    <input type="url" name="url" placeholder="Playlist URL" required>
+    <label><input type="checkbox" name="shuffle"> Shuffle</label>
+    <button type="submit">➕ Add Playlist</button>
+</form>
+
+<p class="tip">
+💡 Tip: If you want latest video plays first, unselect shuffle — works in most playlists.
+</p>
+
+</body>
+</html>
+"""
+
+PLAYER_HTML = """
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{name|capitalize}} Radio</title>
+<style>
+body { background:#000; color:#0f0; text-align:center; font-family:sans-serif; }
+a { color:#0f0; text-decoration:none; }
+audio { width:90%; margin:20px auto; display:block; }
+</style>
+</head>
+<body>
+<h3>🎶 {{name|capitalize}} Radio</h3>
+
+<audio controls autoplay>
+  <source src="/stream/{{name}}" type="audio/mpeg">
+  Your browser does not support audio playback.
+</audio>
+
+<p style="margin-top:20px; font-size:18px;">
+  🔗 Stream URL:<br>
+  <a href="/stream/{{name}}" style="color:#0f0;">{{ request.host_url }}stream/{{name }}</a>
+</p>
+
+<p style="margin-top:15px;">🎵 YouTube Playlist:<br>
+  <a href="{{ playlist_url }}" target="_blank">{{ playlist_name }}</a>
+</p>
+</body>
+</html>
+"""
+
+@app.route("/listen/<name>")
+def listen(name):
+    if name not in PLAYLISTS:
+        abort(404)
+    playlist_url = PLAYLISTS.get(name)
+    playlist_name = f"{name.capitalize()} Playlist"
+    return render_template_string(
+        PLAYER_HTML,
+        name=name,
+        playlist_url=playlist_url,
+        playlist_name=playlist_name
+    )
+
+# -----------------------------
+# CACHE
+# -----------------------------
+def load_cache():
+    if os.path.exists(CACHE_FILE):
+        try:
+            with open(CACHE_FILE, "r") as f:
+                return json.load(f)
+        except Exception as e:
+            logging.error(f"Failed to load cache: {e}")
+    return {}
+
+def save_cache(data):
+    try:
+        with open(CACHE_FILE, "w") as f:
+            json.dump(data, f)
+    except Exception as e:
+        logging.error(f"Failed to save cache: {e}")
+
+CACHE = load_cache()
+
+# -----------------------------
+# LOAD PLAYLIST VIDEO IDS
+# -----------------------------
+def load_playlist_ids(name, force=False):
+    now = time.time()
+    cached = CACHE.get(name, {})
+    if not force and cached and now - cached.get("time", 0) < 1800:
+        logging.info(f"[{name}] Using cached playlist IDs ({len(cached['ids'])} videos)")
+        return cached["ids"]
+
+    url = PLAYLISTS[name]
+    try:
+        logging.info(f"[{name}] Refreshing playlist IDs...")
+        result = subprocess.run(
+            ["yt-dlp", "--flat-playlist", "-J", url, "--cookies", COOKIES_PATH],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True
+        )
+        data = json.loads(result.stdout)
+        video_ids = [
+            e["id"] for e in data.get("entries", [])
+            if not e.get("private") and e.get("age_limit", 0) == 0
+        ]
+
+        if name in SHUFFLE_PLAYLISTS:
+            random.shuffle(video_ids)
+
+        CACHE[name] = {"ids": video_ids, "time": now}
+        save_cache(CACHE)
+        logging.info(f"[{name}] Loaded {len(video_ids)} video IDs successfully")
+        return video_ids
+    except Exception as e:
+        logging.error(f"[{name}] Playlist load failed: {e}")
+        return cached.get("ids", [])
+
+# -----------------------------
+# STREAM WORKER
+# -----------------------------
+def stream_worker(name):
+    stream = STREAMS[name]
+    failed_videos = set()
+    played_videos = set()
+    shuffle_enabled = name in SHUFFLE_PLAYLISTS
+
     while True:
         try:
-            print("Fetching latest ePaper data...")
-            r = requests.post(url, json={}, headers=headers, timeout=10)
-            if r.headers.get('Content-Encoding') == 'br':
-                data = brotli.decompress(r.content).decode('utf-8')
+            # Reload if playlist empty
+            if not stream["VIDEO_IDS"]:
+                logging.info(f"[{name}] Playlist empty, reloading...")
+                stream["VIDEO_IDS"] = load_playlist_ids(name, force=True)
+                failed_videos.clear()
+                played_videos.clear()
+                stream["INDEX"] = 0
+                if not stream["VIDEO_IDS"]:
+                    logging.warning(f"[{name}] No videos available after reload, retrying in 10s...")
+                    time.sleep(10)
+                    continue
+
+            # Auto-refresh every 30min
+            if time.time() - stream["LAST_REFRESH"] > 1800:
+                logging.info(f"[{name}] Auto-refreshing playlist IDs...")
+                stream["VIDEO_IDS"] = load_playlist_ids(name, force=True)
+                failed_videos.clear()
+                played_videos.clear()
+                stream["INDEX"] = 0
+                stream["LAST_REFRESH"] = time.time()
+                if shuffle_enabled:
+                    random.shuffle(stream["VIDEO_IDS"])
+
+            if shuffle_enabled:
+                available = [v for v in stream["VIDEO_IDS"] if v not in failed_videos and v not in played_videos]
+                if not available:
+                    played_videos.clear()
+                    available = [v for v in stream["VIDEO_IDS"] if v not in failed_videos]
+
+                if not available:
+                    logging.warning(f"[{name}] No available videos to play, retrying in 5s...")
+                    time.sleep(5)
+                    continue
+
+                vid = random.choice(available)
+                played_videos.add(vid)
             else:
-                data = r.text
-            with open(EPAPER_TXT, "w", encoding="utf-8") as f:
-                f.write(data)
-            print("✅ epaper.txt updated successfully.")
+                for _ in range(len(stream["VIDEO_IDS"])):
+                    vid = stream["VIDEO_IDS"][stream["INDEX"] % len(stream["VIDEO_IDS"])]
+                    stream["INDEX"] += 1
+                    if vid not in failed_videos:
+                        break
+                else:
+                    logging.warning(f"[{name}] No available videos to play, retrying in 5s...")
+                    time.sleep(5)
+                    continue
+
+            url = f"https://www.youtube.com/watch?v={vid}"
+            logging.info(f"[{name}] ▶️ Streaming: {url}")
+
+            # Skip if cookies missing
+            if not os.path.exists(COOKIES_PATH) or os.path.getsize(COOKIES_PATH) == 0:
+                failed_videos.add(vid)
+                continue
+
+            # Get direct audio URL
+            try:
+                result = subprocess.run(
+                    ["yt-dlp", "-f", "bestaudio[ext=m4a]/bestaudio", "--cookies", COOKIES_PATH, "-g", url],
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True
+                )
+                audio_url = result.stdout.strip()
+            except subprocess.CalledProcessError:
+                failed_videos.add(vid)
+                continue
+
+            # Stream via FFmpeg
+            cmd = f'ffmpeg -re -i "{audio_url}" -b:a 40k -ac 1 -f mp3 pipe:1 -loglevel quiet'
+            proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+            while True:
+                chunk = proc.stdout.read(4096)
+                if not chunk:
+                    break
+                if len(stream["QUEUE"]) < MAX_QUEUE_SIZE:
+                    stream["QUEUE"].append(chunk)
+
+            proc.stdout.close()
+            proc.stderr.close()
+            proc.wait()
+
         except Exception as e:
-            print(f"[Error updating epaper.txt] {e}")
-        time.sleep(8640)
+            logging.error(f"[{name}] Worker error: {e}", exc_info=True)
+            time.sleep(5)
 
-def fetch_telegram_xml(name, url):
-    try:
-        r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
-        soup = BeautifulSoup(r.text, "html.parser")
-        rss_root = ET.Element("rss", version="2.0")
-        ch = ET.SubElement(rss_root, "channel")
-        ET.SubElement(ch, "title").text = f"{name} Telegram Feed"
-        for msg in soup.select(".tgme_widget_message_wrap")[:40]:
-            date_tag = msg.select_one("a.tgme_widget_message_date")
-            link = date_tag["href"] if date_tag else url
-            text_tag = msg.select_one(".tgme_widget_message_text")
-            desc_html = text_tag.decode_contents() if text_tag else ""
-            item = ET.SubElement(ch, "item")
-            ET.SubElement(item, "title").text = BeautifulSoup(desc_html, "html.parser").get_text(strip=True)[:80]
-            ET.SubElement(item, "link").text = link
-            ET.SubElement(item, "description").text = desc_html
-        ET.ElementTree(rss_root).write(os.path.join(XML_FOLDER, f"{name}.xml"), encoding="utf-8", xml_declaration=True)
-    except Exception as e:
-        print(f"[Error fetching {name}] {e}")
-
-def telegram_updater():
-    while True:
-        for name, url in TELEGRAM_CHANNELS.items():
-            fetch_telegram_xml(name, url)
-        time.sleep(600)
-
-# ------------------ Browser ------------------
-@app.route("/browse")
-def browse():
-    url = request.args.get("url", "")
-    if not url:
-        return "<p>No URL provided.</p>", 400
-    if not re.match(r"^https?://", url):
-        url = "https://" + url
-    return f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta name="viewport" content="width=device-width,initial-scale=1.0">
-        <title>Browser - {url}</title>
-        <style>
-            body {{margin:0;background:#000;height:100vh;display:flex;flex-direction:column;}}
-            iframe {{border:none;flex:1;width:100%;}}
-            .topbar {{
-                background:#111;color:white;display:flex;align-items:center;
-                padding:6px;gap:8px;font-family:sans-serif;
-            }}
-            input[type=text] {{
-                flex:1;padding:6px;border-radius:4px;border:none;outline:none;
-            }}
-            button {{background:#0078cc;color:white;border:none;padding:6px 10px;border-radius:4px;}}
-        </style>
-    </head>
-    <body>
-        <div class="topbar">
-            <form style="display:flex;flex:1;" onsubmit="go(event)">
-                <input type="text" id="addr" value="{url}" placeholder="Enter URL...">
-                <button>Go</button>
-            </form>
-            <button onclick="home()">🏠</button>
-        </div>
-        <iframe src="{url}"></iframe>
-        <script>
-            function go(e) {{
-                e.preventDefault();
-                const url = document.getElementById('addr').value.trim();
-                window.location = '/browse?url=' + encodeURIComponent(url);
-            }}
-            function home() {{ window.location = '/'; }}
-        </script>
-    </body>
-    </html>
-    """
-
-# ------------------ Telegram HTML ------------------
-@app.route("/telegram/<channel_name>")
-def telegram_html(channel_name):
-    path = os.path.join(XML_FOLDER, f"{channel_name}.xml")
-    if not os.path.exists(path):
-        fetch_telegram_xml(channel_name, TELEGRAM_CHANNELS.get(channel_name, ""))
-    try:
-        feed = feedparser.parse(path)
-        posts = ""
-        for e in reversed(feed.entries[:30]):
-            title = e.get("title", "")
-            link = e.get("link", "#")
-            posts += f"<div class='post'><a href='{link}' target='_blank'>{title}</a></div>"
-        return f"""
-        <html><head><meta name='viewport' content='width=device-width,initial-scale=1.0'>
-        <style>
-        body{{font-family:sans-serif;background:#f9f9f9;padding:10px;}}
-        a{{text-decoration:none;color:#0078cc;}}
-        .post{{background:#fff;margin:10px 0;padding:10px;border-radius:8px;}}
-        </style></head><body>
-        <h2>{channel_name}</h2>
-        {posts or "<p>No posts.</p>"}
-        <p><a href="/">🏠 Home</a></p>
-        </body></html>
-        """
-    except Exception as e:
-        return f"<p>Error: {e}</p>"
-
-# ------------------ ePaper Routes ------------------
-@app.route("/today")
-def today_links():
-    cards = ""
-    for i, loc in enumerate(LOCATIONS):
-        url = get_url_for_location(loc)
-        color = RGB_COLORS[i % len(RGB_COLORS)]
-        cards += f'<div class="card" style="background:{color}"><a href="/browse?url={url}">{loc}</a></div>'
-    return render_template_string(wrap_home("Today's Editions", cards))
-
-@app.route("/njayar")
-def njayar_archive():
-    start = datetime.date(2019, 1, 6)
-    today = datetime.date.today()
-    cutoff = datetime.date(2024, 6, 30)
-    sundays = []
-    d = start
-    while d <= today:
-        if d >= cutoff:
-            sundays.append(d)
-        d += datetime.timedelta(days=7)
-    cards = ""
-    for i, d in enumerate(reversed(sundays)):
-        url = get_url_for_location("Njayar Prabhadham", d)
-        color = RGB_COLORS[i % len(RGB_COLORS)]
-        cards += f'<div class="card" style="background:{color}"><a href="/browse?url={url}">{d}</a></div>'
-    return render_template_string(wrap_home("Njayar Prabhadham - Sundays", cards))
-
-# ------------------ Home (Browser Hub) ------------------
-def wrap_home(title, inner):
-    return f"""
-    <!DOCTYPE html><html><head>
-    <meta name="viewport" content="width=device-width,initial-scale=1.0">
-    <title>{title}</title>
-    <style>
-        body{{font-family:'Segoe UI',sans-serif;background:#f0f2f5;margin:0;padding:20px;text-align:center;}}
-        h1{{margin-bottom:20px;}}
-        .grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:15px;max-width:800px;margin:auto;}}
-        .card{{padding:20px;border-radius:12px;box-shadow:0 2px 6px rgba(0,0,0,0.1);}}
-        .card a{{color:white;text-decoration:none;font-weight:bold;display:block;}}
-        .add{{background:#555;cursor:pointer;color:white;font-size:2em;}}
-        #modal{{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);
-                align-items:center;justify-content:center;}}
-        #modal .box{{background:white;padding:20px;border-radius:10px;width:90%;max-width:350px;text-align:left;}}
-        input{{width:100%;margin-bottom:10px;padding:8px;}}
-        button{{background:#0078cc;color:white;border:none;padding:8px 12px;border-radius:6px;}}
-        .edit,.del{{position:absolute;top:6px;font-size:0.8em;background:rgba(255,255,255,0.8);
-                     border:none;border-radius:4px;}}
-        .del{{right:8px;}} .edit{{right:40px;}}
-    </style></head>
-    <body>
-        <h1>{title}</h1>
-        <div class="grid" id="grid">{inner}<div class="card add" onclick="openModal()">+</div></div>
-        <div id="modal">
-            <div class="box">
-                <h3 id="modalTitle">Add Website</h3>
-                <input type="text" id="name" placeholder="Name">
-                <input type="text" id="url" placeholder="URL (https://...)">
-                <button onclick="save()">Save</button>
-                <button onclick="closeModal()" style="background:#777;">Cancel</button>
-            </div>
-        </div>
-        <script>
-            let editIndex=null;
-            function openModal(i=null) {{
-                editIndex=i;
-                document.getElementById('modal').style.display='flex';
-                if(i!==null){{
-                    let data=JSON.parse(localStorage.getItem('customGrids')||'[]')[i];
-                    name.value=data.name;url.value=data.url;
-                }} else{{name.value='';url.value='';}}
-            }}
-            function closeModal(){{document.getElementById('modal').style.display='none';}}
-            function save(){{
-                let n=name.value.trim(),u=url.value.trim();
-                if(!n||!u)return alert('Enter name & URL');
-                let arr=JSON.parse(localStorage.getItem('customGrids')||'[]');
-                if(editIndex!==null)arr[editIndex]={{name:n,url:u}};else arr.push({{name:n,url:u}});
-                localStorage.setItem('customGrids',JSON.stringify(arr));
-                closeModal();render();
-            }}
-            function del(i){{
-                if(!confirm('Delete this site?'))return;
-                let arr=JSON.parse(localStorage.getItem('customGrids')||'[]');
-                arr.splice(i,1);
-                localStorage.setItem('customGrids',JSON.stringify(arr));
-                render();
-            }}
-            function render(){{
-                document.querySelectorAll('.custom').forEach(e=>e.remove());
-                let arr=JSON.parse(localStorage.getItem('customGrids')||'[]');
-                let grid=document.getElementById('grid');
-                arr.forEach((g,i)=>{{
-                    let d=document.createElement('div');
-                    d.className='card custom';
-                    d.style.background='{RGB_COLORS[3]}';
-                    d.innerHTML=`<a href="/browse?url=${{encodeURIComponent(g.url)}}" target="_self">${{g.name}}</a>
-                                 <button class='del' onclick='del(${{i}})'>✕</button>
-                                 <button class='edit' onclick='openModal(${{i}})'>✎</button>`;
-                    grid.insertBefore(d,grid.lastElementChild);
-                }});
-            }}
-            render();
-        </script>
-    </body></html>
-    """
-
+# -----------------------------
+# ROUTES
+# -----------------------------
 @app.route("/")
-def homepage():
-    BUILTIN_LINKS = [
-        {"name": "GitHub", "url": "https://github.com/", "icon": "🐙"},
-        {"name": "Mobile TV", "url": "https://capitalist-anthe-pscj-4a28f285.koyeb.app/", "icon": "📺"},
-        {"name": "VRadio", "url": "https://likely-zelda-junction-66aa4be8.koyeb.app/", "icon": "📻"},
-        {"name": "Koyeb", "url": "https://app.koyeb.com/", "icon": "💎"},
-        {"name": "ChatGPT", "url": "https://chatgpt.com/auth/login", "icon": "🤖"},
-    ]
+def home():
+    return render_template_string(HOME_HTML, playlists=PLAYLISTS.keys(), shuffle_playlists=SHUFFLE_PLAYLISTS)
 
-    html = f"""
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Lite Browser Home</title>
-        <style>
-            body {{
-                font-family: 'Segoe UI', sans-serif;
-                background:#f7f8fa;
-                margin:0;
-                padding:20px;
-                color:#333;
-            }}
-            h1 {{
-                text-align:center;
-                margin-bottom:25px;
-            }}
-            .grid {{
-                display:grid;
-                grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
-                gap:15px;
-                max-width:1000px;
-                margin:auto;
-            }}
-            .card {{
-                position:relative;
-                background:white;
-                border-radius:15px;
-                box-shadow:0 2px 8px rgba(0,0,0,0.1);
-                padding:25px 10px;
-                display:flex;
-                flex-direction:column;
-                align-items:center;
-                justify-content:center;
-                transition:transform .2s, box-shadow .2s;
-            }}
-            .card:hover {{
-                transform:translateY(-4px);
-                box-shadow:0 4px 12px rgba(0,0,0,0.15);
-            }}
-            .card a {{
-                text-decoration:none;
-                color:#333;
-                font-weight:600;
-                font-size:1em;
-                text-align:center;
-                word-break:break-word;
-            }}
-            .icon {{
-                font-size:2em;
-                margin-bottom:10px;
-            }}
-            .menu {{
-                position:absolute;
-                top:8px;
-                right:10px;
-                cursor:pointer;
-                font-weight:bold;
-                font-size:1.2em;
-            }}
-            .dropdown {{
-                display:none;
-                position:absolute;
-                top:25px;
-                right:10px;
-                background:white;
-                box-shadow:0 2px 6px rgba(0,0,0,0.2);
-                border-radius:6px;
-                z-index:2;
-            }}
-            .dropdown button {{
-                border:none;
-                background:none;
-                padding:8px 12px;
-                text-align:left;
-                width:100%;
-                cursor:pointer;
-            }}
-            .dropdown button:hover {{
-                background:#f0f0f0;
-            }}
-            .add-card {{
-                background:#0078d7;
-                color:white;
-                font-size:2em;
-                font-weight:bold;
-                cursor:pointer;
-            }}
-            #addModal {{
-                position:fixed;
-                top:0;left:0;width:100%;height:100%;
-                background:rgba(0,0,0,0.5);
-                display:none;
-                justify-content:center;
-                align-items:center;
-            }}
-            #addModal .modal {{
-                background:#fff;
-                padding:20px;
-                border-radius:10px;
-                width:90%;
-                max-width:350px;
-            }}
-            input[type=text] {{
-                width:100%;
-                padding:8px;
-                margin-bottom:10px;
-                border:1px solid #ccc;
-                border-radius:6px;
-            }}
-            button {{
-                background:#0078d7;
-                color:white;
-                border:none;
-                padding:8px 12px;
-                border-radius:6px;
-                cursor:pointer;
-            }}
-        </style>
-    </head>
-    <body>
-        <h1>Lite Browser</h1>
-        <div class="grid" id="grid">
-            {''.join([f'<div class="card"><div class="icon">{x["icon"]}</div><a href="{x["url"]}" target="_blank">{x["name"]}</a></div>' for x in BUILTIN_LINKS])}
-            <div class="card add-card" onclick="openAddModal()">+</div>
-        </div>
+@app.route("/listen/<name>")
+def listen(name):
+    if name not in PLAYLISTS:
+        abort(404)
+    return render_template_string(PLAYER_HTML, name=name)
 
-        <!-- Add/Edit Modal -->
-        <div id="addModal">
-            <div class="modal">
-                <h3 id="modalTitle">Add Shortcut</h3>
-                <input type="text" id="gridName" placeholder="Name">
-                <input type="text" id="gridURL" placeholder="URL (https://...)">
-                <input type="text" id="gridIcon" placeholder="Icon (emoji)">
-                <button onclick="saveGrid()">Save</button>
-                <button onclick="closeAddModal()" style="background:#777;">Cancel</button>
-            </div>
-        </div>
+@app.route("/stream/<name>")
+def stream_audio(name):
+    if name not in STREAMS:
+        abort(404)
+    stream = STREAMS[name]
+    def generate():
+        while True:
+            if stream["QUEUE"]:
+                yield stream["QUEUE"].popleft()
+            else:
+                time.sleep(0.1)
+    headers = {
+        "Content-Type": "audio/mpeg",
+        "Content-Disposition": f'attachment; filename="{name}.mp3"'
+    }
+    return Response(stream_with_context(generate()), headers=headers)
 
-        <script>
-            let editIndex = null;
+@app.route("/add_playlist", methods=["POST"])
+def add_playlist():
+    name = request.form.get("name", "").strip()
+    url = request.form.get("url", "").strip()
+    if not name or not url:
+        abort(400, "Name and URL required")
 
-            function openAddModal(index=null) {{
-                editIndex = index;
-                document.getElementById('modalTitle').textContent = index===null ? 'Add Shortcut' : 'Edit Shortcut';
-                const modal = document.getElementById('addModal');
-                modal.style.display = 'flex';
-                if (index!==null) {{
-                    const grids = JSON.parse(localStorage.getItem('customGrids')||'[]');
-                    const g = grids[index];
-                    document.getElementById('gridName').value = g.name;
-                    document.getElementById('gridURL').value = g.url;
-                    document.getElementById('gridIcon').value = g.icon;
-                }} else {{
-                    document.getElementById('gridName').value='';
-                    document.getElementById('gridURL').value='';
-                    document.getElementById('gridIcon').value='';
-                }}
-            }}
-            function closeAddModal() {{
-                document.getElementById('addModal').style.display='none';
-            }}
-            function saveGrid() {{
-                const name=document.getElementById('gridName').value.trim();
-                const url=document.getElementById('gridURL').value.trim();
-                const icon=document.getElementById('gridIcon').value.trim()||'🌐';
-                if(!name||!url) return alert('Please fill name and URL');
-                let grids=JSON.parse(localStorage.getItem('customGrids')||'[]');
-                if(editIndex!==null) grids[editIndex]={{name,url,icon}};
-                else grids.push({{name,url,icon}});
-                localStorage.setItem('customGrids',JSON.stringify(grids));
-                closeAddModal();
-                renderCustomGrids();
-            }}
-            function deleteGrid(index){{
-                if(!confirm('Delete this shortcut?'))return;
-                let grids=JSON.parse(localStorage.getItem('customGrids')||'[]');
-                grids.splice(index,1);
-                localStorage.setItem('customGrids',JSON.stringify(grids));
-                renderCustomGrids();
-            }}
-            function toggleMenu(i){{
-                const d=document.getElementById(`dropdown-${{i}}`);
-                d.style.display=d.style.display==='block'?'none':'block';
-            }}
-            function renderCustomGrids(){{
-                document.querySelectorAll('.custom').forEach(e=>e.remove());
-                const grid=document.getElementById('grid');
-                const grids=JSON.parse(localStorage.getItem('customGrids')||'[]');
-                grids.forEach((g,i)=>{{
-                    const div=document.createElement('div');
-                    div.className='card custom';
-                    div.innerHTML=`
-                        <div class="menu" onclick="toggleMenu(${{i}})">⋮</div>
-                        <div class="dropdown" id="dropdown-${{i}}">
-                            <button onclick="openAddModal(${{i}});toggleMenu(${{i}})">✎ Edit</button>
-                            <button onclick="deleteGrid(${{i}});toggleMenu(${{i}})">🗑 Delete</button>
-                        </div>
-                        <div class="icon">${{g.icon}}</div>
-                        <a href="${{g.url}}" target="_blank">${{g.name}}</a>`;
-                    grid.insertBefore(div, grid.lastElementChild);
-                }});
-            }}
-            window.onload=renderCustomGrids;
-            window.onclick=function(e){{
-                if(!e.target.matches('.menu')){{
-                    document.querySelectorAll('.dropdown').forEach(d=>d.style.display='none');
-                }}
-            }}
-        </script>
-    </body>
-    </html>
-    """
-    return html
+    # --- Clean playlist URL ---
+    import re
+    match = re.search(r"(?:list=)([A-Za-z0-9_-]+)", url)
+    if match:
+        url = f"https://www.youtube.com/playlist?list={match.group(1)}"
+    else:
+        abort(400, "Invalid YouTube playlist URL")
 
-# ------------------ Run ------------------
+    PLAYLISTS[name] = url
+    if request.form.get("shuffle"):
+        SHUFFLE_PLAYLISTS.add(name)
+    save_playlists()  # persist changes
+
+    video_ids = load_playlist_ids(name)
+    if not video_ids:
+        logging.warning(f"[{name}] Failed to load playlist, not starting stream")
+        return redirect(url_for("home"))
+
+    STREAMS[name] = {
+        "VIDEO_IDS": video_ids,
+        "INDEX": 0,
+        "QUEUE": deque(),
+        "LOCK": threading.Lock(),
+        "LAST_REFRESH": time.time(),
+    }
+    threading.Thread(target=stream_worker, args=(name,), daemon=True).start()
+    logging.info(f"[{name}] Playlist added and stream started")
+
+    return redirect(url_for("home"))
+@app.route("/delete/<name>")
+def delete_playlist(name):
+    if name not in PLAYLISTS:
+        abort(404)
+
+    # Stop and remove stream
+    if name in STREAMS:
+        del STREAMS[name]
+
+    # Remove from playlists, shuffle, cache
+    PLAYLISTS.pop(name, None)
+    SHUFFLE_PLAYLISTS.discard(name)
+    CACHE.pop(name, None)
+
+    save_cache(CACHE)
+    save_playlists()
+    logging.info(f"[{name}] Playlist deleted")
+
+    return redirect(url_for("home"))
+
+# -----------------------------
+# MAIN
+# -----------------------------
 if __name__ == "__main__":
-    threading.Thread(target=update_epaper_json, daemon=True).start()
-    threading.Thread(target=telegram_updater, daemon=True).start()
+    for name in PLAYLISTS:
+        STREAMS[name] = {
+            "VIDEO_IDS": load_playlist_ids(name),
+            "INDEX": 0,
+            "QUEUE": deque(),
+            "LOCK": threading.Lock(),
+            "LAST_REFRESH": time.time(),
+        }
+        threading.Thread(target=stream_worker, args=(name,), daemon=True).start()
+
+    logging.info("🎧 Multi-Playlist YouTube Radio started!")
+    logging.info(f"Logs: {LOG_PATH}")
     app.run(host="0.0.0.0", port=8000)
