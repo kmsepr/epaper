@@ -29,7 +29,6 @@ RGB_COLORS = [
 
 TELEGRAM_CHANNELS = {
     "Pathravarthakal": "https://t.me/s/Pathravarthakal",
-    "AnotherChannel": "https
 }
 XML_FOLDER = "telegram_xml"
 os.makedirs(XML_FOLDER, exist_ok=True)
@@ -278,7 +277,7 @@ def homepage():
         {"name": "VRadio", "url": "http://likely-zelda-junction-66aa4be8.koyeb.app/", "icon": "📻"},
         {"name": "Crystal TV", "url": "https://crystal.tv/web/", "icon": "💎"},
         {"name": "ChatGPT", "url": "https://chatgpt.com/auth/login", "icon": "🤖"},
-        {"name": "KAS Ranker", "url": "https://www.kasranker.com/",},
+        {"name": "KAS Ranker", "url": "https://www.kasranker.com/"},
     
 
     html = f"""
