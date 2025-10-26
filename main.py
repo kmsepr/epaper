@@ -464,7 +464,7 @@ def homepage():
                 renderCustomGrids();
             }}
             function toggleMenu(i){{
-                const d=document.getElementById('dropdown-'+i);
+                const d=document.getElementById(`dropdown-${{i}}`);
                 d.style.display=d.style.display==='block'?'none':'block';
             }}
             function renderCustomGrids(){{
@@ -475,10 +475,10 @@ def homepage():
                     const div=document.createElement('div');
                     div.className='card custom';
                     div.innerHTML=`
-                        <div class="menu" onclick="toggleMenu(${i})">⋮</div>
-                        <div class="dropdown" id="dropdown-${i}">
-                            <button onclick="openAddModal(${i});toggleMenu(${i})">✎ Edit</button>
-                            <button onclick="deleteGrid(${i});toggleMenu(${i})">🗑 Delete</button>
+                        <div class="menu" onclick="toggleMenu(${{i}})">⋮</div>
+                        <div class="dropdown" id="dropdown-${{i}}">
+                            <button onclick="openAddModal(${{i}});toggleMenu(${{i}})">✎ Edit</button>
+                            <button onclick="deleteGrid(${{i}});toggleMenu(${{i}})">🗑 Delete</button>
                         </div>
                         <div class="icon">${{g.icon}}</div>
                         <a href="${{g.url}}" target="_blank">${{g.name}}</a>`;
