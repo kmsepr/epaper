@@ -274,9 +274,9 @@ def homepage():
     BUILTIN_LINKS = [
         {"name": "Firebase Studio", "url": "https://firebase.studio/", "icon": "🔥"},
         {"name": "GitHub", "url": "https://github.com/", "icon": "🐙"},
-        {"name": "Mobile TV", "url": "http://capitalist-anthe-pscj-4a28f285.koyeb.app/", "icon": "📺"},
-        {"name": "VRadio", "url": "http://likely-zelda-junction-66aa4be8.koyeb.app/", "icon": "📻"},
-        {"name": "Crystal TV", "url": "http://crystal.tv/web/", "icon": "💎"},
+        {"name": "Mobile TV", "url": "https://capitalist-anthe-pscj-4a28f285.koyeb.app/", "icon": "📺"},
+        {"name": "VRadio", "url": "https://likely-zelda-junction-66aa4be8.koyeb.app/", "icon": "📻"},
+        {"name": "Koyeb", "url": "https://app.koyeb.com/", "icon": "💎"},
         {"name": "ChatGPT", "url": "https://chatgpt.com/auth/login", "icon": "🤖"},
     ]
 
