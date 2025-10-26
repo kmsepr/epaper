@@ -272,13 +272,14 @@ def wrap_home(title, inner):
 @app.route("/")
 def homepage():
     BUILTIN_LINKS = [
-        {"name": "Firebase Studio", "url": "https://firebase.studio/", "icon": "🔥"},
+        
         {"name": "GitHub", "url": "https://github.com/", "icon": "🐙"},
         {"name": "Mobile TV", "url": "http://capitalist-anthe-pscj-4a28f285.koyeb.app/", "icon": "📺"},
         {"name": "VRadio", "url": "http://likely-zelda-junction-66aa4be8.koyeb.app/", "icon": "📻"},
-        {"name": "Crystal TV", "url": "http://crystal.tv/web/", "icon": "💎"},
+        {"name": "Crystal TV", "url": "https://crystal.tv/web/", "icon": "💎"},
         {"name": "ChatGPT", "url": "https://chatgpt.com/auth/login", "icon": "🤖"},
-    ]
+        {"name": "KAS Ranker", "url": "https://www.kasranker.com/", "icon": ""},
+    
 
     html = f"""
     <!DOCTYPE html>
