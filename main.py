@@ -270,18 +270,232 @@ def wrap_home(title, inner):
     """
 
 @app.route("/")
-def home():
-    cards = ""
-    for i, (label, link) in enumerate([
-        ("Today's Editions", "/today"),
-        ("Njayar Prabhadham Archive", "/njayar"),
-    ]):
-        color = RGB_COLORS[i % len(RGB_COLORS)]
-        cards += f'<div class="card" style="background:{color}"><a href="{link}">{label}</a></div>'
-    for i, (name, _) in enumerate(TELEGRAM_CHANNELS.items()):
-        color = RGB_COLORS[(i + 2) % len(RGB_COLORS)]
-        cards += f'<div class="card" style="background:{color}"><a href="/telegram/{name}">{name}</a></div>'
-    return render_template_string(wrap_home("Mini Browser Home", cards))
+def homepage():
+    BUILTIN_LINKS = [
+        {"name": "Firebase Studio", "url": "https://firebase.studio/", "icon": "🔥"},
+        {"name": "GitHub", "url": "https://github.com/", "icon": "🐙"},
+        {"name": "Mobile TV", "url": "http://capitalist-anthe-pscj-4a28f285.koyeb.app/", "icon": "📺"},
+        {"name": "VRadio", "url": "http://likely-zelda-junction-66aa4be8.koyeb.app/", "icon": "📻"},
+        {"name": "Crystal TV", "url": "http://crystal.tv/web/", "icon": "💎"},
+        {"name": "ChatGPT", "url": "https://chatgpt.com/auth/login", "icon": "🤖"},
+    ]
+
+    html = f"""
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Lite Browser Home</title>
+        <style>
+            body {{
+                font-family: 'Segoe UI', sans-serif;
+                background:#f7f8fa;
+                margin:0;
+                padding:20px;
+                color:#333;
+            }}
+            h1 {{
+                text-align:center;
+                margin-bottom:25px;
+            }}
+            .grid {{
+                display:grid;
+                grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
+                gap:15px;
+                max-width:1000px;
+                margin:auto;
+            }}
+            .card {{
+                position:relative;
+                background:white;
+                border-radius:15px;
+                box-shadow:0 2px 8px rgba(0,0,0,0.1);
+                padding:25px 10px;
+                display:flex;
+                flex-direction:column;
+                align-items:center;
+                justify-content:center;
+                transition:transform .2s, box-shadow .2s;
+            }}
+            .card:hover {{
+                transform:translateY(-4px);
+                box-shadow:0 4px 12px rgba(0,0,0,0.15);
+            }}
+            .card a {{
+                text-decoration:none;
+                color:#333;
+                font-weight:600;
+                font-size:1em;
+                text-align:center;
+                word-break:break-word;
+            }}
+            .icon {{
+                font-size:2em;
+                margin-bottom:10px;
+            }}
+            .menu {{
+                position:absolute;
+                top:8px;
+                right:10px;
+                cursor:pointer;
+                font-weight:bold;
+                font-size:1.2em;
+            }}
+            .dropdown {{
+                display:none;
+                position:absolute;
+                top:25px;
+                right:10px;
+                background:white;
+                box-shadow:0 2px 6px rgba(0,0,0,0.2);
+                border-radius:6px;
+                z-index:2;
+            }}
+            .dropdown button {{
+                border:none;
+                background:none;
+                padding:8px 12px;
+                text-align:left;
+                width:100%;
+                cursor:pointer;
+            }}
+            .dropdown button:hover {{
+                background:#f0f0f0;
+            }}
+            .add-card {{
+                background:#0078d7;
+                color:white;
+                font-size:2em;
+                font-weight:bold;
+                cursor:pointer;
+            }}
+            #addModal {{
+                position:fixed;
+                top:0;left:0;width:100%;height:100%;
+                background:rgba(0,0,0,0.5);
+                display:none;
+                justify-content:center;
+                align-items:center;
+            }}
+            #addModal .modal {{
+                background:#fff;
+                padding:20px;
+                border-radius:10px;
+                width:90%;
+                max-width:350px;
+            }}
+            input[type=text] {{
+                width:100%;
+                padding:8px;
+                margin-bottom:10px;
+                border:1px solid #ccc;
+                border-radius:6px;
+            }}
+            button {{
+                background:#0078d7;
+                color:white;
+                border:none;
+                padding:8px 12px;
+                border-radius:6px;
+                cursor:pointer;
+            }}
+        </style>
+    </head>
+    <body>
+        <h1>Lite Browser</h1>
+        <div class="grid" id="grid">
+            {''.join([f'<div class="card"><div class="icon">{x["icon"]}</div><a href="{x["url"]}" target="_blank">{x["name"]}</a></div>' for x in BUILTIN_LINKS])}
+            <div class="card add-card" onclick="openAddModal()">+</div>
+        </div>
+
+        <!-- Add/Edit Modal -->
+        <div id="addModal">
+            <div class="modal">
+                <h3 id="modalTitle">Add Shortcut</h3>
+                <input type="text" id="gridName" placeholder="Name">
+                <input type="text" id="gridURL" placeholder="URL (https://...)">
+                <input type="text" id="gridIcon" placeholder="Icon (emoji)">
+                <button onclick="saveGrid()">Save</button>
+                <button onclick="closeAddModal()" style="background:#777;">Cancel</button>
+            </div>
+        </div>
+
+        <script>
+            let editIndex = null;
+
+            function openAddModal(index=null) {{
+                editIndex = index;
+                document.getElementById('modalTitle').textContent = index===null ? 'Add Shortcut' : 'Edit Shortcut';
+                const modal = document.getElementById('addModal');
+                modal.style.display = 'flex';
+                if (index!==null) {{
+                    const grids = JSON.parse(localStorage.getItem('customGrids')||'[]');
+                    const g = grids[index];
+                    document.getElementById('gridName').value = g.name;
+                    document.getElementById('gridURL').value = g.url;
+                    document.getElementById('gridIcon').value = g.icon;
+                }} else {{
+                    document.getElementById('gridName').value='';
+                    document.getElementById('gridURL').value='';
+                    document.getElementById('gridIcon').value='';
+                }}
+            }}
+            function closeAddModal() {{
+                document.getElementById('addModal').style.display='none';
+            }}
+            function saveGrid() {{
+                const name=document.getElementById('gridName').value.trim();
+                const url=document.getElementById('gridURL').value.trim();
+                const icon=document.getElementById('gridIcon').value.trim()||'🌐';
+                if(!name||!url) return alert('Please fill name and URL');
+                let grids=JSON.parse(localStorage.getItem('customGrids')||'[]');
+                if(editIndex!==null) grids[editIndex]={{name,url,icon}};
+                else grids.push({{name,url,icon}});
+                localStorage.setItem('customGrids',JSON.stringify(grids));
+                closeAddModal();
+                renderCustomGrids();
+            }}
+            function deleteGrid(index){{
+                if(!confirm('Delete this shortcut?'))return;
+                let grids=JSON.parse(localStorage.getItem('customGrids')||'[]');
+                grids.splice(index,1);
+                localStorage.setItem('customGrids',JSON.stringify(grids));
+                renderCustomGrids();
+            }}
+            function toggleMenu(i){{
+                const d=document.getElementById('dropdown-'+i);
+                d.style.display=d.style.display==='block'?'none':'block';
+            }}
+            function renderCustomGrids(){{
+                document.querySelectorAll('.custom').forEach(e=>e.remove());
+                const grid=document.getElementById('grid');
+                const grids=JSON.parse(localStorage.getItem('customGrids')||'[]');
+                grids.forEach((g,i)=>{{
+                    const div=document.createElement('div');
+                    div.className='card custom';
+                    div.innerHTML=`
+                        <div class="menu" onclick="toggleMenu(${i})">⋮</div>
+                        <div class="dropdown" id="dropdown-${i}">
+                            <button onclick="openAddModal(${i});toggleMenu(${i})">✎ Edit</button>
+                            <button onclick="deleteGrid(${i});toggleMenu(${i})">🗑 Delete</button>
+                        </div>
+                        <div class="icon">${{g.icon}}</div>
+                        <a href="${{g.url}}" target="_blank">${{g.name}}</a>`;
+                    grid.insertBefore(div, grid.lastElementChild);
+                }});
+            }}
+            window.onload=renderCustomGrids;
+            window.onclick=function(e){{
+                if(!e.target.matches('.menu')){{
+                    document.querySelectorAll('.dropdown').forEach(d=>d.style.display='none');
+                }}
+            }}
+        </script>
+    </body>
+    </html>
+    """
+    return html
 
 # ------------------ Run ------------------
 if __name__ == "__main__":
