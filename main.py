@@ -74,14 +74,14 @@ def fetch_telegram_xml(name, url):
             text_tag = msg.select_one(".tgme_widget_message_text")
             desc_html = text_tag.decode_contents() if text_tag else ""
             item = ET.SubElement(ch, "item")
-            
+
             # Use BeautifulSoup to strip HTML tags from title text
             title_text = BeautifulSoup(desc_html, "html.parser").get_text(strip=True)
             ET.SubElement(item, "title").text = title_text[:80] + ("..." if len(title_text) > 80 else "")
-            
+
             ET.SubElement(item, "link").text = link
             ET.SubElement(item, "description").text = desc_html
-            
+
         ET.ElementTree(rss_root).write(os.path.join(XML_FOLDER, f"{name}.xml"), encoding="utf-8", xml_declaration=True)
     except Exception as e:
         print(f"[Error fetching {name}] {e}")
@@ -142,98 +142,116 @@ def browse():
 
 # ------------------ Telegram HTML ------------------
 @app.route("/telegram/<channel_name>")
-def telegram_feed(channel_name):
+def telegram_html(channel_name):
     if channel_name not in TELEGRAM_CHANNELS:
-        abort(404)
+        return f"<p>Error: Channel '{channel_name}' not found.</p>", 404
 
-    url = TELEGRAM_CHANNELS[channel_name]
+    path = os.path.join(XML_FOLDER, f"{channel_name}.xml")
+
+    # 🕒 Refresh every 2 minutes or on ?refresh=1
+    refresh_now = request.args.get("refresh") == "1"
+    if refresh_now or not os.path.exists(path) or (time.time() - os.path.getmtime(path) > 120):
+        fetch_telegram_xml(channel_name, TELEGRAM_CHANNELS[channel_name])
+
     try:
-        r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
-        soup = BeautifulSoup(r.text, "html.parser")
+        feed = feedparser.parse(path)
+        posts = ""
+        for e in feed.entries[:50]:  # show up to 50 posts
+            link = e.get("link", TELEGRAM_CHANNELS[channel_name])
+            desc_html = e.get("description", "").strip()
+            soup = BeautifulSoup(desc_html, "html.parser")
 
-        posts_html = ""
-        msgs = soup.select(".tgme_widget_message_wrap")[:50]  # limit 50 newest
+            # 🧹 Remove unwanted tags (polls, videos, scripts, etc.)
+            for tag in soup.find_all([
+                "video", "iframe", "source", "audio",
+                "svg", "poll", "button", "script", "style"
+            ]):
+                tag.decompose()
 
-        for msg in msgs:
-            text_tag = msg.select_one(".tgme_widget_message_text")
-            img_tag = msg.select_one("a.tgme_widget_message_photo_wrap img") or msg.select_one("video, picture img")
-            link_tag = msg.select_one("a.tgme_widget_message_date")
+            # 🖼️ Optional image
+            img_tag = soup.find("img")
+            text_only = soup.get_text(strip=True)
 
-            # Extract text
-            text_html = text_tag.decode_contents() if text_tag else ""
-            text_clean = BeautifulSoup(text_html, "html.parser").get_text(strip=True)
-
-            # skip non-text and unwanted content
-            skip_types = ["poll", "video", "sticker", "voice", "file"]
-            if any(t in text_clean.lower() for t in skip_types):
+            # 🚫 Skip posts with neither text nor image
+            if not text_only and not img_tag:
                 continue
 
-            # skip empty posts
-            if not text_clean and not img_tag:
-                continue
-
-            content = ""
+            # ✅ Allow text-only or text+image
+            content_html = ""
             if img_tag:
-                img_src = img_tag.get("src")
-                if img_src:
-                    content += f"<img src='{img_src}' loading='lazy'><br>"
-            if text_clean:
-                content += f"<p>{text_clean}</p>"
+                content_html += f"<img src='{img_tag['src']}' loading='lazy'>"
+            if text_only:
+                content_html += f"<p>{text_only}</p>"
 
-            link = link_tag["href"] if link_tag and "href" in link_tag.attrs else url
-            posts_html += f"<div class='post'><a href='{link}' target='_blank'>{content}</a></div>"
+            posts += f"""
+            <div class='post'>
+                <a href='{link}' target='_blank'>{content_html}</a>
+            </div>
+            """
 
-        if not posts_html:
-            posts_html = "<p>No recent posts found.</p>"
-
-    except Exception as e:
-        return f"<p>Failed to fetch posts: {e}</p>"
-
-    # ---- Return formatted HTML ----
-    html = f"""
-    <html>
-    <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <title>{channel_name} - Telegram Feed</title>
+        return f"""
+        <html><head>
+        <meta name='viewport' content='width=device-width,initial-scale=1.0'>
+        <title>{channel_name} Posts</title>
         <style>
             body {{
-                font-family: sans-serif;
-                background: #000;
-                color: #fff;
+                font-family: system-ui, sans-serif;
+                background: #f5f6f7;
                 margin: 0;
-                text-align: center;
-            }}
-            h3 {{
-                margin: 10px;
-            }}
-            .post {{
-                border-bottom: 1px solid #222;
                 padding: 10px;
             }}
-            img {{
-                max-width: 100%;
-                border-radius: 8px;
-                margin-bottom: 5px;
+            h2 {{
+                color: #00695c;
+                margin: 10px 0;
+                text-transform: capitalize;
             }}
-            p {{
-                margin: 0;
-                padding: 6px;
-                font-size: 15px;
+            .post {{
+                background: #fff;
+                margin: 12px 0;
+                padding: 12px;
+                border-radius: 12px;
+                box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+            }}
+            .post img {{
+                width: 100%;
+                border-radius: 10px;
+                margin-bottom: 8px;
+            }}
+            .post p {{
+                font-size: 0.95em;
+                color: #333;
                 line-height: 1.4em;
+                margin: 0;
             }}
             a {{
                 text-decoration: none;
-                color: #fff;
+                color: inherit;
+            }}
+            .home {{
+                display: inline-block;
+                margin-top: 15px;
+                font-size: 1.1em;
+            }}
+            .refresh {{
+                background:#00695c;
+                color:#fff;
+                padding:6px 10px;
+                border-radius:6px;
+                text-decoration:none;
+                font-size:0.9em;
+                margin-left:10px;
             }}
         </style>
-    </head>
-    <body>
-        <h3>📢 @{channel_name} (Latest)</h3>
-        {posts_html}
-    </body>
-    </html>
-    """
-    return html
+        </head><body>
+        <h2>Telegram: {channel_name}
+            <a class='refresh' href='?refresh=1'>🔄 Refresh</a>
+        </h2>
+        {posts or "<p>No text or image posts found.</p>"}
+        <p class='home'><a href='/'>🏠 Home</a></p>
+        </body></html>
+        """
+    except Exception as e:
+        return f"<p>Error loading feed: {e}</p>"
 
 # ------------------ ePaper Routes ------------------
 @app.route("/today")
@@ -250,7 +268,7 @@ def today_links():
 def njayar_archive():
     # Only show Njayar editions starting from 2024-06-30
     cutoff = datetime.date(2024, 6, 30)
-    
+
     # Find all Sundays from cutoff up to today
     today = datetime.date.today()
     sundays = []
@@ -258,11 +276,11 @@ def njayar_archive():
     # Move 'd' forward to the first Sunday on or after cutoff
     while d.weekday() != 6: # 6 is Sunday
         d += datetime.timedelta(days=1)
-        
+
     while d <= today:
         sundays.append(d)
         d += datetime.timedelta(days=7)
-        
+
     cards = ""
     for i, d in enumerate(reversed(sundays)):
         url = get_url_for_location("Njayar Prabhadham", d)
@@ -609,7 +627,7 @@ def homepage():
 if __name__ == "__main__":
     # Ensure XML folder is created before threads start
     os.makedirs(XML_FOLDER, exist_ok=True)
-    
+
     threading.Thread(target=update_epaper_json, daemon=True).start()
     threading.Thread(target=telegram_updater, daemon=True).start()
-    app.run(host="0.0.0.0", port=8000)
+    app.run(host="0.0.0.0", port=8000) 
