@@ -143,62 +143,74 @@ def browse():
 # ------------------ Telegram HTML ------------------
 @app.route("/telegram/<channel_name>")
 def telegram_html(channel_name):
-    # Sanitize channel name to ensure it's a valid key
     if channel_name not in TELEGRAM_CHANNELS:
         return f"<p>Error: Channel '{channel_name}' not found.</p>", 404
-    
+
     path = os.path.join(XML_FOLDER, f"{channel_name}.xml")
-    
-    # Check if XML file exists and is recent (e.g., less than 15 minutes old)
     if not os.path.exists(path) or (time.time() - os.path.getmtime(path) > 900):
-        # Synchronously fetch if requested and file is old/missing
-        fetch_telegram_xml(channel_name, TELEGRAM_CHANNELS.get(channel_name, ""))
-        
+        fetch_telegram_xml(channel_name, TELEGRAM_CHANNELS[channel_name])
+
     try:
         feed = feedparser.parse(path)
-       posts = ""
-for e in feed.entries[:30]:
-    link = e.get("link", TELEGRAM_CHANNELS[channel_name])
-    title_text = BeautifulSoup(e.get("title", ""), "html.parser").get_text(strip=True)
-    description_html = e.get("description", "").strip()
-    soup = BeautifulSoup(description_html, "html.parser")
+        posts = ""
+        for e in feed.entries[:30]:
+            link = e.get("link", TELEGRAM_CHANNELS[channel_name])
+            desc_html = e.get("description", "").strip()
+            soup = BeautifulSoup(desc_html, "html.parser")
 
-    # 🔍 Detect image tags
-    img_tag = soup.find("img")
+            # Remove non-text content (polls, videos, scripts, etc.)
+            for tag in soup.find_all(["video", "iframe", "source", "audio", "svg", "poll", "button", "script", "style"]):
+                tag.decompose()
 
-    # 🧹 Remove non-text content (videos, iframes, polls etc.)
-    for tag in soup.find_all(["video", "iframe", "source", "audio", "svg", "poll", "button", "script", "style"]):
-        tag.decompose()
+            # Extract text and image
+            img_tag = soup.find("img")
+            text_only = soup.get_text(strip=True)
 
-    text_only = soup.get_text(strip=True)
+            # ✅ Keep only posts with both image + text
+            if not (img_tag and text_only):
+                continue
 
-    # 🚫 Skip posts with no text (like only image, poll, or video)
-    if not text_only:
-        continue
+            content_html = f"<img src='{img_tag['src']}' style='max-width:100%;border-radius:8px;'><p>{text_only}</p>"
 
-    # ✅ Keep image + text if both exist
-    content_html = ""
-    if img_tag:
-        content_html += str(img_tag)
-    content_html += f"<p>{text_only}</p>"
+            posts += f"""
+            <div class='post'>
+                <a href='{link}' target='_blank'>{content_html}</a>
+            </div>
+            """
 
-    posts += f"""
-    <div class='post'>
-        <a href='{link}' target='_blank'>{content_html}</a>
-    </div>
-    """
         return f"""
-        <html><head><meta name='viewport' content='width=device-width,initial-scale=1.0'>
+        <html><head>
+        <meta name='viewport' content='width=device-width,initial-scale=1.0'>
         <title>{channel_name} Posts</title>
         <style>
-        body{{font-family:sans-serif;background:#f9f9f9;padding:10px;}}
-        a{{text-decoration:none;color:#0078cc;}}
-        h3{{margin-top:0;}}
-        .post{{background:#fff;margin:10px 0;padding:15px;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.1);}}
-        .content{{white-space:pre-wrap;}}
+        body {{
+            font-family:sans-serif;
+            background:#f9f9f9;
+            padding:10px;
+        }}
+        .post {{
+            background:#fff;
+            margin:12px 0;
+            padding:15px;
+            border-radius:10px;
+            box-shadow:0 2px 5px rgba(0,0,0,0.1);
+        }}
+        a {{
+            text-decoration:none;
+            color:#333;
+        }}
+        p {{
+            margin-top:8px;
+            font-size:0.95em;
+            line-height:1.4em;
+        }}
+        img {{
+            width:100%;
+            border-radius:10px;
+        }}
         </style></head><body>
         <h2>Telegram: {channel_name}</h2>
-        {posts or "<p>No posts.</p>"}
+        {posts or "<p>No posts with image + text.</p>"}
         <p><a href="/">🏠 Home</a></p>
         </body></html>
         """
