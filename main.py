@@ -158,19 +158,27 @@ def telegram_html(channel_name):
             desc_html = e.get("description", "").strip()
             soup = BeautifulSoup(desc_html, "html.parser")
 
-            # Remove non-text content (polls, videos, scripts, etc.)
-            for tag in soup.find_all(["video", "iframe", "source", "audio", "svg", "poll", "button", "script", "style"]):
+            # 🧹 Remove unwanted non-text elements
+            for tag in soup.find_all([
+                "video", "iframe", "source", "audio",
+                "svg", "poll", "button", "script", "style"
+            ]):
                 tag.decompose()
 
-            # Extract text and image
+            # 🖼️ Find optional image
             img_tag = soup.find("img")
             text_only = soup.get_text(strip=True)
 
-            # ✅ Keep only posts with both image + text
-            if not (img_tag and text_only):
+            # 🚫 Skip posts with neither text nor image
+            if not text_only and not img_tag:
                 continue
 
-            content_html = f"<img src='{img_tag['src']}' style='max-width:100%;border-radius:8px;'><p>{text_only}</p>"
+            # ✅ Allow text-only or text+image
+            content_html = ""
+            if img_tag:
+                content_html += f"<img src='{img_tag['src']}' loading='lazy'>"
+            if text_only:
+                content_html += f"<p>{text_only}</p>"
 
             posts += f"""
             <div class='post'>
@@ -183,35 +191,48 @@ def telegram_html(channel_name):
         <meta name='viewport' content='width=device-width,initial-scale=1.0'>
         <title>{channel_name} Posts</title>
         <style>
-        body {{
-            font-family:sans-serif;
-            background:#f9f9f9;
-            padding:10px;
-        }}
-        .post {{
-            background:#fff;
-            margin:12px 0;
-            padding:15px;
-            border-radius:10px;
-            box-shadow:0 2px 5px rgba(0,0,0,0.1);
-        }}
-        a {{
-            text-decoration:none;
-            color:#333;
-        }}
-        p {{
-            margin-top:8px;
-            font-size:0.95em;
-            line-height:1.4em;
-        }}
-        img {{
-            width:100%;
-            border-radius:10px;
-        }}
-        </style></head><body>
+            body {{
+                font-family: system-ui, sans-serif;
+                background: #f5f6f7;
+                margin: 0;
+                padding: 10px;
+            }}
+            h2 {{
+                color: #00695c;
+                margin: 10px 0;
+            }}
+            .post {{
+                background: #fff;
+                margin: 12px 0;
+                padding: 12px;
+                border-radius: 12px;
+                box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+            }}
+            .post img {{
+                width: 100%;
+                border-radius: 10px;
+                margin-bottom: 8px;
+            }}
+            .post p {{
+                font-size: 0.95em;
+                color: #333;
+                line-height: 1.4em;
+                margin: 0;
+            }}
+            a {{
+                text-decoration: none;
+                color: inherit;
+            }}
+            .home {{
+                display: inline-block;
+                margin-top: 15px;
+                font-size: 1.1em;
+            }}
+        </style>
+        </head><body>
         <h2>Telegram: {channel_name}</h2>
-        {posts or "<p>No posts with image + text.</p>"}
-        <p><a href="/">🏠 Home</a></p>
+        {posts or "<p>No text or image posts found.</p>"}
+        <p class='home'><a href='/'>🏠 Home</a></p>
         </body></html>
         """
     except Exception as e:
