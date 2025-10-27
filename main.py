@@ -155,6 +155,10 @@ def telegram_html(channel_name):
 
     try:
         feed = feedparser.parse(path)
+
+        # 🔄 Make latest feed appear first
+        feed.entries.reverse()
+
         posts = ""
         for e in feed.entries[:50]:  # show up to 50 posts
             link = e.get("link", TELEGRAM_CHANNELS[channel_name])
@@ -189,6 +193,8 @@ def telegram_html(channel_name):
             </div>
             """
 
+        last_updated = datetime.datetime.fromtimestamp(os.path.getmtime(path)).strftime("%Y-%m-%d %H:%M:%S")
+
         return f"""
         <html><head>
         <meta name='viewport' content='width=device-width,initial-scale=1.0'>
@@ -204,6 +210,11 @@ def telegram_html(channel_name):
                 color: #00695c;
                 margin: 10px 0;
                 text-transform: capitalize;
+            }}
+            .meta {{
+                font-size: 0.8em;
+                color: #666;
+                margin-bottom: 8px;
             }}
             .post {{
                 background: #fff;
@@ -246,13 +257,13 @@ def telegram_html(channel_name):
         <h2>Telegram: {channel_name}
             <a class='refresh' href='?refresh=1'>🔄 Refresh</a>
         </h2>
+        <div class='meta'>Last updated: {last_updated}</div>
         {posts or "<p>No text or image posts found.</p>"}
         <p class='home'><a href='/'>🏠 Home</a></p>
         </body></html>
         """
     except Exception as e:
         return f"<p>Error loading feed: {e}</p>"
-
 # ------------------ ePaper Routes ------------------
 @app.route("/today")
 def today_links():
