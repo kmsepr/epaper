@@ -142,128 +142,90 @@ def browse():
 
 # ------------------ Telegram HTML ------------------
 @app.route("/telegram/<channel_name>")
-def telegram_html(channel_name):
+def telegram_feed(channel_name):
     if channel_name not in TELEGRAM_CHANNELS:
-        return f"<p>Error: Channel '{channel_name}' not found.</p>", 404
+        abort(404)
 
-    path = os.path.join(XML_FOLDER, f"{channel_name}.xml")
-
-    # 🕒 Refresh every 2 minutes or on ?refresh=1
-    refresh_now = request.args.get("refresh") == "1"
-    if refresh_now or not os.path.exists(path) or (time.time() - os.path.getmtime(path) > 120):
-        fetch_telegram_xml(channel_name, TELEGRAM_CHANNELS[channel_name])
+    url = TELEGRAM_CHANNELS[channel_name]
+    rss_url = f"https://rsshub.app/telegram/channel/{channel_name}"
 
     try:
-        feed = feedparser.parse(path)
+        feed = feedparser.parse(rss_url)
+    except Exception as e:
+        return f"Failed to fetch feed: {e}"
 
-        # 🔄 Make latest feed appear first
-        feed.entries.reverse()
+    posts = ""
+    for e in reversed(feed.entries[-50:]):  # ✅ newest first
+        title_text = BeautifulSoup(e.get("title", ""), "html.parser").get_text(strip=True)
+        description_html = e.get("description", "").strip()
 
-        posts = ""
-        for e in feed.entries[:50]:  # show up to 50 posts
-            link = e.get("link", TELEGRAM_CHANNELS[channel_name])
-            desc_html = e.get("description", "").strip()
-            soup = BeautifulSoup(desc_html, "html.parser")
+        # Parse description safely
+        soup = BeautifulSoup(description_html, "html.parser")
+        img_tag = soup.find("img")
 
-            # 🧹 Remove unwanted tags (polls, videos, scripts, etc.)
-            for tag in soup.find_all([
-                "video", "iframe", "source", "audio",
-                "svg", "poll", "button", "script", "style"
-            ]):
-                tag.decompose()
+        # 🧹 Skip posts with polls, videos, etc.
+        skip_types = ["poll", "video", "audio", "sticker", "voice", "file"]
+        if any(t in title_text.lower() for t in skip_types):
+            continue
 
-            # 🖼️ Optional image
-            img_tag = soup.find("img")
-            text_only = soup.get_text(strip=True)
+        # 🖼 Keep text-only or text+image posts
+        if not title_text and not img_tag:
+            continue
 
-            # 🚫 Skip posts with neither text nor image
-            if not text_only and not img_tag:
-                continue
+        content = ""
+        if img_tag:
+            content += str(img_tag)
+        if title_text:
+            content += f"<p>{title_text}</p>"
 
-            # ✅ Allow text-only or text+image
-            content_html = ""
-            if img_tag:
-                content_html += f"<img src='{img_tag['src']}' loading='lazy'>"
-            if text_only:
-                content_html += f"<p>{text_only}</p>"
+        link = e.get("link", url)
+        posts += f"""
+        <div class='post'>
+            <a href="{link}" target="_blank">{content}</a>
+        </div>
+        """
 
-            posts += f"""
-            <div class='post'>
-                <a href='{link}' target='_blank'>{content_html}</a>
-            </div>
-            """
-
-        last_updated = datetime.datetime.fromtimestamp(os.path.getmtime(path)).strftime("%Y-%m-%d %H:%M:%S")
-
-        return f"""
-        <html><head>
-        <meta name='viewport' content='width=device-width,initial-scale=1.0'>
-        <title>{channel_name} Posts</title>
+    html = f"""
+    <html>
+    <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
         <style>
             body {{
-                font-family: system-ui, sans-serif;
-                background: #f5f6f7;
+                font-family: sans-serif;
+                background: #111;
+                color: #eee;
+                text-align: center;
                 margin: 0;
-                padding: 10px;
-            }}
-            h2 {{
-                color: #00695c;
-                margin: 10px 0;
-                text-transform: capitalize;
-            }}
-            .meta {{
-                font-size: 0.8em;
-                color: #666;
-                margin-bottom: 8px;
+                padding: 0;
             }}
             .post {{
-                background: #fff;
-                margin: 12px 0;
-                padding: 12px;
-                border-radius: 12px;
-                box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+                border-bottom: 1px solid #222;
+                padding: 10px;
             }}
-            .post img {{
-                width: 100%;
-                border-radius: 10px;
-                margin-bottom: 8px;
+            img {{
+                max-width: 100%;
+                border-radius: 8px;
+                margin-bottom: 5px;
             }}
-            .post p {{
-                font-size: 0.95em;
-                color: #333;
-                line-height: 1.4em;
+            p {{
                 margin: 0;
+                padding: 4px;
+                font-size: 15px;
+                line-height: 1.4em;
             }}
             a {{
                 text-decoration: none;
-                color: inherit;
-            }}
-            .home {{
-                display: inline-block;
-                margin-top: 15px;
-                font-size: 1.1em;
-            }}
-            .refresh {{
-                background:#00695c;
-                color:#fff;
-                padding:6px 10px;
-                border-radius:6px;
-                text-decoration:none;
-                font-size:0.9em;
-                margin-left:10px;
+                color: #eee;
             }}
         </style>
-        </head><body>
-        <h2>Telegram: {channel_name}
-            <a class='refresh' href='?refresh=1'>🔄 Refresh</a>
-        </h2>
-        <div class='meta'>Last updated: {last_updated}</div>
-        {posts or "<p>No text or image posts found.</p>"}
-        <p class='home'><a href='/'>🏠 Home</a></p>
-        </body></html>
-        """
-    except Exception as e:
-        return f"<p>Error loading feed: {e}</p>"
+    </head>
+    <body>
+        <h3>📢 @{channel_name} (Latest)</h3>
+        {posts or "<p>No posts found.</p>"}
+    </body>
+    </html>
+    """
+    return html
 
 # ------------------ ePaper Routes ------------------
 @app.route("/today")
