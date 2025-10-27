@@ -156,24 +156,37 @@ def telegram_html(channel_name):
         
     try:
         feed = feedparser.parse(path)
-        posts = ""
-        # The telegram_updater runs in reverse, so read entries naturally
-        for e in feed.entries[:30]:
-            # Ensure links are valid
-            link = e.get("link", TELEGRAM_CHANNELS[channel_name])
-            
-            # Use BeautifulSoup to strip HTML for the title
-            title_text = BeautifulSoup(e.get("title", "No Title"), "html.parser").get_text(strip=True)
-            
-            # The description from telegram_xml already contains HTML from the original post
-            description_html = e.get("description", "No content.")
-            
-            posts += f"""
-            <div class='post'>
-                <h3><a href='{link}' target='_blank'>{title_text}</a></h3>
-                <div class='content'>{description_html}</div>
-            </div>
-            """
+       posts = ""
+for e in feed.entries[:30]:
+    link = e.get("link", TELEGRAM_CHANNELS[channel_name])
+    title_text = BeautifulSoup(e.get("title", ""), "html.parser").get_text(strip=True)
+    description_html = e.get("description", "").strip()
+    soup = BeautifulSoup(description_html, "html.parser")
+
+    # 🔍 Detect image tags
+    img_tag = soup.find("img")
+
+    # 🧹 Remove non-text content (videos, iframes, polls etc.)
+    for tag in soup.find_all(["video", "iframe", "source", "audio", "svg", "poll", "button", "script", "style"]):
+        tag.decompose()
+
+    text_only = soup.get_text(strip=True)
+
+    # 🚫 Skip posts with no text (like only image, poll, or video)
+    if not text_only:
+        continue
+
+    # ✅ Keep image + text if both exist
+    content_html = ""
+    if img_tag:
+        content_html += str(img_tag)
+    content_html += f"<p>{text_only}</p>"
+
+    posts += f"""
+    <div class='post'>
+        <a href='{link}' target='_blank'>{content_html}</a>
+    </div>
+    """
         return f"""
         <html><head><meta name='viewport' content='width=device-width,initial-scale=1.0'>
         <title>{channel_name} Posts</title>
