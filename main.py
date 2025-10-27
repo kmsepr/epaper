@@ -147,56 +147,64 @@ def telegram_feed(channel_name):
         abort(404)
 
     url = TELEGRAM_CHANNELS[channel_name]
-    rss_url = f"https://rsshub.app/telegram/channel/{channel_name}"
-
     try:
-        feed = feedparser.parse(rss_url)
+        r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+        soup = BeautifulSoup(r.text, "html.parser")
+
+        posts_html = ""
+        msgs = soup.select(".tgme_widget_message_wrap")[:50]  # limit 50 newest
+
+        for msg in msgs:
+            text_tag = msg.select_one(".tgme_widget_message_text")
+            img_tag = msg.select_one("a.tgme_widget_message_photo_wrap img") or msg.select_one("video, picture img")
+            link_tag = msg.select_one("a.tgme_widget_message_date")
+
+            # Extract text
+            text_html = text_tag.decode_contents() if text_tag else ""
+            text_clean = BeautifulSoup(text_html, "html.parser").get_text(strip=True)
+
+            # skip non-text and unwanted content
+            skip_types = ["poll", "video", "sticker", "voice", "file"]
+            if any(t in text_clean.lower() for t in skip_types):
+                continue
+
+            # skip empty posts
+            if not text_clean and not img_tag:
+                continue
+
+            content = ""
+            if img_tag:
+                img_src = img_tag.get("src")
+                if img_src:
+                    content += f"<img src='{img_src}' loading='lazy'><br>"
+            if text_clean:
+                content += f"<p>{text_clean}</p>"
+
+            link = link_tag["href"] if link_tag and "href" in link_tag.attrs else url
+            posts_html += f"<div class='post'><a href='{link}' target='_blank'>{content}</a></div>"
+
+        if not posts_html:
+            posts_html = "<p>No recent posts found.</p>"
+
     except Exception as e:
-        return f"Failed to fetch feed: {e}"
+        return f"<p>Failed to fetch posts: {e}</p>"
 
-    posts = ""
-    for e in reversed(feed.entries[-50:]):  # ✅ newest first
-        title_text = BeautifulSoup(e.get("title", ""), "html.parser").get_text(strip=True)
-        description_html = e.get("description", "").strip()
-
-        # Parse description safely
-        soup = BeautifulSoup(description_html, "html.parser")
-        img_tag = soup.find("img")
-
-        # 🧹 Skip posts with polls, videos, etc.
-        skip_types = ["poll", "video", "audio", "sticker", "voice", "file"]
-        if any(t in title_text.lower() for t in skip_types):
-            continue
-
-        # 🖼 Keep text-only or text+image posts
-        if not title_text and not img_tag:
-            continue
-
-        content = ""
-        if img_tag:
-            content += str(img_tag)
-        if title_text:
-            content += f"<p>{title_text}</p>"
-
-        link = e.get("link", url)
-        posts += f"""
-        <div class='post'>
-            <a href="{link}" target="_blank">{content}</a>
-        </div>
-        """
-
+    # ---- Return formatted HTML ----
     html = f"""
     <html>
     <head>
         <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>{channel_name} - Telegram Feed</title>
         <style>
             body {{
                 font-family: sans-serif;
-                background: #111;
-                color: #eee;
-                text-align: center;
+                background: #000;
+                color: #fff;
                 margin: 0;
-                padding: 0;
+                text-align: center;
+            }}
+            h3 {{
+                margin: 10px;
             }}
             .post {{
                 border-bottom: 1px solid #222;
@@ -209,19 +217,19 @@ def telegram_feed(channel_name):
             }}
             p {{
                 margin: 0;
-                padding: 4px;
+                padding: 6px;
                 font-size: 15px;
                 line-height: 1.4em;
             }}
             a {{
                 text-decoration: none;
-                color: #eee;
+                color: #fff;
             }}
         </style>
     </head>
     <body>
         <h3>📢 @{channel_name} (Latest)</h3>
-        {posts or "<p>No posts found.</p>"}
+        {posts_html}
     </body>
     </html>
     """
