@@ -29,7 +29,7 @@ RGB_COLORS = [
 
 TELEGRAM_CHANNELS = {
     "Pathravarthakal": "https://t.me/s/Pathravarthakal",
-    "DailyCa": "https://tme/s/DailyCAMalayalam"
+    "DailyCa": "https://t.me/s/DailyCAMalayalam"
 }
 XML_FOLDER = "telegram_xml"
 os.makedirs(XML_FOLDER, exist_ok=True)
