@@ -147,25 +147,28 @@ def telegram_html(channel_name):
         return f"<p>Error: Channel '{channel_name}' not found.</p>", 404
 
     path = os.path.join(XML_FOLDER, f"{channel_name}.xml")
-    if not os.path.exists(path) or (time.time() - os.path.getmtime(path) > 900):
+
+    # 🕒 Refresh every 2 minutes or on ?refresh=1
+    refresh_now = request.args.get("refresh") == "1"
+    if refresh_now or not os.path.exists(path) or (time.time() - os.path.getmtime(path) > 120):
         fetch_telegram_xml(channel_name, TELEGRAM_CHANNELS[channel_name])
 
     try:
         feed = feedparser.parse(path)
         posts = ""
-        for e in feed.entries[:30]:
+        for e in feed.entries[:50]:  # show up to 50 posts
             link = e.get("link", TELEGRAM_CHANNELS[channel_name])
             desc_html = e.get("description", "").strip()
             soup = BeautifulSoup(desc_html, "html.parser")
 
-            # 🧹 Remove unwanted non-text elements
+            # 🧹 Remove unwanted tags (polls, videos, scripts, etc.)
             for tag in soup.find_all([
                 "video", "iframe", "source", "audio",
                 "svg", "poll", "button", "script", "style"
             ]):
                 tag.decompose()
 
-            # 🖼️ Find optional image
+            # 🖼️ Optional image
             img_tag = soup.find("img")
             text_only = soup.get_text(strip=True)
 
@@ -200,6 +203,7 @@ def telegram_html(channel_name):
             h2 {{
                 color: #00695c;
                 margin: 10px 0;
+                text-transform: capitalize;
             }}
             .post {{
                 background: #fff;
@@ -228,9 +232,20 @@ def telegram_html(channel_name):
                 margin-top: 15px;
                 font-size: 1.1em;
             }}
+            .refresh {{
+                background:#00695c;
+                color:#fff;
+                padding:6px 10px;
+                border-radius:6px;
+                text-decoration:none;
+                font-size:0.9em;
+                margin-left:10px;
+            }}
         </style>
         </head><body>
-        <h2>Telegram: {channel_name}</h2>
+        <h2>Telegram: {channel_name}
+            <a class='refresh' href='?refresh=1'>🔄 Refresh</a>
+        </h2>
         {posts or "<p>No text or image posts found.</p>"}
         <p class='home'><a href='/'>🏠 Home</a></p>
         </body></html>
