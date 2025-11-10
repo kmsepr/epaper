@@ -170,18 +170,10 @@ logging.getLogger().addHandler(handler)
 
 PLAYLISTS = {
 
- "kas_ranker": "https://youtube.com/playlist?list=PLS2N6hORhZbuZsS_2u5H_z6oOKDQT1NRZ",
+ "std10": "https://youtube.com/playlist?list=PLFMb-2_G0bMZMOWz-RvR9dk2Sj0UUnQTZ",
 
 
-"youtube": "https://youtube.com/playlist?list=PLYKzjRvMAycik6KyPflN03WxNwF2usRIk",
-
-"ca": "https://youtube.com/playlist?list=PLYKzjRvMAyci_W5xYyIXHBoR63eefUadL",
-
-
-"jr": "https://youtube.com/playlist?list=PL7zZM6gm86jx6pR01WJL8jQ5wKIkndRMD",
-
-"talent_ca": "https://youtube.com/playlist?list=PL5RD_h4gTSuQbCndwvolzeTDwZVGwCl53",
-
+"std10": "https://youtube.com/playlist?list=PLFMb-2_G0bMYWEI3ZJ4mQ8nXTxiEmSlvC",
 
 
 }
