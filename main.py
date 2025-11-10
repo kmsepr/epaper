@@ -293,7 +293,7 @@ def stream_worker_radio(name):
             ytdlp = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
             ffmpeg = subprocess.Popen([
                 "ffmpeg", "-loglevel", "error", "-i", "pipe:0",
-                "-ac", "1", "-ar", "22050", "-b:a", "32k", "-f", "mp3", "pipe:1"
+                "-ac", "1", "-ar", "22050", "-b:a", "40k", "-f", "mp3", "pipe:1"
             ], stdin=ytdlp.stdout, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
 
             ytdlp.stdout.close()  # Allow yt-dlp to exit when ffmpeg closes
