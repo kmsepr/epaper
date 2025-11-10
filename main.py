@@ -1,16 +1,22 @@
+#!/usr/bin/env python3
 import os
 import time
 import json
-import feedparser
 import threading
 import datetime
 import requests
 import brotli
 import re
-from flask import Flask, render_template_string, Response, request, abort, redirect
+import subprocess
+import logging
+from collections import deque
+from logging.handlers import RotatingFileHandler
+from flask import Flask, render_template_string, Response, request, abort, redirect, stream_with_context, send_file
 from bs4 import BeautifulSoup
+import feedparser
 import xml.etree.ElementTree as ET
 
+# -------------------- App --------------------
 app = Flask(__name__)
 
 # -------------------- Config --------------------
@@ -34,10 +40,9 @@ TELEGRAM_CHANNELS = {
 XML_FOLDER = "telegram_xml"
 os.makedirs(XML_FOLDER, exist_ok=True)
 
-# 🎧 YouTube Playlists
-PLAYLISTS = {
+# 🎧 YouTube Playlists (for iframe embed in homepage)
+PLAYLISTS_IFRAME = {
     "std10": "https://youtube.com/playlist?list=PLFMb-2_G0bMZMOWz-RvR9dk2Sj0UUnQTZ",
-    
 }
 
 # ------------------ Utility ------------------
@@ -47,7 +52,7 @@ def get_url_for_location(location, dt_obj=None):
     date_str = dt_obj.strftime('%Y-%m-%d')
     return f"https://epaper.suprabhaatham.com/details/{location}/{date_str}/1"
 
-# ------------------ Threads ------------------
+# ------------------ Threads (epaper & telegram) ------------------
 def update_epaper_json():
     url = "https://api2.suprabhaatham.com/api/ePaper"
     headers = {"Content-Type": "application/json", "Accept-Encoding": "br"}
@@ -220,7 +225,7 @@ def homepage():
         target_attr = 'target="_blank"' if x['url'].startswith('http') else 'target="_self"'
         final_url = f"/browse?url={x['url']}" if x['url'].startswith('http') and not any(r in x['url'] for r in ["koyeb.app", "koyeb.com"]) else x['url']
         link_html.append(f'<div class="card"><div class="icon">{x["icon"]}</div><a href="{final_url}" {target_attr}>{x["name"]}</a></div>')
-    playlist_cards = "".join(f'<div class="card"><div class="icon">🎧</div><a href="/stream/{k}">{k.capitalize()}</a></div>' for k in PLAYLISTS)
+    playlist_cards = "".join(f'<div class="card"><div class="icon">🎧</div><a href="/stream/{k}">{k.capitalize()}</a></div>' for k in PLAYLISTS_IFRAME)
     html = f"""
     <!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1.0">
     <title>Lite Browser</title>
@@ -239,15 +244,18 @@ def homepage():
         <div class="grid">{playlist_cards}</div>
         <h2>🌐 Shortcuts</h2>
         <div class="grid">{''.join(link_html)}</div>
+        <h3>🔊 Audio Radio</h3>
+        <p>To listen to server-streamed audio versions of playlists visit <code>/radio/stream/&lt;playlist_name&gt;</code> (audio backend)</p>
     </body></html>
     """
     return html
 
+# ------------------ Iframe Playlist Embed (original) ------------------
 @app.route("/stream/<name>")
-def stream(name):
-    if name not in PLAYLISTS:
+def stream_iframe(name):
+    if name not in PLAYLISTS_IFRAME:
         return redirect("/")
-    url = PLAYLISTS[name]
+    url = PLAYLISTS_IFRAME[name]
     embed = url.replace("playlist?", "embed/videoseries?")
     return f"""
     <html><head><meta name='viewport' content='width=device-width,initial-scale=1.0'>
@@ -257,14 +265,202 @@ def stream(name):
         iframe{{width:100%;height:90vh;border:none;}}
     </style></head>
     <body>
-        <h2>🎧 {name.capitalize()} Playlist</h2>
+        <h2>🎧 {name.capitalize()} Playlist (YouTube Embed)</h2>
         <iframe src="{embed}" allow="autoplay; encrypted-media"></iframe>
         <p><a href="/" style="color:#0af;">🏠 Back</a></p>
     </body></html>
     """
 
-# ------------------ Run ------------------
+# ==============================================================
+# 🎶 YouTube Playlist Radio SECTION (audio backend)
+# ==============================================================
+
+# Logging & paths
+LOG_PATH = "/mnt/data/radio.log"
+COOKIES_PATH = "/mnt/data/cookies.txt"  # optional; create if using cookies
+CACHE_FILE = "/mnt/data/playlist_cache.json"
+DOWNLOAD_DIR = "/mnt/data/radio_cache"
+os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True)
+
+handler = RotatingFileHandler(LOG_PATH, maxBytes=5*1024*1024, backupCount=3)
+logging.getLogger().addHandler(handler)
+logging.getLogger().setLevel(logging.INFO)
+
+# Radio playlists (audio backend). Add your playlists here.
+PLAYLISTS_RADIO = {
+    "kas_ranker": "https://youtube.com/playlist?list=PLS2N6hORhZbuZsS_2u5H_z6oOKDQT1NRZ",
+    "youtube": "https://youtube.com/playlist?list=PLYKzjRvMAycik6KyPflN03WxNwF2usRIk",
+    "ca": "https://youtube.com/playlist?list=PLYKzjRvMAyci_W5xYyIXHBoR63eefUadL",
+    "jr": "https://youtube.com/playlist?list=PL7zZM6gm86jx6pR01WJL8jQ5wKIkndRMD",
+    "talent_ca": "https://youtube.com/playlist?list=PL5RD_h4gTSuQbCndwvolzeTDwZVGwCl53",
+}
+
+PLAY_MODES = {}  # optional: "shuffle"/"reverse"
+
+STREAMS_RADIO = {}
+MAX_QUEUE = 64
+REFRESH_INTERVAL = 600  # 10 min
+
+# Cache helper
+def load_cache_radio():
+    if os.path.exists(CACHE_FILE):
+        try:
+            return json.load(open(CACHE_FILE))
+        except Exception:
+            return {}
+    return {}
+
+def save_cache_radio(data):
+    try:
+        json.dump(data, open(CACHE_FILE, "w"))
+    except Exception as e:
+        logging.error(e)
+
+CACHE_RADIO = load_cache_radio()
+
+def get_playlist_ids(url):
+    """Return list of YouTube video IDs from a playlist URL sorted by latest upload date."""
+    try:
+        cmd = [
+            "yt-dlp",
+            "--flat-playlist",
+            "--dump-single-json",
+            "--no-warnings",
+            "--quiet",
+            url
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        data = json.loads(result.stdout)
+        entries = [e for e in data.get("entries", []) if "id" in e]
+        # Sort by upload date descending (latest first) when available
+        entries.sort(key=lambda e: e.get("upload_date", ""), reverse=True)
+        return [entry["id"] for entry in entries]
+    except Exception as e:
+        logging.error(f"get_playlist_ids() failed for {url}: {e}")
+        return []
+
+def load_playlist_ids_radio(name, url):
+    """Load and cache YouTube playlist IDs with safe mode handling."""
+    try:
+        ids = get_playlist_ids(url)
+        if not ids:
+            logging.warning(f"[{name}] ⚠️ No videos found in playlist — using empty list.")
+            CACHE_RADIO[name] = []
+            save_cache_radio(CACHE_RADIO)
+            return []
+        mode = PLAY_MODES.get(name, "normal").lower().strip()
+        if mode == "shuffle":
+            import random
+            random.shuffle(ids)
+        elif mode == "reverse":
+            ids.reverse()
+        CACHE_RADIO[name] = ids
+        save_cache_radio(CACHE_RADIO)
+        logging.info(f"[{name}] Cached {len(ids)} videos in {mode.upper()} mode.")
+        return ids
+    except Exception as e:
+        logging.exception(f"[{name}] ❌ Failed to load playlist ({e}) — fallback to cached or empty.")
+        return CACHE_RADIO.get(name, [])
+
+def stream_worker_radio(name):
+    s = STREAMS_RADIO[name]
+    while True:
+        try:
+            ids = s["IDS"]
+            if not ids:
+                ids = load_playlist_ids_radio(name, PLAYLISTS_RADIO[name])
+                s["IDS"] = ids
+            if not ids:
+                logging.warning(f"[{name}] No playlist ids found; sleeping 60s...")
+                time.sleep(60)
+                continue
+            vid = ids[s["INDEX"] % len(ids)]
+            s["INDEX"] += 1
+            url = f"https://www.youtube.com/watch?v={vid}"
+            logging.info(f"[{name}] ▶️ Now playing: {url}")
+            cmd = [
+                "yt-dlp", "-f", "bestaudio/best",
+                "--cookies", COOKIES_PATH,
+                "--user-agent", "Mozilla/5.0",
+                "-o", "-", "--quiet", "--no-warnings", url
+            ]
+            ytdlp = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+            ffmpeg = subprocess.Popen([
+                "ffmpeg", "-loglevel", "error", "-i", "pipe:0",
+                "-ac", "1", "-ar", "22050", "-b:a", "32k", "-f", "mp3", "pipe:1"
+            ], stdin=ytdlp.stdout, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+            ytdlp.stdout.close()
+            for chunk in iter(lambda: ffmpeg.stdout.read(2048), b""):
+                while len(s["QUEUE"]) >= MAX_QUEUE:
+                    time.sleep(0.2)
+                s["QUEUE"].append(chunk)
+            ffmpeg.wait(timeout=2)
+            logging.info(f"[{name}] ✅ Finished track.")
+            time.sleep(3)
+        except Exception as e:
+            logging.warning(f"[{name}] Worker error: {e}")
+            time.sleep(10)
+
+# Radio Flask routes (audio backend)
+@app.route("/radio/listen/<name>")
+def listen_radio_download(name):
+    if name not in STREAMS_RADIO:
+        abort(404)
+    s = STREAMS_RADIO[name]
+    def gen():
+        while True:
+            if s["QUEUE"]:
+                yield s["QUEUE"].popleft()
+            else:
+                time.sleep(0.05)
+    headers = {"Content-Disposition": f"attachment; filename={name}.mp3"}
+    return Response(stream_with_context(gen()), mimetype="audio/mpeg", headers=headers)
+
+@app.route("/radio/stream/<name>")
+def stream_audio(name):
+    if name not in STREAMS_RADIO:
+        abort(404)
+    s = STREAMS_RADIO[name]
+    def gen():
+        while True:
+            if s["QUEUE"]:
+                yield s["QUEUE"].popleft()
+            else:
+                time.sleep(0.05)
+    return Response(stream_with_context(gen()), mimetype="audio/mpeg")
+
+def cache_refresher():
+    while True:
+        for name, url in PLAYLISTS_RADIO.items():
+            last = STREAMS_RADIO[name]["LAST_REFRESH"]
+            if time.time() - last > 7200:  # every 2 hours
+                logging.info(f"[{name}] 🔁 Refreshing playlist cache...")
+                STREAMS_RADIO[name]["IDS"] = load_playlist_ids_radio(name, url)
+                STREAMS_RADIO[name]["LAST_REFRESH"] = time.time()
+        time.sleep(600)
+
+# ==============================================================
+# 🚀 Start both systems when running directly
+# ==============================================================
+
 if __name__ == "__main__":
+    # Start epaper + telegram background threads
     threading.Thread(target=update_epaper_json, daemon=True).start()
     threading.Thread(target=telegram_updater, daemon=True).start()
+
+    # Setup radio streams and workers
+    for pname, url in PLAYLISTS_RADIO.items():
+        STREAMS_RADIO[pname] = {
+            "IDS": load_playlist_ids_radio(pname, url),
+            "INDEX": 0,
+            "QUEUE": deque(),
+            "LAST_REFRESH": time.time(),
+        }
+        t = threading.Thread(target=stream_worker_radio, args=(pname,), daemon=True)
+        t.start()
+
+    threading.Thread(target=cache_refresher, daemon=True).start()
+
+    logging.info("🚀 Unified Flask App (Lite Browser + Audio Radio) running at http://0.0.0.0:8000")
     app.run(host="0.0.0.0", port=8000)
