@@ -220,33 +220,67 @@ def homepage():
         {"name": "Koyeb", "url": "https://app.koyeb.com/", "icon": "💎"},
         {"name": "ChatGPT", "url": "https://chatgpt.com/auth/login", "icon": "🤖"},
     ]
+
+    # 🔊 YouTube Radio (audio backend)
+    radio_cards = "".join(
+        f'<div class="card"><div class="icon">🔊</div>'
+        f'<a href="/radio/stream/{k}">{k.replace("_", " ").title()}</a></div>'
+        for k in PLAYLISTS_RADIO
+    )
+
+    # 🌐 Shortcuts section
     link_html = []
     for x in BUILTIN_LINKS:
         target_attr = 'target="_blank"' if x['url'].startswith('http') else 'target="_self"'
-        final_url = f"/browse?url={x['url']}" if x['url'].startswith('http') and not any(r in x['url'] for r in ["koyeb.app", "koyeb.com"]) else x['url']
-        link_html.append(f'<div class="card"><div class="icon">{x["icon"]}</div><a href="{final_url}" {target_attr}>{x["name"]}</a></div>')
-    playlist_cards = "".join(f'<div class="card"><div class="icon">🎧</div><a href="/stream/{k}">{k.capitalize()}</a></div>' for k in PLAYLISTS_IFRAME)
+        final_url = (
+            f"/browse?url={x['url']}"
+            if x['url'].startswith('http') and not any(r in x['url'] for r in ["koyeb.app", "koyeb.com"])
+            else x['url']
+        )
+        link_html.append(
+            f'<div class="card"><div class="icon">{x["icon"]}</div>'
+            f'<a href="{final_url}" {target_attr}>{x["name"]}</a></div>'
+        )
+
     html = f"""
-    <!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1.0">
-    <title>Lite Browser</title>
-    <style>
-        body{{font-family:sans-serif;background:#f7f8fa;padding:20px;}}
-        .grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:15px;}}
-        .card{{background:white;border-radius:15px;box-shadow:0 2px 6px rgba(0,0,0,0.1);
-               text-align:center;padding:15px;transition:.2s;}}
-        .card:hover{{transform:scale(1.04);}}
-        .icon{{font-size:2em;margin-bottom:8px;}}
-        a{{text-decoration:none;color:#111;font-weight:600;}}
-        h2{{margin:10px 0;}}
-    </style></head><body>
-        <h1>Lite Browser</h1>
-        <h2>🎧 YouTube Playlists</h2>
-        <div class="grid">{playlist_cards}</div>
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta name="viewport" content="width=device-width,initial-scale=1.0">
+        <title>YouTube Radio</title>
+        <style>
+            body {{
+                font-family: sans-serif;
+                background: #f7f8fa;
+                padding: 20px;
+            }}
+            .grid {{
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+                gap: 15px;
+            }}
+            .card {{
+                background: white;
+                border-radius: 15px;
+                box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+                text-align: center;
+                padding: 15px;
+                transition: 0.2s;
+            }}
+            .card:hover {{ transform: scale(1.04); }}
+            .icon {{ font-size: 2em; margin-bottom: 8px; }}
+            a {{ text-decoration: none; color: #111; font-weight: 600; }}
+            h2 {{ margin: 10px 0; }}
+        </style>
+    </head>
+    <body>
+        <h1>🎧 YouTube Radio</h1>
+        <div class="grid">{radio_cards}</div>
+
         <h2>🌐 Shortcuts</h2>
         <div class="grid">{''.join(link_html)}</div>
-        <h3>🔊 Audio Radio</h3>
-        <p>To listen to server-streamed audio versions of playlists visit <code>/radio/stream/&lt;playlist_name&gt;</code> (audio backend)</p>
-    </body></html>
+    </body>
+    </html>
     """
     return html
 
