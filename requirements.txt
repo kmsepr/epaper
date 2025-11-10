@@ -4,3 +4,4 @@ brotli
 beautifulsoup4
 feedparser
 yt-dlp
+pandas
