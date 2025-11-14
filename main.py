@@ -175,7 +175,8 @@ PLAYLISTS = {
 
 "std9": "https://youtube.com/playlist?list=PLFMb-2_G0bMYWEI3ZJ4mQ8nXTxiEmSlvC",
 
-"dd": "https://youtube.com/playlist?list=PLjETElbIubzt1eVq5OVCmyiV6ai7aUP-z",
+"samastha": "https://youtube.com/playlist?list=PLgkREi1Wpr-XgNxocxs3iPj61pqMhi9bv",
+
 
 "kas_ranker": "https://youtube.com/playlist?list=PLS2N6hORhZbvjEB9VUAtuvPkirvoKqzfn",
 
