@@ -169,13 +169,12 @@ handler = RotatingFileHandler(LOG_PATH, maxBytes=5*1024*1024, backupCount=3)
 logging.getLogger().addHandler(handler)
 
 PLAYLISTS = {
+"youtube": "https://youtube.com/playlist?list=PLYKzjRvMAycik6KyPflN03WxNwF2usRIk",
 
  "firdous": "https://youtube.com/playlist?list=PLgkREi1Wpr-VMfNuvrgNhZqpjEbT7nxv0",
 
 "samastha": "https://youtube.com/playlist?list=PLgkREi1Wpr-XgNxocxs3iPj61pqMhi9bv",
 
-
-"kas_ranker": "https://youtube.com/playlist?list=PLS2N6hORhZbvjEB9VUAtuvPkirvoKqzfn",
 
 
 }
