@@ -175,6 +175,8 @@ PLAYLISTS = {
 
 "samastha": "https://youtube.com/playlist?list=PLgkREi1Wpr-XgNxocxs3iPj61pqMhi9bv",
 
+"jr": "https://youtube.com/playlist?list=PL7zZM6gm86jx6pR01WJL8jQ5wKIkndRMD",
+
 
 
 }
