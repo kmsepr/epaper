@@ -29,7 +29,7 @@ RGB_COLORS = [
 
 TELEGRAM_CHANNELS = {
     "Pathravarthakal": "https://t.me/s/Pathravarthakal",
-    "AnotherChannel": "https://t.me/s/AnotherChannel"
+    "DailyCa": "https://t.me/s/DailyCAMalayalam"
 }
 XML_FOLDER = "telegram_xml"
 os.makedirs(XML_FOLDER, exist_ok=True)
@@ -69,13 +69,19 @@ def fetch_telegram_xml(name, url):
         ET.SubElement(ch, "title").text = f"{name} Telegram Feed"
         for msg in soup.select(".tgme_widget_message_wrap")[:40]:
             date_tag = msg.select_one("a.tgme_widget_message_date")
-            link = date_tag["href"] if date_tag else url
+            # Ensure link is extracted, fallback to URL if not found
+            link = date_tag["href"] if date_tag and "href" in date_tag.attrs else url
             text_tag = msg.select_one(".tgme_widget_message_text")
             desc_html = text_tag.decode_contents() if text_tag else ""
             item = ET.SubElement(ch, "item")
-            ET.SubElement(item, "title").text = BeautifulSoup(desc_html, "html.parser").get_text(strip=True)[:80]
+
+            # Use BeautifulSoup to strip HTML tags from title text
+            title_text = BeautifulSoup(desc_html, "html.parser").get_text(strip=True)
+            ET.SubElement(item, "title").text = title_text[:80] + ("..." if len(title_text) > 80 else "")
+
             ET.SubElement(item, "link").text = link
             ET.SubElement(item, "description").text = desc_html
+
         ET.ElementTree(rss_root).write(os.path.join(XML_FOLDER, f"{name}.xml"), encoding="utf-8", xml_declaration=True)
     except Exception as e:
         print(f"[Error fetching {name}] {e}")
@@ -137,31 +143,127 @@ def browse():
 # ------------------ Telegram HTML ------------------
 @app.route("/telegram/<channel_name>")
 def telegram_html(channel_name):
+    if channel_name not in TELEGRAM_CHANNELS:
+        return f"<p>Error: Channel '{channel_name}' not found.</p>", 404
+
     path = os.path.join(XML_FOLDER, f"{channel_name}.xml")
-    if not os.path.exists(path):
-        fetch_telegram_xml(channel_name, TELEGRAM_CHANNELS.get(channel_name, ""))
+
+    # 🕒 Refresh every 2 minutes or on ?refresh=1
+    refresh_now = request.args.get("refresh") == "1"
+    if refresh_now or not os.path.exists(path) or (time.time() - os.path.getmtime(path) > 120):
+        fetch_telegram_xml(channel_name, TELEGRAM_CHANNELS[channel_name])
+
     try:
         feed = feedparser.parse(path)
+
+        # 🔄 Make latest feed appear first
+        feed.entries.reverse()
+
         posts = ""
-        for e in reversed(feed.entries[:30]):
-            title = e.get("title", "")
-            link = e.get("link", "#")
-            posts += f"<div class='post'><a href='{link}' target='_blank'>{title}</a></div>"
+        for e in feed.entries[:50]:  # show up to 50 posts
+            link = e.get("link", TELEGRAM_CHANNELS[channel_name])
+            desc_html = e.get("description", "").strip()
+            soup = BeautifulSoup(desc_html, "html.parser")
+
+            # 🧹 Remove unwanted tags (polls, videos, scripts, etc.)
+            for tag in soup.find_all([
+                "video", "iframe", "source", "audio",
+                "svg", "poll", "button", "script", "style"
+            ]):
+                tag.decompose()
+
+            # 🖼️ Optional image
+            img_tag = soup.find("img")
+            text_only = soup.get_text(strip=True)
+
+            # 🚫 Skip posts with neither text nor image
+            if not text_only and not img_tag:
+                continue
+
+            # ✅ Allow text-only or text+image
+            content_html = ""
+            if img_tag:
+                content_html += f"<img src='{img_tag['src']}' loading='lazy'>"
+            if text_only:
+                content_html += f"<p>{text_only}</p>"
+
+            posts += f"""
+            <div class='post'>
+                <a href='{link}' target='_blank'>{content_html}</a>
+            </div>
+            """
+
+        last_updated = datetime.datetime.fromtimestamp(os.path.getmtime(path)).strftime("%Y-%m-%d %H:%M:%S")
+
         return f"""
-        <html><head><meta name='viewport' content='width=device-width,initial-scale=1.0'>
+        <html><head>
+        <meta name='viewport' content='width=device-width,initial-scale=1.0'>
+        <title>{channel_name} Posts</title>
         <style>
-        body{{font-family:sans-serif;background:#f9f9f9;padding:10px;}}
-        a{{text-decoration:none;color:#0078cc;}}
-        .post{{background:#fff;margin:10px 0;padding:10px;border-radius:8px;}}
-        </style></head><body>
-        <h2>{channel_name}</h2>
-        {posts or "<p>No posts.</p>"}
-        <p><a href="/">🏠 Home</a></p>
+            body {{
+                font-family: system-ui, sans-serif;
+                background: #f5f6f7;
+                margin: 0;
+                padding: 10px;
+            }}
+            h2 {{
+                color: #00695c;
+                margin: 10px 0;
+                text-transform: capitalize;
+            }}
+            .meta {{
+                font-size: 0.8em;
+                color: #666;
+                margin-bottom: 8px;
+            }}
+            .post {{
+                background: #fff;
+                margin: 12px 0;
+                padding: 12px;
+                border-radius: 12px;
+                box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+            }}
+            .post img {{
+                width: 100%;
+                border-radius: 10px;
+                margin-bottom: 8px;
+            }}
+            .post p {{
+                font-size: 0.95em;
+                color: #333;
+                line-height: 1.4em;
+                margin: 0;
+            }}
+            a {{
+                text-decoration: none;
+                color: inherit;
+            }}
+            .home {{
+                display: inline-block;
+                margin-top: 15px;
+                font-size: 1.1em;
+            }}
+            .refresh {{
+                background:#00695c;
+                color:#fff;
+                padding:6px 10px;
+                border-radius:6px;
+                text-decoration:none;
+                font-size:0.9em;
+                margin-left:10px;
+            }}
+        </style>
+        </head><body>
+        <h2>Telegram: {channel_name}
+            <a class='refresh' href='?refresh=1'>🔄 Refresh</a>
+        </h2>
+        <div class='meta'>Last updated: {last_updated}</div>
+        {posts or "<p>No text or image posts found.</p>"}
+        <p class='home'><a href='/'>🏠 Home</a></p>
         </body></html>
         """
     except Exception as e:
-        return f"<p>Error: {e}</p>"
-
+        return f"<p>Error loading feed: {e}</p>"
 # ------------------ ePaper Routes ------------------
 @app.route("/today")
 def today_links():
@@ -169,29 +271,39 @@ def today_links():
     for i, loc in enumerate(LOCATIONS):
         url = get_url_for_location(loc)
         color = RGB_COLORS[i % len(RGB_COLORS)]
+        # Use /browse for the external ePaper URL
         cards += f'<div class="card" style="background:{color}"><a href="/browse?url={url}">{loc}</a></div>'
     return render_template_string(wrap_home("Today's Editions", cards))
 
 @app.route("/njayar")
 def njayar_archive():
-    start = datetime.date(2019, 1, 6)
-    today = datetime.date.today()
+    # Only show Njayar editions starting from 2024-06-30
     cutoff = datetime.date(2024, 6, 30)
+
+    # Find all Sundays from cutoff up to today
+    today = datetime.date.today()
     sundays = []
-    d = start
+    d = cutoff
+    # Move 'd' forward to the first Sunday on or after cutoff
+    while d.weekday() != 6: # 6 is Sunday
+        d += datetime.timedelta(days=1)
+
     while d <= today:
-        if d >= cutoff:
-            sundays.append(d)
+        sundays.append(d)
         d += datetime.timedelta(days=7)
+
     cards = ""
     for i, d in enumerate(reversed(sundays)):
         url = get_url_for_location("Njayar Prabhadham", d)
         color = RGB_COLORS[i % len(RGB_COLORS)]
+        # Use /browse for the external ePaper URL
         cards += f'<div class="card" style="background:{color}"><a href="/browse?url={url}">{d}</a></div>'
     return render_template_string(wrap_home("Njayar Prabhadham - Sundays", cards))
 
 # ------------------ Home (Browser Hub) ------------------
 def wrap_home(title, inner):
+    # This template is for the pages called from the homepage (like /today, /njayar)
+    # and includes client-side JS for managing custom cards on those pages too.
     return f"""
     <!DOCTYPE html><html><head>
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
@@ -213,6 +325,7 @@ def wrap_home(title, inner):
         .del{{right:8px;}} .edit{{right:40px;}}
     </style></head>
     <body>
+        <p><a href="/">🏠 Home</a></p>
         <h1>{title}</h1>
         <div class="grid" id="grid">{inner}<div class="card add" onclick="openModal()">+</div></div>
         <div id="modal">
@@ -226,6 +339,7 @@ def wrap_home(title, inner):
         </div>
         <script>
             let editIndex=null;
+            const RGB_COLORS={json.dumps(RGB_COLORS)};
             function openModal(i=null) {{
                 editIndex=i;
                 document.getElementById('modal').style.display='flex';
@@ -257,7 +371,8 @@ def wrap_home(title, inner):
                 arr.forEach((g,i)=>{{
                     let d=document.createElement('div');
                     d.className='card custom';
-                    d.style.background='{RGB_COLORS[3]}';
+                    // Custom cards on subpages use a different color for distinction
+                    d.style.background=RGB_COLORS[3]; 
                     d.innerHTML=`<a href="/browse?url=${{encodeURIComponent(g.url)}}" target="_self">${{g.name}}</a>
                                  <button class='del' onclick='del(${{i}})'>✕</button>
                                  <button class='edit' onclick='openModal(${{i}})'>✎</button>`;
@@ -271,15 +386,30 @@ def wrap_home(title, inner):
 
 @app.route("/")
 def homepage():
+    # MODIFIED: Added links for ePaper and Telegram feeds.
     BUILTIN_LINKS = [
-        
+        {"name": "Today's ePaper", "url": "/today", "icon": "📰"},
+        {"name": "Njayar ePaper", "url": "/njayar", "icon": "🗓️"},
+        {"name": "Pathravarthakal", "url": "/telegram/Pathravarthakal", "icon": "📣"},
+        {"name": "DailyCa", "url": "/telegram/DailyCa", "icon": "🗞️"},
         {"name": "GitHub", "url": "https://github.com/", "icon": "🐙"},
-        {"name": "Mobile TV", "url": "http://capitalist-anthe-pscj-4a28f285.koyeb.app/", "icon": "📺"},
-        {"name": "VRadio", "url": "http://likely-zelda-junction-66aa4be8.koyeb.app/", "icon": "📻"},
-        {"name": "Crystal TV", "url": "https://crystal.tv/web/", "icon": "💎"},
+        {"name": "Mobile TV", "url": "https://capitalist-anthe-pscj-4a28f285.koyeb.app/", "icon": "📺"},
+        {"name": "VRadio", "url": "https://likely-zelda-junction-66aa4be8.koyeb.app/", "icon": "📻"},
+        {"name": "Koyeb", "url": "https://app.koyeb.com/", "icon": "💎"},
         {"name": "ChatGPT", "url": "https://chatgpt.com/auth/login", "icon": "🤖"},
-        {"name": "KAS Ranker", "url": "https://www.kasranker.com/", "icon": ""},
-    
+    ]
+
+    # Generate HTML for built-in links
+    link_html = []
+    for x in BUILTIN_LINKS:
+        # Internal links (/...) open in the current window. External links (http...) open in a new tab.
+        target_attr = 'target="_blank"' if x['url'].startswith('http') else 'target="_self"'
+        # Use /browse for external links to maintain app-level browsing, 
+        # but keep internal links as-is.
+        final_url = f"/browse?url={x['url']}" if x['url'].startswith('http') and not any(r in x['url'] for r in ["koyeb.app", "koyeb.com"]) else x['url']
+        link_html.append(
+            f'<div class="card"><div class="icon">{x["icon"]}</div><a href="{final_url}" {target_attr}>{x["name"]}</a></div>'
+        )
 
     html = f"""
     <!DOCTYPE html>
@@ -406,11 +536,10 @@ def homepage():
     <body>
         <h1>Lite Browser</h1>
         <div class="grid" id="grid">
-            {''.join([f'<div class="card"><div class="icon">{x["icon"]}</div><a href="{x["url"]}" target="_blank">{x["name"]}</a></div>' for x in BUILTIN_LINKS])}
+            {''.join(link_html)}
             <div class="card add-card" onclick="openAddModal()">+</div>
         </div>
 
-        <!-- Add/Edit Modal -->
         <div id="addModal">
             <div class="modal">
                 <h3 id="modalTitle">Add Shortcut</h3>
@@ -466,6 +595,10 @@ def homepage():
             }}
             function toggleMenu(i){{
                 const d=document.getElementById(`dropdown-${{i}}`);
+                // Close other menus
+                document.querySelectorAll('.dropdown').forEach(dd => {{
+                    if(dd.id !== `dropdown-${{i}}`) dd.style.display = 'none';
+                }});
                 d.style.display=d.style.display==='block'?'none':'block';
             }}
             function renderCustomGrids(){{
@@ -475,6 +608,8 @@ def homepage():
                 grids.forEach((g,i)=>{{
                     const div=document.createElement('div');
                     div.className='card custom';
+                    // Custom grids open external URLs using the /browse route
+                    const custom_url = g.url.startsWith('http') ? `/browse?url=${{encodeURIComponent(g.url)}}` : g.url;
                     div.innerHTML=`
                         <div class="menu" onclick="toggleMenu(${{i}})">⋮</div>
                         <div class="dropdown" id="dropdown-${{i}}">
@@ -482,13 +617,14 @@ def homepage():
                             <button onclick="deleteGrid(${{i}});toggleMenu(${{i}})">🗑 Delete</button>
                         </div>
                         <div class="icon">${{g.icon}}</div>
-                        <a href="${{g.url}}" target="_blank">${{g.name}}</a>`;
+                        <a href="${{custom_url}}" target="_self">${{g.name}}</a>`;
                     grid.insertBefore(div, grid.lastElementChild);
                 }});
             }}
             window.onload=renderCustomGrids;
             window.onclick=function(e){{
-                if(!e.target.matches('.menu')){{
+                // Close menu if click is outside the menu button/dropdown
+                if(!e.target.matches('.menu') && !e.target.closest('.dropdown')){{
                     document.querySelectorAll('.dropdown').forEach(d=>d.style.display='none');
                 }}
             }}
@@ -500,6 +636,9 @@ def homepage():
 
 # ------------------ Run ------------------
 if __name__ == "__main__":
+    # Ensure XML folder is created before threads start
+    os.makedirs(XML_FOLDER, exist_ok=True)
+
     threading.Thread(target=update_epaper_json, daemon=True).start()
     threading.Thread(target=telegram_updater, daemon=True).start()
-    app.run(host="0.0.0.0", port=8000)
+    app.run(host="0.0.0.0", port=8000) 
