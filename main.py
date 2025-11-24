@@ -1,397 +1,505 @@
 import os
-import io
-import re
 import time
-import random
 import json
+import feedparser
 import threading
-import subprocess
-import logging
-import pandas as pd
-from collections import deque
-from logging.handlers import RotatingFileHandler
-from flask import Flask, request, send_file, Response, render_template_string, abort, stream_with_context
-
-# ==============================================================
-# 🧠 Basic Config
-# ==============================================================
+import datetime
+import requests
+import brotli
+import re
+from flask import Flask, render_template_string, Response, request, abort
+from bs4 import BeautifulSoup
+import xml.etree.ElementTree as ET
 
 app = Flask(__name__)
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-# ==============================================================
-# 📘 MCQ Converter SECTION
-# ==============================================================
+# -------------------- Config --------------------
+UPLOAD_FOLDER = "static"
+EPAPER_TXT = "epaper.txt"
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
-def parse_mcqs(text):
-    text = text.replace('\r\n', '\n').replace('\r','\n')
-    lines = [l.strip() for l in text.split('\n') if l.strip()]
+LOCATIONS = [
+    "Kozhikode", "Malappuram", "Kannur", "Thrissur",
+    "Kochi", "Thiruvananthapuram", "Palakkal", "Gulf"
+]
+RGB_COLORS = [
+    "#FF6B6B", "#6BCB77", "#4D96FF", "#FFD93D",
+    "#FF6EC7", "#00C2CB", "#FFA41B", "#845EC2"
+]
 
-    rows = []
-    qno = None
-    qtext_lines = []
-    opts = {}
-    answer = None
-    explanation_lines = []
-    capturing_expl = False
+TELEGRAM_CHANNELS = {
+    "Pathravarthakal": "https://t.me/s/Pathravarthakal",
+    "AnotherChannel": "https://t.me/s/AnotherChannel"
+}
+XML_FOLDER = "telegram_xml"
+os.makedirs(XML_FOLDER, exist_ok=True)
 
-    for line in lines:
-        # ✅ Match option lines
-        m_opt = re.match(r'^[\(\[]?([a-dA-D])[\)\:\-]*\s*(.*)', line)
-        if m_opt and not capturing_expl:
-            opt_text = m_opt.group(2).strip()
-            opt_text = re.sub(r'^[\.\)\:\-\s]+', '', opt_text)
-            opts[m_opt.group(1).lower()] = opt_text
-            continue
+# ------------------ Utility ------------------
+def get_url_for_location(location, dt_obj=None):
+    if dt_obj is None:
+        dt_obj = datetime.datetime.now()
+    date_str = dt_obj.strftime('%Y-%m-%d')
+    return f"https://epaper.suprabhaatham.com/details/{location}/{date_str}/1"
 
-        # ✅ Match answer lines
-        m_ans = re.match(r'^(\d+)\.\s*(?:Answer|Ans)?[:\-]?\s*([A-Da-d])$', line)
-        if m_ans:
-            answer = m_ans.group(2).upper()
-            qno = m_ans.group(1)
-            capturing_expl = True
-            explanation_lines = []
-            continue
-
-        # ✅ Explanation mode
-        if capturing_expl:
-            if re.match(r'^\d+\.', line):
-                if opts and answer:
-                    question_full = '\n'.join(qtext_lines).strip() + '\n' + \
-                        f"A) {opts.get('a','')}\nB) {opts.get('b','')}\nC) {opts.get('c','')}\nD) {opts.get('d','')}"
-                    rows.append([
-                        qno,
-                        question_full,
-                        'A','B','C','D',
-                        {"A":1,"B":2,"C":3,"D":4}[answer],
-                        ' '.join(explanation_lines).strip(),
-                        ""
-                    ])
-                qno = None
-                qtext_lines = []
-                opts = {}
-                answer = None
-                capturing_expl = False
-                m_q = re.match(r'^(\d+)\.(.*)', line)
-                if m_q:
-                    qno = m_q.group(1)
-                    qtext_lines = [m_q.group(2).strip()]
-                continue
+# ------------------ Threads ------------------
+def update_epaper_json():
+    url = "https://api2.suprabhaatham.com/api/ePaper"
+    headers = {"Content-Type": "application/json", "Accept-Encoding": "br"}
+    while True:
+        try:
+            print("Fetching latest ePaper data...")
+            r = requests.post(url, json={}, headers=headers, timeout=10)
+            if r.headers.get('Content-Encoding') == 'br':
+                data = brotli.decompress(r.content).decode('utf-8')
             else:
-                explanation_lines.append(line)
-                continue
+                data = r.text
+            with open(EPAPER_TXT, "w", encoding="utf-8") as f:
+                f.write(data)
+            print("✅ epaper.txt updated successfully.")
+        except Exception as e:
+            print(f"[Error updating epaper.txt] {e}")
+        time.sleep(8640)
 
-        # ✅ Question start
-        m_q = re.match(r'^(\d+)\.(.*)', line)
-        if m_q:
-            qno = m_q.group(1)
-            qtext_lines = [m_q.group(2).strip()]
-            continue
+def fetch_telegram_xml(name, url):
+    try:
+        r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+        soup = BeautifulSoup(r.text, "html.parser")
+        rss_root = ET.Element("rss", version="2.0")
+        ch = ET.SubElement(rss_root, "channel")
+        ET.SubElement(ch, "title").text = f"{name} Telegram Feed"
+        for msg in soup.select(".tgme_widget_message_wrap")[:40]:
+            date_tag = msg.select_one("a.tgme_widget_message_date")
+            link = date_tag["href"] if date_tag else url
+            text_tag = msg.select_one(".tgme_widget_message_text")
+            desc_html = text_tag.decode_contents() if text_tag else ""
+            item = ET.SubElement(ch, "item")
+            ET.SubElement(item, "title").text = BeautifulSoup(desc_html, "html.parser").get_text(strip=True)[:80]
+            ET.SubElement(item, "link").text = link
+            ET.SubElement(item, "description").text = desc_html
+        ET.ElementTree(rss_root).write(os.path.join(XML_FOLDER, f"{name}.xml"), encoding="utf-8", xml_declaration=True)
+    except Exception as e:
+        print(f"[Error fetching {name}] {e}")
 
-        if qno:
-            qtext_lines.append(line)
+def telegram_updater():
+    while True:
+        for name, url in TELEGRAM_CHANNELS.items():
+            fetch_telegram_xml(name, url)
+        time.sleep(600)
 
-    # ✅ Final flush
-    if opts and answer:
-        question_full = '\n'.join(qtext_lines).strip() + '\n' + \
-            f"A) {opts.get('a','')}\nB) {opts.get('b','')}\nC) {opts.get('c','')}\nD) {opts.get('d','')}"
-        rows.append([
-            qno,
-            question_full,
-            'A','B','C','D',
-            {"A":1,"B":2,"C":3,"D":4}[answer],
-            ' '.join(explanation_lines).strip(),
-            ""
-        ])
-
-    return rows
-
-
-@app.route("/mcq", methods=["GET"])
-def index_mcq():
-    return """
+# ------------------ Browser ------------------
+@app.route("/browse")
+def browse():
+    url = request.args.get("url", "")
+    if not url:
+        return "<p>No URL provided.</p>", 400
+    if not re.match(r"^https?://", url):
+        url = "https://" + url
+    return f"""
     <!DOCTYPE html>
     <html>
     <head>
-    <title>MCQ Converter</title>
-    <style>
-    body {display:flex;justify-content:center;align-items:center;height:100vh;font-family:Arial;background:linear-gradient(135deg,#4facfe,#00f2fe);margin:0;}
-    .container{text-align:center;background:white;padding:40px;border-radius:15px;box-shadow:0 10px 25px rgba(0,0,0,0.25);width:80%;max-width:900px;}
-    h1{font-size:36px;margin-bottom:20px;color:#222;}
-    textarea{width:100%;height:400px;padding:15px;font-size:16px;border-radius:10px;border:1px solid #ccc;resize:vertical;margin-bottom:20px;}
-    input[type=submit]{margin-top:20px;background:#007bff;color:white;border:none;padding:15px 30px;font-size:18px;border-radius:10px;cursor:pointer;transition:0.3s;}
-    input[type=submit]:hover{background:#0056b3;}
-    </style>
+        <meta name="viewport" content="width=device-width,initial-scale=1.0">
+        <title>Browser - {url}</title>
+        <style>
+            body {{margin:0;background:#000;height:100vh;display:flex;flex-direction:column;}}
+            iframe {{border:none;flex:1;width:100%;}}
+            .topbar {{
+                background:#111;color:white;display:flex;align-items:center;
+                padding:6px;gap:8px;font-family:sans-serif;
+            }}
+            input[type=text] {{
+                flex:1;padding:6px;border-radius:4px;border:none;outline:none;
+            }}
+            button {{background:#0078cc;color:white;border:none;padding:6px 10px;border-radius:4px;}}
+        </style>
     </head>
     <body>
-    <div class="container">
-        <h1>📘 MCQ to Excel Converter</h1>
-        <form method="post" action="/convert">
-            <textarea name="mcq_text" placeholder="Paste your MCQs here..."></textarea><br>
-            <input type="submit" value="Convert to Excel">
-        </form>
-    </div>
+        <div class="topbar">
+            <form style="display:flex;flex:1;" onsubmit="go(event)">
+                <input type="text" id="addr" value="{url}" placeholder="Enter URL...">
+                <button>Go</button>
+            </form>
+            <button onclick="home()">🏠</button>
+        </div>
+        <iframe src="{url}"></iframe>
+        <script>
+            function go(e) {{
+                e.preventDefault();
+                const url = document.getElementById('addr').value.trim();
+                window.location = '/browse?url=' + encodeURIComponent(url);
+            }}
+            function home() {{ window.location = '/'; }}
+        </script>
     </body>
     </html>
     """
 
-
-@app.route('/convert', methods=['POST'])
-def convert():
-    text = request.form.get("mcq_text", "").strip()
-    if not text:
-        return "No text provided!", 400
-
-    rows = parse_mcqs(text)
-    if not rows:
-        return "Could not parse any MCQs. Please check format.", 400
-
-    df = pd.DataFrame(rows, columns=[
-        "Sr. No.","Question Text","Option 1","Option 2","Option 3","Option 4",
-        "Correct Option Number (1–4)","Explanation","Image URL"
-    ])
-    output = io.BytesIO()
-    df.to_excel(output, index=False, header=True)
-    output.seek(0)
-    return send_file(output, as_attachment=True, download_name="mcqs.xlsx")
-
-# ==============================================================
-# 🎶 YouTube Playlist Radio SECTION
-# ==============================================================
-
-LOG_PATH = "/mnt/data/radio.log"
-COOKIES_PATH = "/mnt/data/cookies.txt"
-CACHE_FILE = "/mnt/data/playlist_cache.json"
-os.makedirs(DOWNLOAD_DIR := "/mnt/data/radio_cache", exist_ok=True)
-os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True)
-
-handler = RotatingFileHandler(LOG_PATH, maxBytes=5*1024*1024, backupCount=3)
-logging.getLogger().addHandler(handler)
-
-PLAYLISTS = {
-"youtube": "https://youtube.com/playlist?list=PLYKzjRvMAycik6KyPflN03WxNwF2usRIk",
-
- "firdous": "https://youtube.com/playlist?list=PLgkREi1Wpr-VMfNuvrgNhZqpjEbT7nxv0",
-
-"samastha": "https://youtube.com/playlist?list=PLgkREi1Wpr-XgNxocxs3iPj61pqMhi9bv",
-
-"jr": "https://youtube.com/playlist?list=PL7zZM6gm86jx6pR01WJL8jQ5wKIkndRMD",
-
-
-
-}
-
-PLAY_MODES = {
-
-
-
-}
-
-STREAMS_RADIO = {}
-MAX_QUEUE = 64
-REFRESH_INTERVAL = 600 # 10 min
-
-# ==============================================================
-# 🧩 Playlist Caching + Loader
-# ==============================================================
-
-def load_cache_radio():
-    if os.path.exists(CACHE_FILE):
-        try:
-            return json.load(open(CACHE_FILE))
-        except Exception:
-            return {}
-    return {}
-
-def save_cache_radio(data):
+# ------------------ Telegram HTML ------------------
+@app.route("/telegram/<channel_name>")
+def telegram_html(channel_name):
+    path = os.path.join(XML_FOLDER, f"{channel_name}.xml")
+    if not os.path.exists(path):
+        fetch_telegram_xml(channel_name, TELEGRAM_CHANNELS.get(channel_name, ""))
     try:
-        json.dump(data, open(CACHE_FILE, "w"))
+        feed = feedparser.parse(path)
+        posts = ""
+        for e in reversed(feed.entries[:30]):
+            title = e.get("title", "")
+            link = e.get("link", "#")
+            posts += f"<div class='post'><a href='{link}' target='_blank'>{title}</a></div>"
+        return f"""
+        <html><head><meta name='viewport' content='width=device-width,initial-scale=1.0'>
+        <style>
+        body{{font-family:sans-serif;background:#f9f9f9;padding:10px;}}
+        a{{text-decoration:none;color:#0078cc;}}
+        .post{{background:#fff;margin:10px 0;padding:10px;border-radius:8px;}}
+        </style></head><body>
+        <h2>{channel_name}</h2>
+        {posts or "<p>No posts.</p>"}
+        <p><a href="/">🏠 Home</a></p>
+        </body></html>
+        """
     except Exception as e:
-        logging.error(e)
+        return f"<p>Error: {e}</p>"
 
-CACHE_RADIO = load_cache_radio()
+# ------------------ ePaper Routes ------------------
+@app.route("/today")
+def today_links():
+    cards = ""
+    for i, loc in enumerate(LOCATIONS):
+        url = get_url_for_location(loc)
+        color = RGB_COLORS[i % len(RGB_COLORS)]
+        cards += f'<div class="card" style="background:{color}"><a href="/browse?url={url}">{loc}</a></div>'
+    return render_template_string(wrap_home("Today's Editions", cards))
 
+@app.route("/njayar")
+def njayar_archive():
+    start = datetime.date(2019, 1, 6)
+    today = datetime.date.today()
+    cutoff = datetime.date(2024, 6, 30)
+    sundays = []
+    d = start
+    while d <= today:
+        if d >= cutoff:
+            sundays.append(d)
+        d += datetime.timedelta(days=7)
+    cards = ""
+    for i, d in enumerate(reversed(sundays)):
+        url = get_url_for_location("Njayar Prabhadham", d)
+        color = RGB_COLORS[i % len(RGB_COLORS)]
+        cards += f'<div class="card" style="background:{color}"><a href="/browse?url={url}">{d}</a></div>'
+    return render_template_string(wrap_home("Njayar Prabhadham - Sundays", cards))
 
-def get_playlist_ids(url):
-    """Return list of YouTube video IDs from a playlist URL sorted by latest upload date."""
-    try:
-        cmd = [
-            "yt-dlp",
-            "--flat-playlist",
-            "--dump-single-json",
-            "--no-warnings",
-            "--quiet",
-            url
-        ]
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        data = json.loads(result.stdout)
-
-        entries = [e for e in data.get("entries", []) if "id" in e]
-
-        # 🔹 Sort by upload date descending (latest first)
-        entries.sort(key=lambda e: e.get("upload_date", ""), reverse=True)
-
-        return [entry["id"] for entry in entries]
-    except Exception as e:
-        logging.error(f"get_playlist_ids() failed for {url}: {e}")
-        return []
-
-
-def load_playlist_ids_radio(name, url):
-    """Load and cache YouTube playlist IDs with safe mode handling."""
-    try:
-        ids = get_playlist_ids(url)
-        if not ids:
-            logging.warning(f"[{name}] ⚠️ No videos found in playlist — using empty list.")
-            CACHE_RADIO[name] = []
-            save_cache_radio(CACHE_RADIO)
-            return []
-
-        mode = PLAY_MODES.get(name, "normal").lower().strip()
-        if mode == "shuffle":
-            random.shuffle(ids)
-        elif mode == "reverse":
-            ids.reverse()
-
-        CACHE_RADIO[name] = ids
-        save_cache_radio(CACHE_RADIO)
-        logging.info(f"[{name}] Cached {len(ids)} videos in {mode.upper()} mode.")
-        return ids
-
-    except Exception as e:
-        logging.exception(f"[{name}] ❌ Failed to load playlist ({e}) — fallback to normal order.")
-        return CACHE_RADIO.get(name, [])
-
-
-
-# ⚡ Ultra-Lightweight Radio Worker (Low CPU/RAM)
-# ==============================================================
-
-def stream_worker_radio(name):
-    s = STREAMS_RADIO[name]
-    while True:
-        try:
-            ids = s["IDS"]
-            if not ids:
-                ids = load_playlist_ids_radio(name, PLAYLISTS[name])
-                s["IDS"] = ids
-            if not ids:
-                logging.warning(f"[{name}] No playlist ids found; sleeping 60s...")
-                time.sleep(60)
-                continue
-
-            vid = ids[s["INDEX"] % len(ids)]
-            s["INDEX"] += 1
-            url = f"https://www.youtube.com/watch?v={vid}"
-            logging.info(f"[{name}] ▶️ Now playing: {url}")
-
-            cmd = [
-                "yt-dlp", "-f", "bestaudio/best",
-                "--cookies", COOKIES_PATH,
-                "--user-agent", "Mozilla/5.0",
-                "-o", "-", "--quiet", "--no-warnings", url
-            ]
-            ytdlp = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-            ffmpeg = subprocess.Popen([
-                "ffmpeg", "-loglevel", "error", "-i", "pipe:0",
-                "-ac", "1", "-ar", "22050", "-b:a", "40k", "-f", "mp3", "pipe:1"
-            ], stdin=ytdlp.stdout, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-
-            ytdlp.stdout.close()  # Allow yt-dlp to exit when ffmpeg closes
-
-            # Stream directly — no big buffer
-            for chunk in iter(lambda: ffmpeg.stdout.read(2048), b""):
-                while len(s["QUEUE"]) >= MAX_QUEUE:
-                    time.sleep(0.2)
-                s["QUEUE"].append(chunk)
-
-            ffmpeg.wait(timeout=2)
-            logging.info(f"[{name}] ✅ Finished track.")
-            time.sleep(3)
-
-        except Exception as e:
-            logging.warning(f"[{name}] Worker error: {e}")
-            time.sleep(10)
-
-# ==============================================================
-# 🌐 Flask Routes
-# ==============================================================
+# ------------------ Home (Browser Hub) ------------------
+def wrap_home(title, inner):
+    return f"""
+    <!DOCTYPE html><html><head>
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <title>{title}</title>
+    <style>
+        body{{font-family:'Segoe UI',sans-serif;background:#f0f2f5;margin:0;padding:20px;text-align:center;}}
+        h1{{margin-bottom:20px;}}
+        .grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:15px;max-width:800px;margin:auto;}}
+        .card{{padding:20px;border-radius:12px;box-shadow:0 2px 6px rgba(0,0,0,0.1);}}
+        .card a{{color:white;text-decoration:none;font-weight:bold;display:block;}}
+        .add{{background:#555;cursor:pointer;color:white;font-size:2em;}}
+        #modal{{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);
+                align-items:center;justify-content:center;}}
+        #modal .box{{background:white;padding:20px;border-radius:10px;width:90%;max-width:350px;text-align:left;}}
+        input{{width:100%;margin-bottom:10px;padding:8px;}}
+        button{{background:#0078cc;color:white;border:none;padding:8px 12px;border-radius:6px;}}
+        .edit,.del{{position:absolute;top:6px;font-size:0.8em;background:rgba(255,255,255,0.8);
+                     border:none;border-radius:4px;}}
+        .del{{right:8px;}} .edit{{right:40px;}}
+    </style></head>
+    <body>
+        <h1>{title}</h1>
+        <div class="grid" id="grid">{inner}<div class="card add" onclick="openModal()">+</div></div>
+        <div id="modal">
+            <div class="box">
+                <h3 id="modalTitle">Add Website</h3>
+                <input type="text" id="name" placeholder="Name">
+                <input type="text" id="url" placeholder="URL (https://...)">
+                <button onclick="save()">Save</button>
+                <button onclick="closeModal()" style="background:#777;">Cancel</button>
+            </div>
+        </div>
+        <script>
+            let editIndex=null;
+            function openModal(i=null) {{
+                editIndex=i;
+                document.getElementById('modal').style.display='flex';
+                if(i!==null){{
+                    let data=JSON.parse(localStorage.getItem('customGrids')||'[]')[i];
+                    name.value=data.name;url.value=data.url;
+                }} else{{name.value='';url.value='';}}
+            }}
+            function closeModal(){{document.getElementById('modal').style.display='none';}}
+            function save(){{
+                let n=name.value.trim(),u=url.value.trim();
+                if(!n||!u)return alert('Enter name & URL');
+                let arr=JSON.parse(localStorage.getItem('customGrids')||'[]');
+                if(editIndex!==null)arr[editIndex]={{name:n,url:u}};else arr.push({{name:n,url:u}});
+                localStorage.setItem('customGrids',JSON.stringify(arr));
+                closeModal();render();
+            }}
+            function del(i){{
+                if(!confirm('Delete this site?'))return;
+                let arr=JSON.parse(localStorage.getItem('customGrids')||'[]');
+                arr.splice(i,1);
+                localStorage.setItem('customGrids',JSON.stringify(arr));
+                render();
+            }}
+            function render(){{
+                document.querySelectorAll('.custom').forEach(e=>e.remove());
+                let arr=JSON.parse(localStorage.getItem('customGrids')||'[]');
+                let grid=document.getElementById('grid');
+                arr.forEach((g,i)=>{{
+                    let d=document.createElement('div');
+                    d.className='card custom';
+                    d.style.background='{RGB_COLORS[3]}';
+                    d.innerHTML=`<a href="/browse?url=${{encodeURIComponent(g.url)}}" target="_self">${{g.name}}</a>
+                                 <button class='del' onclick='del(${{i}})'>✕</button>
+                                 <button class='edit' onclick='openModal(${{i}})'>✎</button>`;
+                    grid.insertBefore(d,grid.lastElementChild);
+                }});
+            }}
+            render();
+        </script>
+    </body></html>
+    """
 
 @app.route("/")
-def home():
-    playlists = list(PLAYLISTS.keys())
-    html = """<!doctype html><html><head>
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>🎧 YouTube Radio</title>
-<style>
-body{background:#000;color:#0f0;font-family:Arial,Helvetica,sans-serif;text-align:center;margin:0;padding:12px}
-a{display:block;color:#0f0;text-decoration:none;border:1px solid #0f0;padding:10px;margin:8px;border-radius:8px;font-size:18px}
-a:hover{background:#0f0;color:#000}
-</style></head><body>
-<h2>🎶 YouTube Playlist Radio</h2>
-<a href="/mcq">🧠 Go to MCQ Converter</a>
-{% for p in playlists %}
-  <a href="/stream/{{p}}">▶ {{p|capitalize}}</a>
-{% endfor %}
-</body></html>"""
-    return render_template_string(html, playlists=playlists)
+def homepage():
+    BUILTIN_LINKS = [
+        
+        {"name": "GitHub", "url": "https://github.com/", "icon": "🐙"},
+        {"name": "Mobile TV", "url": "http://capitalist-anthe-pscj-4a28f285.koyeb.app/", "icon": "📺"},
+        {"name": "VRadio", "url": "http://likely-zelda-junction-66aa4be8.koyeb.app/", "icon": "📻"},
+        {"name": "Crystal TV", "url": "https://crystal.tv/web/", "icon": "💎"},
+        {"name": "ChatGPT", "url": "https://chatgpt.com/auth/login", "icon": "🤖"},
+        {"name": "KAS Ranker", "url": "https://www.kasranker.com/", "icon": ""},
+    
 
+    html = f"""
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Lite Browser Home</title>
+        <style>
+            body {{
+                font-family: 'Segoe UI', sans-serif;
+                background:#f7f8fa;
+                margin:0;
+                padding:20px;
+                color:#333;
+            }}
+            h1 {{
+                text-align:center;
+                margin-bottom:25px;
+            }}
+            .grid {{
+                display:grid;
+                grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
+                gap:15px;
+                max-width:1000px;
+                margin:auto;
+            }}
+            .card {{
+                position:relative;
+                background:white;
+                border-radius:15px;
+                box-shadow:0 2px 8px rgba(0,0,0,0.1);
+                padding:25px 10px;
+                display:flex;
+                flex-direction:column;
+                align-items:center;
+                justify-content:center;
+                transition:transform .2s, box-shadow .2s;
+            }}
+            .card:hover {{
+                transform:translateY(-4px);
+                box-shadow:0 4px 12px rgba(0,0,0,0.15);
+            }}
+            .card a {{
+                text-decoration:none;
+                color:#333;
+                font-weight:600;
+                font-size:1em;
+                text-align:center;
+                word-break:break-word;
+            }}
+            .icon {{
+                font-size:2em;
+                margin-bottom:10px;
+            }}
+            .menu {{
+                position:absolute;
+                top:8px;
+                right:10px;
+                cursor:pointer;
+                font-weight:bold;
+                font-size:1.2em;
+            }}
+            .dropdown {{
+                display:none;
+                position:absolute;
+                top:25px;
+                right:10px;
+                background:white;
+                box-shadow:0 2px 6px rgba(0,0,0,0.2);
+                border-radius:6px;
+                z-index:2;
+            }}
+            .dropdown button {{
+                border:none;
+                background:none;
+                padding:8px 12px;
+                text-align:left;
+                width:100%;
+                cursor:pointer;
+            }}
+            .dropdown button:hover {{
+                background:#f0f0f0;
+            }}
+            .add-card {{
+                background:#0078d7;
+                color:white;
+                font-size:2em;
+                font-weight:bold;
+                cursor:pointer;
+            }}
+            #addModal {{
+                position:fixed;
+                top:0;left:0;width:100%;height:100%;
+                background:rgba(0,0,0,0.5);
+                display:none;
+                justify-content:center;
+                align-items:center;
+            }}
+            #addModal .modal {{
+                background:#fff;
+                padding:20px;
+                border-radius:10px;
+                width:90%;
+                max-width:350px;
+            }}
+            input[type=text] {{
+                width:100%;
+                padding:8px;
+                margin-bottom:10px;
+                border:1px solid #ccc;
+                border-radius:6px;
+            }}
+            button {{
+                background:#0078d7;
+                color:white;
+                border:none;
+                padding:8px 12px;
+                border-radius:6px;
+                cursor:pointer;
+            }}
+        </style>
+    </head>
+    <body>
+        <h1>Lite Browser</h1>
+        <div class="grid" id="grid">
+            {''.join([f'<div class="card"><div class="icon">{x["icon"]}</div><a href="{x["url"]}" target="_blank">{x["name"]}</a></div>' for x in BUILTIN_LINKS])}
+            <div class="card add-card" onclick="openAddModal()">+</div>
+        </div>
 
-@app.route("/listen/<name>")
-def listen_radio_download(name):
-    if name not in STREAMS_RADIO:
-        abort(404)
-    s = STREAMS_RADIO[name]
-    def gen():
-        while True:
-            if s["QUEUE"]:
-                yield s["QUEUE"].popleft()
-            else:
-                time.sleep(0.05)
-    headers = {"Content-Disposition": f"attachment; filename={name}.mp3"}
-    return Response(stream_with_context(gen()), mimetype="audio/mpeg", headers=headers)
+        <!-- Add/Edit Modal -->
+        <div id="addModal">
+            <div class="modal">
+                <h3 id="modalTitle">Add Shortcut</h3>
+                <input type="text" id="gridName" placeholder="Name">
+                <input type="text" id="gridURL" placeholder="URL (https://...)">
+                <input type="text" id="gridIcon" placeholder="Icon (emoji)">
+                <button onclick="saveGrid()">Save</button>
+                <button onclick="closeAddModal()" style="background:#777;">Cancel</button>
+            </div>
+        </div>
 
+        <script>
+            let editIndex = null;
 
-@app.route("/stream/<name>")
-def stream_audio(name):
-    if name not in STREAMS_RADIO:
-        abort(404)
-    s = STREAMS_RADIO[name]
-    def gen():
-        while True:
-            if s["QUEUE"]:
-                yield s["QUEUE"].popleft()
-            else:
-                time.sleep(0.05)
-    return Response(stream_with_context(gen()), mimetype="audio/mpeg")
+            function openAddModal(index=null) {{
+                editIndex = index;
+                document.getElementById('modalTitle').textContent = index===null ? 'Add Shortcut' : 'Edit Shortcut';
+                const modal = document.getElementById('addModal');
+                modal.style.display = 'flex';
+                if (index!==null) {{
+                    const grids = JSON.parse(localStorage.getItem('customGrids')||'[]');
+                    const g = grids[index];
+                    document.getElementById('gridName').value = g.name;
+                    document.getElementById('gridURL').value = g.url;
+                    document.getElementById('gridIcon').value = g.icon;
+                }} else {{
+                    document.getElementById('gridName').value='';
+                    document.getElementById('gridURL').value='';
+                    document.getElementById('gridIcon').value='';
+                }}
+            }}
+            function closeAddModal() {{
+                document.getElementById('addModal').style.display='none';
+            }}
+            function saveGrid() {{
+                const name=document.getElementById('gridName').value.trim();
+                const url=document.getElementById('gridURL').value.trim();
+                const icon=document.getElementById('gridIcon').value.trim()||'🌐';
+                if(!name||!url) return alert('Please fill name and URL');
+                let grids=JSON.parse(localStorage.getItem('customGrids')||'[]');
+                if(editIndex!==null) grids[editIndex]={{name,url,icon}};
+                else grids.push({{name,url,icon}});
+                localStorage.setItem('customGrids',JSON.stringify(grids));
+                closeAddModal();
+                renderCustomGrids();
+            }}
+            function deleteGrid(index){{
+                if(!confirm('Delete this shortcut?'))return;
+                let grids=JSON.parse(localStorage.getItem('customGrids')||'[]');
+                grids.splice(index,1);
+                localStorage.setItem('customGrids',JSON.stringify(grids));
+                renderCustomGrids();
+            }}
+            function toggleMenu(i){{
+                const d=document.getElementById(`dropdown-${{i}}`);
+                d.style.display=d.style.display==='block'?'none':'block';
+            }}
+            function renderCustomGrids(){{
+                document.querySelectorAll('.custom').forEach(e=>e.remove());
+                const grid=document.getElementById('grid');
+                const grids=JSON.parse(localStorage.getItem('customGrids')||'[]');
+                grids.forEach((g,i)=>{{
+                    const div=document.createElement('div');
+                    div.className='card custom';
+                    div.innerHTML=`
+                        <div class="menu" onclick="toggleMenu(${{i}})">⋮</div>
+                        <div class="dropdown" id="dropdown-${{i}}">
+                            <button onclick="openAddModal(${{i}});toggleMenu(${{i}})">✎ Edit</button>
+                            <button onclick="deleteGrid(${{i}});toggleMenu(${{i}})">🗑 Delete</button>
+                        </div>
+                        <div class="icon">${{g.icon}}</div>
+                        <a href="${{g.url}}" target="_blank">${{g.name}}</a>`;
+                    grid.insertBefore(div, grid.lastElementChild);
+                }});
+            }}
+            window.onload=renderCustomGrids;
+            window.onclick=function(e){{
+                if(!e.target.matches('.menu')){{
+                    document.querySelectorAll('.dropdown').forEach(d=>d.style.display='none');
+                }}
+            }}
+        </script>
+    </body>
+    </html>
+    """
+    return html
 
-def cache_refresher():
-    while True:
-        for name, url in PLAYLISTS.items():
-            last = STREAMS_RADIO[name]["LAST_REFRESH"]
-            if time.time() - last > 7200:  # every 2 hours
-                logging.info(f"[{name}] 🔁 Refreshing playlist cache...")
-                STREAMS_RADIO[name]["IDS"] = load_playlist_ids_radio(name, url)
-                STREAMS_RADIO[name]["LAST_REFRESH"] = time.time()
-        time.sleep(600)
-
-
-# ==============================================================
-# 🚀 START SERVER
-# ==============================================================
-
+# ------------------ Run ------------------
 if __name__ == "__main__":
-    for pname, url in PLAYLISTS.items():
-        STREAMS_RADIO[pname] = {
-            "IDS": load_playlist_ids_radio(pname, url),
-            "INDEX": 0,
-            "QUEUE": deque(),
-            "LAST_REFRESH": time.time(),
-        }
-        threading.Thread(target=stream_worker_radio, args=(pname,), daemon=True).start()
-
-    # ✅ Start cache refresher thread properly
-    threading.Thread(target=cache_refresher, daemon=True).start()
-
-    logging.info("🚀 Unified Flask App (Radio + MCQ Converter) running at http://0.0.0.0:8000")
+    threading.Thread(target=update_epaper_json, daemon=True).start()
+    threading.Thread(target=telegram_updater, daemon=True).start()
     app.run(host="0.0.0.0", port=8000)
