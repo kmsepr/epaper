@@ -327,7 +327,7 @@ def wrap_home(title, inner):
     <body>
         <p><a href="/">🏠 Home</a></p>
         <h1>{title}</h1>
-        <div class="grid" id="grid">{inner}<div class="card add" onclick="openModal()">+</div></div>
+        <div class="grid" id="grid">{inner}</div>
         <div id="modal">
             <div class="box">
                 <h3 id="modalTitle">Add Website</h3>
