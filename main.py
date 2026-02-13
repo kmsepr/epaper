@@ -275,30 +275,7 @@ def today_links():
         cards += f'<div class="card" style="background:{color}"><a href="/browse?url={url}">{loc}</a></div>'
     return render_template_string(wrap_home("Today's Editions", cards))
 
-@app.route("/njayar")
-def njayar_archive():
-    # Only show Njayar editions starting from 2024-06-30
-    cutoff = datetime.date(2024, 6, 30)
 
-    # Find all Sundays from cutoff up to today
-    today = datetime.date.today()
-    sundays = []
-    d = cutoff
-    # Move 'd' forward to the first Sunday on or after cutoff
-    while d.weekday() != 6: # 6 is Sunday
-        d += datetime.timedelta(days=1)
-
-    while d <= today:
-        sundays.append(d)
-        d += datetime.timedelta(days=7)
-
-    cards = ""
-    for i, d in enumerate(reversed(sundays)):
-        url = get_url_for_location("Njayar Prabhadham", d)
-        color = RGB_COLORS[i % len(RGB_COLORS)]
-        # Use /browse for the external ePaper URL
-        cards += f'<div class="card" style="background:{color}"><a href="/browse?url={url}">{d}</a></div>'
-    return render_template_string(wrap_home("Njayar Prabhadham - Sundays", cards))
 
 # ------------------ Home (Browser Hub) ------------------
 def wrap_home(title, inner):
@@ -389,14 +366,8 @@ def homepage():
     # MODIFIED: Added links for ePaper and Telegram feeds.
     BUILTIN_LINKS = [
         {"name": "Today's ePaper", "url": "/today", "icon": "📰"},
-        {"name": "Njayar ePaper", "url": "/njayar", "icon": "🗓️"},
         {"name": "Pathravarthakal", "url": "/telegram/Pathravarthakal", "icon": "📣"},
         {"name": "DailyCa", "url": "/telegram/DailyCa", "icon": "🗞️"},
-        {"name": "GitHub", "url": "https://github.com/", "icon": "🐙"},
-        {"name": "Mobile TV", "url": "https://capitalist-anthe-pscj-4a28f285.koyeb.app/", "icon": "📺"},
-        {"name": "VRadio", "url": "https://likely-zelda-junction-66aa4be8.koyeb.app/", "icon": "📻"},
-        {"name": "Koyeb", "url": "https://app.koyeb.com/", "icon": "💎"},
-        {"name": "ChatGPT", "url": "https://chatgpt.com/auth/login", "icon": "🤖"},
     ]
 
     # Generate HTML for built-in links
