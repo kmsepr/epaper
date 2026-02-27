@@ -121,6 +121,7 @@ def telegram_html(channel_name):
 
     path = os.path.join(XML_FOLDER, f"{channel_name}.xml")
 
+    # Refresh every 2 minutes or if ?refresh=1
     refresh_now = request.args.get("refresh") == "1"
     if refresh_now or not os.path.exists(path) or (time.time() - os.path.getmtime(path) > 120):
         fetch_telegram_xml(channel_name, TELEGRAM_CHANNELS[channel_name])
@@ -128,15 +129,24 @@ def telegram_html(channel_name):
     try:
         feed = feedparser.parse(path)
 
-        # ✅ NEWEST FIRST (without modifying feed structure)
+        # ✅ Newest first (without modifying feed structure)
         entries = list(feed.entries)[::-1]
 
         posts = ""
-        for e in entries[:50]:
+        count = 0
+
+        for e in entries:
+            title = e.get("title", "").lower()
+
+            # 🚫 Skip pinned messages
+            if "pinned" in title:
+                continue
+
             link = e.get("link", TELEGRAM_CHANNELS[channel_name])
             desc_html = e.get("description", "").strip()
             soup = BeautifulSoup(desc_html, "html.parser")
 
+            # Remove unwanted tags
             for tag in soup.find_all([
                 "video", "iframe", "source", "audio",
                 "svg", "poll", "button", "script", "style"
@@ -146,6 +156,7 @@ def telegram_html(channel_name):
             img_tag = soup.find("img")
             text_only = soup.get_text(strip=True)
 
+            # Skip empty posts
             if not text_only and not img_tag:
                 continue
 
@@ -161,6 +172,10 @@ def telegram_html(channel_name):
             </div>
             """
 
+            count += 1
+            if count >= 50:
+                break
+
         last_updated = datetime.datetime.fromtimestamp(
             os.path.getmtime(path)
         ).strftime("%Y-%m-%d %H:%M:%S")
@@ -169,18 +184,71 @@ def telegram_html(channel_name):
         <html><head>
         <meta name='viewport' content='width=device-width,initial-scale=1.0'>
         <title>{channel_name} Posts</title>
+        <style>
+            body {{
+                font-family: system-ui, sans-serif;
+                background: #f5f6f7;
+                margin: 0;
+                padding: 10px;
+            }}
+            h2 {{
+                color: #00695c;
+                margin: 10px 0;
+                text-transform: capitalize;
+            }}
+            .meta {{
+                font-size: 0.8em;
+                color: #666;
+                margin-bottom: 8px;
+            }}
+            .post {{
+                background: #fff;
+                margin: 12px 0;
+                padding: 12px;
+                border-radius: 12px;
+                box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+            }}
+            .post img {{
+                width: 100%;
+                border-radius: 10px;
+                margin-bottom: 8px;
+            }}
+            .post p {{
+                font-size: 0.95em;
+                color: #333;
+                line-height: 1.4em;
+                margin: 0;
+            }}
+            a {{
+                text-decoration: none;
+                color: inherit;
+            }}
+            .home {{
+                display: inline-block;
+                margin-top: 15px;
+                font-size: 1.1em;
+            }}
+            .refresh {{
+                background:#00695c;
+                color:#fff;
+                padding:6px 10px;
+                border-radius:6px;
+                text-decoration:none;
+                font-size:0.9em;
+                margin-left:10px;
+            }}
+        </style>
         </head><body>
         <h2>Telegram: {channel_name}
-            <a href='?refresh=1'>🔄 Refresh</a>
+            <a class='refresh' href='?refresh=1'>🔄 Refresh</a>
         </h2>
-        <div>Last updated: {last_updated}</div>
+        <div class='meta'>Last updated: {last_updated}</div>
         {posts or "<p>No text or image posts found.</p>"}
-        <p><a href='/'>🏠 Home</a></p>
+        <p class='home'><a href='/'>🏠 Home</a></p>
         </body></html>
         """
     except Exception as e:
         return f"<p>Error loading feed: {e}</p>"
-
 # ------------------ ePaper Routes ------------------
 @app.route("/today")
 def today_links():
@@ -196,10 +264,59 @@ def today_links():
 @app.route("/")
 def homepage():
     return """
-    <h1>Lite Browser</h1>
-    <p><a href="/today">📰 Today's ePaper</a></p>
-    <p><a href="/telegram/Pathravarthakal">📣 Pathravarthakal</a></p>
-    <p><a href="/telegram/DailyCa">🗞️ DailyCa</a></p>
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Lite Browser</title>
+        <style>
+            body {
+                font-family: system-ui, sans-serif;
+                background: #f4f6f8;
+                margin: 0;
+                padding: 30px 15px;
+                text-align: center;
+            }
+            h1 {
+                font-size: 2.2em;
+                margin-bottom: 40px;
+                color: #222;
+            }
+            .btn {
+                display: block;
+                width: 100%;
+                max-width: 400px;
+                margin: 15px auto;
+                padding: 18px;
+                font-size: 1.3em;
+                font-weight: 600;
+                text-decoration: none;
+                border-radius: 14px;
+                color: white;
+                box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+            }
+            .epaper { background: #0078d7; }
+            .pathra { background: #009688; }
+            .dailyca { background: #e91e63; }
+        </style>
+    </head>
+    <body>
+        <h1>Lite Browser</h1>
+
+        <a href="/today" class="btn epaper">
+            📰 Today's ePaper
+        </a>
+
+        <a href="/telegram/Pathravarthakal" class="btn pathra">
+            📣 Pathravarthakal
+        </a>
+
+        <a href="/telegram/DailyCa" class="btn dailyca">
+            🗞️ DailyCa
+        </a>
+
+    </body>
+    </html>
     """
 
 # ------------------ Run ------------------
