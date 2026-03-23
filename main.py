@@ -270,35 +270,51 @@ def homepage():
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Lite Browser</title>
         <style>
-            body {
-                font-family: system-ui, sans-serif;
-                background: #f4f6f8;
-                margin: 0;
-                padding: 30px 15px;
-                text-align: center;
-            }
-            h1 {
-                font-size: 2.2em;
-                margin-bottom: 40px;
-                color: #222;
-            }
-            .btn {
-                display: block;
-                width: 100%;
-                max-width: 400px;
-                margin: 15px auto;
-                padding: 18px;
-                font-size: 1.3em;
-                font-weight: 600;
-                text-decoration: none;
-                border-radius: 14px;
-                color: white;
-                box-shadow: 0 4px 10px rgba(0,0,0,0.08);
-            }
-            .epaper { background: #0078d7; }
-            .pathra { background: #009688; }
-            .dailyca { background: #e91e63; }
-        </style>
+    body {
+        font-family: system-ui, sans-serif;
+        background: #f4f6f8;
+        margin: 0;
+        padding: 15px 8px;
+        text-align: center;
+    }
+
+    h1 {
+        font-size: 1.6em;
+        margin-bottom: 20px;
+        color: #222;
+    }
+
+    .btn {
+        display: block;
+        width: 100%;
+        max-width: 320px;
+        margin: 10px auto;
+        padding: 14px;
+        font-size: 1.05em;
+        font-weight: 600;
+        text-decoration: none;
+        border-radius: 10px;
+        color: white;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+    }
+
+    .epaper { background: #0078d7; }
+    .pathra { background: #009688; }
+    .dailyca { background: #e91e63; }
+
+    /* 🔥 Extra small screens (2.4 inch ~240px width) */
+    @media (max-width: 280px) {
+        h1 {
+            font-size: 1.2em;
+        }
+
+        .btn {
+            font-size: 0.85em;
+            padding: 10px;
+            border-radius: 8px;
+        }
+    }
+</style>
     </head>
     <body>
         <h1>Lite Browser</h1>
