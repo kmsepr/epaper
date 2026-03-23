@@ -261,80 +261,85 @@ def today_links():
     """
 
 # ------------------ Home ------------------
+# ------------------ Home ------------------
 @app.route("/")
 def homepage():
     return """
     <!DOCTYPE html>
     <html>
     <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
         <title>Lite Browser</title>
         <style>
-    body {
-        font-family: system-ui, sans-serif;
-        background: #f4f6f8;
-        margin: 0;
-        padding: 15px 8px;
-        text-align: center;
-    }
+            * {
+                box-sizing: border-box;
+            }
 
-    h1 {
-        font-size: 1.6em;
-        margin-bottom: 20px;
-        color: #222;
-    }
+            body {
+                font-family: system-ui, sans-serif;
+                background: #f4f6f8;
+                margin: 0;
+                padding: 8px;
+                text-align: center;
+            }
 
-    .btn {
-        display: block;
-        width: 100%;
-        max-width: 320px;
-        margin: 10px auto;
-        padding: 14px;
-        font-size: 1.05em;
-        font-weight: 600;
-        text-decoration: none;
-        border-radius: 10px;
-        color: white;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.08);
-    }
+            h1 {
+                font-size: 1.1em;
+                margin: 8px 0 12px 0;
+                color: #222;
+            }
 
-    .epaper { background: #0078d7; }
-    .pathra { background: #009688; }
-    .dailyca { background: #e91e63; }
+            .grid {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 6px;
+                max-width: 240px;
+                margin: auto;
+            }
 
-    /* 🔥 Extra small screens (2.4 inch ~240px width) */
-    @media (max-width: 280px) {
-        h1 {
-            font-size: 1.2em;
-        }
+            .btn {
+                display: block;
+                padding: 10px 6px;
+                font-size: 0.85em;
+                font-weight: 600;
+                text-decoration: none;
+                border-radius: 8px;
+                color: white;
+            }
 
-        .btn {
-            font-size: 0.85em;
-            padding: 10px;
-            border-radius: 8px;
-        }
-    }
-</style>
+            .epaper { background: #0078d7; }
+            .pathra { background: #009688; }
+            .dailyca { background: #e91e63; }
+
+            /* Ultra small screens */
+            @media (max-width: 260px) {
+                h1 {
+                    font-size: 1em;
+                }
+
+                .btn {
+                    font-size: 0.75em;
+                    padding: 8px 4px;
+                }
+
+                .grid {
+                    gap: 5px;
+                }
+            }
+        </style>
     </head>
     <body>
         <h1>Lite Browser</h1>
 
-        <a href="/today" class="btn epaper">
-            📰 Today's ePaper
-        </a>
-
-        <a href="/telegram/Pathravarthakal" class="btn pathra">
-            📣 Pathravarthakal
-        </a>
-
-        <a href="/telegram/DailyCa" class="btn dailyca">
-            🗞️ DailyCa
-        </a>
+        <div class="grid">
+            <a href="/today" class="btn epaper">ePaper</a>
+            <a href="/telegram/Pathravarthakal" class="btn pathra">News</a>
+            <a href="/telegram/DailyCa" class="btn dailyca">DailyCa</a>
+        </div>
 
     </body>
     </html>
     """
-
 # ------------------ Run ------------------
 if __name__ == "__main__":
     os.makedirs(XML_FOLDER, exist_ok=True)
