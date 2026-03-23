@@ -18,15 +18,6 @@ UPLOAD_FOLDER = "static"
 EPAPER_TXT = "epaper.txt"
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
-LOCATIONS = [
-    "Kozhikode", "Malappuram", "Kannur", "Thrissur",
-    "Kochi", "Thiruvananthapuram", "Palakkal", "Gulf"
-]
-RGB_COLORS = [
-    "#FF6B6B", "#6BCB77", "#4D96FF", "#FFD93D",
-    "#FF6EC7", "#00C2CB", "#FFA41B", "#845EC2"
-]
-
 TELEGRAM_CHANNELS = {
     "Pathravarthakal": "https://t.me/s/Pathravarthakal",
     "DailyCa": "https://t.me/s/DailyCAMalayalam"
@@ -329,7 +320,7 @@ def homepage():
         </style>
     </head>
     <body>
-        <h1>Lite Browser</h1>
+        <h1>പത്രവാർത്തകൾ </h1>
 
         <div class="grid">
             <a href="/today" class="btn epaper">ePaper</a>
