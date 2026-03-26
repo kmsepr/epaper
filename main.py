@@ -4,7 +4,6 @@ import feedparser
 import threading
 import datetime
 import requests
-import brotli
 import re
 from flask import Flask
 from bs4 import BeautifulSoup
@@ -16,7 +15,6 @@ app = Flask(__name__)
 # -------------------- Config --------------------
 AUDIO_FOLDER = "static/audio"
 XML_FOLDER = "telegram_xml"
-EPAPER_TXT = "epaper.txt"
 
 TELEGRAM_CHANNELS = {
     "Pathravarthakal": "https://t.me/s/Pathravarthakal",
@@ -47,10 +45,11 @@ def fetch_telegram_xml(name, url):
 
             clean_text = BeautifulSoup(desc_html, "html.parser").get_text(" ", strip=True)
 
-            # 🔥 Remove Telegram junk
+            # Remove links, usernames, telegram junk
             clean_text = re.sub(r"http\S+", "", clean_text)
             clean_text = re.sub(r"@\w+", "", clean_text)
             clean_text = re.sub(r"(View in Telegram|Join Channel|Telegram|Open App)", "", clean_text, flags=re.IGNORECASE)
+
             clean_text = re.sub(r"\s+", " ", clean_text).strip()
 
             short_title = clean_text[:100] + ("..." if len(clean_text) > 100 else "")
@@ -99,13 +98,21 @@ def generate_audio_from_feed(channel_name):
         title = e.get("title", "")
         desc_text = e.get("description", "")
 
-        # Remove English
-        desc_text = re.sub(r"[A-Za-z]+", "", desc_text)
+        # Remove links, usernames, junk
+        desc_text = re.sub(r"http\S+", "", desc_text)
+        desc_text = re.sub(r"@\w+", "", desc_text)
+        desc_text = re.sub(r"(View in Telegram|Join Channel|Telegram|Open App)", "", desc_text, flags=re.IGNORECASE)
 
-        # Remove emojis & keep Malayalam only
-        desc_text = re.sub(r"[^\u0D00-\u0D7F\s.,!?]", "", desc_text)
+        # 🔥 Remove emojis (MAIN FIX)
+        desc_text = re.sub(r"[\U00010000-\U0010ffff]", " ", desc_text)
 
-        # Skip useless content
+        # Keep Malayalam + English + numbers + punctuation
+        desc_text = re.sub(r"[^\u0D00-\u0D7Fa-zA-Z0-9\s.,!?]", " ", desc_text)
+
+        # Clean spaces
+        desc_text = re.sub(r"\s+", " ", desc_text).strip()
+
+        # Skip useless
         if len(desc_text) < 20:
             continue
 
@@ -114,6 +121,7 @@ def generate_audio_from_feed(channel_name):
     if not full_text.strip():
         return
 
+    # Limit size (gTTS safe)
     if len(full_text) > 3500:
         full_text = full_text[:3500]
 
