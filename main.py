@@ -45,10 +45,9 @@ def fetch_telegram_xml(name, url):
 
             clean_text = BeautifulSoup(desc_html, "html.parser").get_text(" ", strip=True)
 
-            # Remove links, usernames, telegram junk
+            # Remove links & usernames
             clean_text = re.sub(r"http\S+", "", clean_text)
             clean_text = re.sub(r"@\w+", "", clean_text)
-            clean_text = re.sub(r"(View in Telegram|Join Channel|Telegram|Open App)", "", clean_text, flags=re.IGNORECASE)
 
             clean_text = re.sub(r"\s+", " ", clean_text).strip()
 
@@ -98,30 +97,54 @@ def generate_audio_from_feed(channel_name):
         title = e.get("title", "")
         desc_text = e.get("description", "")
 
-        # Remove links, usernames, junk
+        # ---------------- CLEANING ----------------
+
+        # Remove links
         desc_text = re.sub(r"http\S+", "", desc_text)
+
+        # Remove usernames
         desc_text = re.sub(r"@\w+", "", desc_text)
-        desc_text = re.sub(r"(View in Telegram|Join Channel|Telegram|Open App)", "", desc_text, flags=re.IGNORECASE)
 
-        # 🔥 Remove emojis (MAIN FIX)
-        desc_text = re.sub(r"[\U00010000-\U0010ffff]", " ", desc_text)
+        # Remove emojis (FULL)
+        desc_text = re.sub(r"[\U0001F000-\U0001FFFF]", " ", desc_text)
+        desc_text = re.sub(r"[\u2600-\u27BF]", " ", desc_text)
+        desc_text = re.sub(r"[\uFE0F\u200D]", " ", desc_text)
 
-        # Keep Malayalam + English + numbers + punctuation
-        desc_text = re.sub(r"[^\u0D00-\u0D7Fa-zA-Z0-9\s.,!?]", " ", desc_text)
+        # Remove hashtags
+        desc_text = re.sub(r"#\w+", "", desc_text)
+
+        # Keep Malayalam + English + numbers
+        desc_text = re.sub(r"[^\u0D00-\u0D7Fa-zA-Z0-9\s.,!?:-]", " ", desc_text)
 
         # Clean spaces
         desc_text = re.sub(r"\s+", " ", desc_text).strip()
 
-        # Skip useless
+        # ---------------- FILTER ----------------
+
+        skip_words = [
+            "join", "demo", "class", "batch", "pdf",
+            "whatsapp", "വാട്സ്ആപ്പ്",
+            "channel", "message", "click",
+            "fee", "psc", "keralapsc", "dailycamalayalam"
+        ]
+
+        if any(word in desc_text.lower() for word in skip_words):
+            continue
+
+        # Skip too long (ads)
+        if len(desc_text) > 400:
+            continue
+
+        # Skip too short
         if len(desc_text) < 20:
             continue
 
+        # ---------------- AUDIO TEXT ----------------
         full_text += f"വാർത്ത. {title}. വിശദാംശങ്ങൾ. {desc_text}. . . "
 
     if not full_text.strip():
         return
 
-    # Limit size (gTTS safe)
     if len(full_text) > 3500:
         full_text = full_text[:3500]
 
@@ -137,7 +160,6 @@ def generate_audio_from_feed(channel_name):
         print(f"[TTS Error] {e}")
 
 def audio_updater():
-    # Run immediately
     for name in TELEGRAM_CHANNELS.keys():
         generate_audio_from_feed(name)
 
