@@ -64,7 +64,7 @@ def update_epaper_json():
 
         time.sleep(8640)
 
-# ------------------ Telegram Fetch (FIXED) ------------------
+# ------------------ Telegram Fetch ------------------
 def fetch_telegram_xml(name, url):
     try:
         r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
@@ -74,27 +74,24 @@ def fetch_telegram_xml(name, url):
         ch = ET.SubElement(rss_root, "channel")
         ET.SubElement(ch, "title").text = f"{name} Telegram Feed"
 
-        for msg in soup.select(".tgme_widget_message_wrap")[:40]:
+        # 🔥 Increased to 80 items
+        for msg in soup.select(".tgme_widget_message_wrap")[:80]:
             date_tag = msg.select_one("a.tgme_widget_message_date")
             link = date_tag["href"] if date_tag and "href" in date_tag.attrs else url
 
             text_tag = msg.select_one(".tgme_widget_message_text")
             desc_html = text_tag.decode_contents() if text_tag else ""
 
-            # ✅ FULL CLEAN TEXT
             clean_text = BeautifulSoup(desc_html, "html.parser").get_text(" ", strip=True)
 
             # Remove links
             clean_text = re.sub(r"http\S+", "", clean_text)
 
-            # Short title
             short_title = clean_text[:100] + ("..." if len(clean_text) > 100 else "")
 
             item = ET.SubElement(ch, "item")
             ET.SubElement(item, "title").text = short_title
             ET.SubElement(item, "link").text = link
-
-            # ✅ FULL TEXT STORED HERE
             ET.SubElement(item, "description").text = clean_text
 
         ET.ElementTree(rss_root).write(
@@ -121,7 +118,6 @@ def generate_audio_from_feed(channel_name):
 
     path = os.path.join(XML_FOLDER, f"{channel_name}.xml")
 
-    # Ensure XML exists
     if not os.path.exists(path):
         fetch_telegram_xml(channel_name, TELEGRAM_CHANNELS[channel_name])
 
@@ -130,7 +126,9 @@ def generate_audio_from_feed(channel_name):
         return
 
     feed = feedparser.parse(path)
-    entries = list(feed.entries)[-30:]
+
+    # 🔥 Increased to 60 entries
+    entries = list(feed.entries)[-60:]
 
     full_text = "ഇന്നത്തെ പ്രധാന വാർത്തകൾ. "
 
@@ -138,19 +136,25 @@ def generate_audio_from_feed(channel_name):
         title = e.get("title", "")
         desc_text = e.get("description", "")
 
-        # Clean Malayalam text
+        # Remove English
         desc_text = re.sub(r"[A-Za-z]+", "", desc_text)
+
+        # 🔥 Remove emojis & unwanted chars
+        desc_text = re.sub(r"[^\u0D00-\u0D7F\s.,!?]", "", desc_text)
 
         combined = f"{title}. {desc_text}"
 
         if combined.strip():
-            full_text += combined + " . . "
+            # 🔥 News style narration
+            full_text += f"വാർത്ത. {title}. വിശദാംശങ്ങൾ. {desc_text}. . . "
 
     if not full_text.strip():
         print("[Audio] Empty text")
         return
 
-    full_text = full_text[:3500]
+    # Limit size
+    if len(full_text) > 3500:
+        full_text = full_text[:3500]
 
     try:
         tts = gTTS(full_text, lang='ml')
