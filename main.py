@@ -10,20 +10,26 @@ import re
 from flask import Flask, render_template_string, Response, request, abort
 from bs4 import BeautifulSoup
 import xml.etree.ElementTree as ET
+from gtts import gTTS   # ✅ NEW
 
 app = Flask(__name__)
 
 # -------------------- Config --------------------
 UPLOAD_FOLDER = "static"
 EPAPER_TXT = "epaper.txt"
+AUDIO_FOLDER = "static/audio"   # ✅ NEW
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 TELEGRAM_CHANNELS = {
     "Pathravarthakal": "https://t.me/s/Pathravarthakal",
     "DailyCa": "https://t.me/s/DailyCAMalayalam"
 }
+
 XML_FOLDER = "telegram_xml"
 os.makedirs(XML_FOLDER, exist_ok=True)
+os.makedirs(AUDIO_FOLDER, exist_ok=True)   # ✅ NEW
+
+LAST_AUDIO_DATE = {}   # ✅ NEW
 
 # ------------------ Utility ------------------
 def get_url_for_location(location, dt_obj=None):
@@ -49,10 +55,12 @@ def update_epaper_json():
             print(f"[Error updating epaper.txt] {e}")
         time.sleep(8640)
 
+# ------------------ Telegram Fetch ------------------
 def fetch_telegram_xml(name, url):
     try:
         r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
         soup = BeautifulSoup(r.text, "html.parser")
+
         rss_root = ET.Element("rss", version="2.0")
         ch = ET.SubElement(rss_root, "channel")
         ET.SubElement(ch, "title").text = f"{name} Telegram Feed"
@@ -83,6 +91,55 @@ def telegram_updater():
             fetch_telegram_xml(name, url)
         time.sleep(600)
 
+# ------------------ 🔊 AUDIO GENERATION ------------------
+def generate_audio_from_feed(channel_name):
+    today = datetime.date.today().isoformat()
+
+    # Skip if already generated today
+    if LAST_AUDIO_DATE.get(channel_name) == today:
+        return
+
+    path = os.path.join(XML_FOLDER, f"{channel_name}.xml")
+    if not os.path.exists(path):
+        return
+
+    feed = feedparser.parse(path)
+    entries = list(feed.entries)[-30:]
+
+    full_text = ""
+
+    for e in entries:
+        text = BeautifulSoup(e.get("description", ""), "html.parser").get_text(" ", strip=True)
+
+        # Remove links
+        text = re.sub(r"http\S+", "", text)
+
+        if text:
+            full_text += text + ". "
+
+    if not full_text.strip():
+        return
+
+    full_text = full_text[:4000]
+    full_text = "ഇന്നത്തെ പ്രധാന വാർത്തകൾ. " + full_text
+
+    try:
+        tts = gTTS(full_text, lang='ml')
+        output_path = os.path.join(AUDIO_FOLDER, f"{channel_name}.mp3")
+        tts.save(output_path)
+
+        LAST_AUDIO_DATE[channel_name] = today
+        print(f"[Daily Audio Generated] {channel_name}")
+
+    except Exception as e:
+        print(f"[TTS Error] {e}")
+
+def audio_updater():
+    while True:
+        for name in TELEGRAM_CHANNELS.keys():
+            generate_audio_from_feed(name)
+        time.sleep(3600)
+
 # ------------------ Browser ------------------
 @app.route("/browse")
 def browse():
@@ -92,12 +149,7 @@ def browse():
     if not re.match(r"^https?://", url):
         url = "https://" + url
     return f"""
-    <!DOCTYPE html>
     <html>
-    <head>
-        <meta name="viewport" content="width=device-width,initial-scale=1.0">
-        <title>Browser - {url}</title>
-    </head>
     <body style="margin:0">
         <iframe src="{url}" style="border:none;width:100%;height:100vh;"></iframe>
     </body>
@@ -112,228 +164,70 @@ def telegram_html(channel_name):
 
     path = os.path.join(XML_FOLDER, f"{channel_name}.xml")
 
-    # Refresh every 2 minutes or if ?refresh=1
-    refresh_now = request.args.get("refresh") == "1"
-    if refresh_now or not os.path.exists(path) or (time.time() - os.path.getmtime(path) > 120):
+    if not os.path.exists(path):
         fetch_telegram_xml(channel_name, TELEGRAM_CHANNELS[channel_name])
 
-    try:
-        feed = feedparser.parse(path)
+    feed = feedparser.parse(path)
+    entries = list(feed.entries)[::-1]
 
-        # ✅ Newest first (without modifying feed structure)
-        entries = list(feed.entries)[::-1]
+    posts = ""
+    count = 0
 
-        posts = ""
-        count = 0
+    for e in entries:
+        title = e.get("title", "").lower()
+        if "pinned" in title:
+            continue
 
-        for e in entries:
-            title = e.get("title", "").lower()
+        link = e.get("link", TELEGRAM_CHANNELS[channel_name])
+        desc_html = e.get("description", "").strip()
+        soup = BeautifulSoup(desc_html, "html.parser")
 
-            # 🚫 Skip pinned messages
-            if "pinned" in title:
-                continue
+        for tag in soup.find_all(["video","iframe","audio","script","style"]):
+            tag.decompose()
 
-            link = e.get("link", TELEGRAM_CHANNELS[channel_name])
-            desc_html = e.get("description", "").strip()
-            soup = BeautifulSoup(desc_html, "html.parser")
+        img_tag = soup.find("img")
+        text_only = soup.get_text(strip=True)
 
-            # Remove unwanted tags
-            for tag in soup.find_all([
-                "video", "iframe", "source", "audio",
-                "svg", "poll", "button", "script", "style"
-            ]):
-                tag.decompose()
+        if not text_only and not img_tag:
+            continue
 
-            img_tag = soup.find("img")
-            text_only = soup.get_text(strip=True)
+        content_html = ""
+        if img_tag:
+            content_html += f"<img src='{img_tag['src']}'>"
+        if text_only:
+            content_html += f"<p>{text_only}</p>"
 
-            # Skip empty posts
-            if not text_only and not img_tag:
-                continue
+        posts += f"<div class='post'><a href='{link}'>{content_html}</a></div>"
 
-            content_html = ""
-            if img_tag:
-                content_html += f"<img src='{img_tag['src']}' loading='lazy'>"
-            if text_only:
-                content_html += f"<p>{text_only}</p>"
+        count += 1
+        if count >= 50:
+            break
 
-            posts += f"""
-            <div class='post'>
-                <a href='{link}' target='_blank'>{content_html}</a>
-            </div>
-            """
+    return f"<html><body>{posts}</body></html>"
 
-            count += 1
-            if count >= 50:
-                break
-
-        last_updated = datetime.datetime.fromtimestamp(
-            os.path.getmtime(path)
-        ).strftime("%Y-%m-%d %H:%M:%S")
-
-        return f"""
-        <html><head>
-        <meta name='viewport' content='width=device-width,initial-scale=1.0'>
-        <title>{channel_name} Posts</title>
-        <style>
-            body {{
-                font-family: system-ui, sans-serif;
-                background: #f5f6f7;
-                margin: 0;
-                padding: 10px;
-            }}
-            h2 {{
-                color: #00695c;
-                margin: 10px 0;
-                text-transform: capitalize;
-            }}
-            .meta {{
-                font-size: 0.8em;
-                color: #666;
-                margin-bottom: 8px;
-            }}
-            .post {{
-                background: #fff;
-                margin: 12px 0;
-                padding: 12px;
-                border-radius: 12px;
-                box-shadow: 0 2px 6px rgba(0,0,0,0.08);
-            }}
-            .post img {{
-                width: 100%;
-                border-radius: 10px;
-                margin-bottom: 8px;
-            }}
-            .post p {{
-                font-size: 0.95em;
-                color: #333;
-                line-height: 1.4em;
-                margin: 0;
-            }}
-            a {{
-                text-decoration: none;
-                color: inherit;
-            }}
-            .home {{
-                display: inline-block;
-                margin-top: 15px;
-                font-size: 1.1em;
-            }}
-            .refresh {{
-                background:#00695c;
-                color:#fff;
-                padding:6px 10px;
-                border-radius:6px;
-                text-decoration:none;
-                font-size:0.9em;
-                margin-left:10px;
-            }}
-        </style>
-        </head><body>
-        <h2>Telegram: {channel_name}
-            <a class='refresh' href='?refresh=1'>🔄 Refresh</a>
-        </h2>
-        <div class='meta'>Last updated: {last_updated}</div>
-        {posts or "<p>No text or image posts found.</p>"}
-        <p class='home'><a href='/'>🏠 Home</a></p>
-        </body></html>
-        """
-    except Exception as e:
-        return f"<p>Error loading feed: {e}</p>"
-# ------------------ ePaper Routes ------------------
+# ------------------ ePaper ------------------
 @app.route("/today")
 def today_links():
-    # ✅ Directly open Malappuram
     url = get_url_for_location("Malappuram")
-    return f"""
-    <script>
-        window.location = "/browse?url=" + encodeURIComponent("{url}");
-    </script>
-    """
+    return f"<script>window.location='/browse?url='+encodeURIComponent('{url}');</script>"
 
-# ------------------ Home ------------------
 # ------------------ Home ------------------
 @app.route("/")
 def homepage():
     return """
-    <!DOCTYPE html>
     <html>
-    <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
-        <title>Lite Browser</title>
-        <style>
-            * {
-                box-sizing: border-box;
-            }
-
-            body {
-                font-family: system-ui, sans-serif;
-                background: #f4f6f8;
-                margin: 0;
-                padding: 8px;
-                text-align: center;
-            }
-
-            h1 {
-                font-size: 1.1em;
-                margin: 8px 0 12px 0;
-                color: #222;
-            }
-
-            .grid {
-                display: grid;
-                grid-template-columns: 1fr 1fr;
-                gap: 6px;
-                max-width: 240px;
-                margin: auto;
-            }
-
-            .btn {
-                display: block;
-                padding: 10px 6px;
-                font-size: 0.85em;
-                font-weight: 600;
-                text-decoration: none;
-                border-radius: 8px;
-                color: white;
-            }
-
-            .epaper { background: #0078d7; }
-            .pathra { background: #009688; }
-            .dailyca { background: #e91e63; }
-
-            /* Ultra small screens */
-            @media (max-width: 260px) {
-                h1 {
-                    font-size: 1em;
-                }
-
-                .btn {
-                    font-size: 0.75em;
-                    padding: 8px 4px;
-                }
-
-                .grid {
-                    gap: 5px;
-                }
-            }
-        </style>
-    </head>
-    <body>
-        <h1>പത്രവാർത്തകൾ </h1>
-
-        <div class="grid">
-            <a href="/today" class="btn epaper">ePaper</a>
-            <a href="/telegram/Pathravarthakal" class="btn pathra">News</a>
-            <a href="/telegram/DailyCa" class="btn dailyca">DailyCa</a>
-        </div>
-
+    <body style="text-align:center">
+        <h2>പത്രവാർത്തകൾ</h2>
+        <a href="/today">ePaper</a><br><br>
+        <a href="/telegram/Pathravarthakal">News</a><br><br>
+        <a href="/telegram/DailyCa">DailyCa</a>
     </body>
     </html>
     """
+
 # ------------------ Run ------------------
 if __name__ == "__main__":
-    os.makedirs(XML_FOLDER, exist_ok=True)
     threading.Thread(target=update_epaper_json, daemon=True).start()
     threading.Thread(target=telegram_updater, daemon=True).start()
+    threading.Thread(target=audio_updater, daemon=True).start()   # ✅ NEW
     app.run(host="0.0.0.0", port=8000)
