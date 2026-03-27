@@ -100,28 +100,12 @@ def generate_audio_from_feed(channel_name):
         # 🔥 Remove URLs
         desc_text = re.sub(r"http\S+", "", desc_text)
 
-        # 🔥 Remove "join ..." text
-        desc_text = re.sub(r"\bjoin\b.*", "", desc_text, flags=re.IGNORECASE)
-
-        # 🔥 Remove promo keywords (partial cleaning)
-        desc_text = re.sub(r"whatsapp.*", "", desc_text, flags=re.IGNORECASE)
-        desc_text = re.sub(r"channel.*", "", desc_text, flags=re.IGNORECASE)
-        desc_text = re.sub(r"demo.*", "", desc_text, flags=re.IGNORECASE)
-        desc_text = re.sub(r"class.*", "", desc_text, flags=re.IGNORECASE)
-        desc_text = re.sub(r"pdf.*", "", desc_text, flags=re.IGNORECASE)
-        desc_text = re.sub(r"fee.*", "", desc_text, flags=re.IGNORECASE)
+        # 🔥 Remove only unwanted words (NOT full sentence)
+        desc_text = re.sub(r"\bjoin\b", "", desc_text, flags=re.IGNORECASE)
+        desc_text = re.sub(r"\b(batch|course|class|demo|pdf|fee|whatsapp|channel)\b", "", desc_text, flags=re.IGNORECASE)
 
         # Clean spaces
         desc_text = re.sub(r"\s+", " ", desc_text).strip()
-
-        # 🚫 Skip long ad paragraphs
-        if len(desc_text) > 300:
-            continue
-
-        # 🚫 Skip if too promotional
-        promo_words = ["join", "batch", "course", "message", "contact", "subscribe", "click", "follow"]
-        if sum(word in desc_text.lower() for word in promo_words) >= 2:
-            continue
 
         if not desc_text:
             continue
