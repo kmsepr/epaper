@@ -5,7 +5,7 @@ import threading
 import datetime
 import requests
 import re
-from flask import Flask
+from flask import Flask, request
 from bs4 import BeautifulSoup
 import xml.etree.ElementTree as ET
 from gtts import gTTS
@@ -45,16 +45,8 @@ def fetch_telegram_xml(name, url):
 
             clean_text = BeautifulSoup(desc_html, "html.parser").get_text(" ", strip=True)
 
-            # Remove links & usernames
-            clean_text = re.sub(r"http\S+", "", clean_text)
-            clean_text = re.sub(r"@\w+", "", clean_text)
-
-            clean_text = re.sub(r"\s+", " ", clean_text).strip()
-
-            short_title = clean_text[:100] + ("..." if len(clean_text) > 100 else "")
-
             item = ET.SubElement(ch, "item")
-            ET.SubElement(item, "title").text = short_title
+            ET.SubElement(item, "title").text = clean_text[:100]
             ET.SubElement(item, "link").text = link
             ET.SubElement(item, "description").text = clean_text
 
@@ -85,64 +77,58 @@ def generate_audio_from_feed(channel_name):
     if not os.path.exists(path):
         fetch_telegram_xml(channel_name, TELEGRAM_CHANNELS[channel_name])
 
-    if not os.path.exists(path):
-        return
-
     feed = feedparser.parse(path)
     entries = list(feed.entries)[-60:]
 
     full_text = "ഇന്നത്തെ പ്രധാന വാർത്തകൾ. "
 
     for e in entries:
-        title = e.get("title", "")
-        desc_text = e.get("description", "")
+        raw_text = e.get("description", "")
 
-        # ---------------- CLEANING ----------------
+        # 🔥 SPLIT CONTENT (MAIN FIX)
+        parts = re.split(r"[👉🔰•\n]+", raw_text)
 
-        # Remove links
-        desc_text = re.sub(r"http\S+", "", desc_text)
+        for part in parts:
+            desc_text = part.strip()
 
-        # Remove usernames
-        desc_text = re.sub(r"@\w+", "", desc_text)
+            if not desc_text:
+                continue
 
-        # Remove emojis (FULL)
-        desc_text = re.sub(r"[\U0001F000-\U0001FFFF]", " ", desc_text)
-        desc_text = re.sub(r"[\u2600-\u27BF]", " ", desc_text)
-        desc_text = re.sub(r"[\uFE0F\u200D]", " ", desc_text)
+            # ---------------- CLEAN ----------------
+            desc_text = re.sub(r"http\S+", "", desc_text)
+            desc_text = re.sub(r"@\w+", "", desc_text)
 
-        # Remove hashtags
-        desc_text = re.sub(r"#\w+", "", desc_text)
+            # Remove emojis fully
+            desc_text = re.sub(r"[\U0001F000-\U0001FFFF]", " ", desc_text)
+            desc_text = re.sub(r"[\u2600-\u27BF]", " ", desc_text)
+            desc_text = re.sub(r"[\uFE0F\u200D]", " ", desc_text)
 
-        # Keep Malayalam + English + numbers
-        desc_text = re.sub(r"[^\u0D00-\u0D7Fa-zA-Z0-9\s.,!?:-]", " ", desc_text)
+            # Remove hashtags
+            desc_text = re.sub(r"#\w+", "", desc_text)
 
-        # Clean spaces
-        desc_text = re.sub(r"\s+", " ", desc_text).strip()
+            # Keep Malayalam + English
+            desc_text = re.sub(r"[^\u0D00-\u0D7Fa-zA-Z0-9\s.,!?:-]", " ", desc_text)
 
-        # ---------------- FILTER ----------------
+            desc_text = re.sub(r"\s+", " ", desc_text).strip()
 
-        skip_words = [
-            "join", "demo", "class", "batch", "pdf",
-            "whatsapp", "വാട്സ്ആപ്പ്",
-            "channel", "message", "click",
-            "fee", "psc", "keralapsc", "dailycamalayalam"
-        ]
+            # ---------------- FILTER ----------------
+            skip_words = [
+                "join", "demo", "class", "batch", "pdf",
+                "whatsapp", "വാട്സ്ആപ്പ്",
+                "channel", "message", "click",
+                "fee", "psc", "keralapsc", "dailycamalayalam"
+            ]
 
-        if any(word in desc_text.lower() for word in skip_words):
-            continue
+            if any(word in desc_text.lower() for word in skip_words):
+                continue
 
-        # Skip too long (ads)
-        if len(desc_text) > 400:
-            continue
+            if len(desc_text) < 20 or len(desc_text) > 250:
+                continue
 
-        # Skip too short
-        if len(desc_text) < 20:
-            continue
+            # ---------------- ADD ----------------
+            full_text += f"വാർത്ത. {desc_text}. . . "
 
-        # ---------------- AUDIO TEXT ----------------
-        full_text += f"വാർത്ത. {title}. വിശദാംശങ്ങൾ. {desc_text}. . . "
-
-    if not full_text.strip():
+    if len(full_text) < 50:
         return
 
     if len(full_text) > 3500:
@@ -160,33 +146,25 @@ def generate_audio_from_feed(channel_name):
         print(f"[TTS Error] {e}")
 
 def audio_updater():
-    for name in TELEGRAM_CHANNELS.keys():
+    for name in TELEGRAM_CHANNELS:
         generate_audio_from_feed(name)
 
     while True:
-        for name in TELEGRAM_CHANNELS.keys():
+        for name in TELEGRAM_CHANNELS:
             generate_audio_from_feed(name)
-        time.sleep(3600)
+        time.sleep(600)
 
-# ------------------ Home ------------------
-@app.route("/")
-def home():
-    return """
-    <h2>പത്രവാർത്തകൾ</h2>
-
-    <h3>🎧 Audio News</h3>
-    <a href="/static/audio/Pathravarthakal.mp3">Pathravarthakal Audio</a><br><br>
-    <a href="/static/audio/DailyCa.mp3">DailyCa Audio</a><br><br>
-
-    <h3>📰 Feeds</h3>
-    <a href="/telegram/Pathravarthakal">Pathravarthakal Feed</a><br><br>
-    <a href="/telegram/DailyCa">DailyCa Feed</a>
-    """
-
-# ------------------ Feed View ------------------
+# ------------------ Feed Page ------------------
 @app.route("/telegram/<channel_name>")
 def telegram_html(channel_name):
+    if channel_name not in TELEGRAM_CHANNELS:
+        return "Invalid channel"
+
     path = os.path.join(XML_FOLDER, f"{channel_name}.xml")
+
+    # 🔥 Refresh button trigger
+    if request.args.get("refresh") == "1":
+        fetch_telegram_xml(channel_name, TELEGRAM_CHANNELS[channel_name])
 
     if not os.path.exists(path):
         fetch_telegram_xml(channel_name, TELEGRAM_CHANNELS[channel_name])
@@ -195,12 +173,43 @@ def telegram_html(channel_name):
     entries = list(feed.entries)[::-1]
 
     posts = ""
-
     for e in entries[:50]:
-        desc = e.get("description", "")
-        posts += f"<p>{desc}</p><hr>"
+        posts += f"<p>{e.get('description','')}</p><hr>"
 
-    return posts or "No posts"
+    return f"""
+    <html>
+    <head>
+    <meta name='viewport' content='width=device-width,initial-scale=1.0'>
+    <style>
+    body {{font-family:system-ui;padding:10px;}}
+    .btn {{background:#00695c;color:#fff;padding:8px 12px;border-radius:6px;text-decoration:none;}}
+    </style>
+    </head>
+    <body>
+
+    <h2>{channel_name}</h2>
+    <a class="btn" href="?refresh=1">🔄 Refresh</a><br><br>
+
+    {posts}
+
+    </body>
+    </html>
+    """
+
+# ------------------ Home ------------------
+@app.route("/")
+def home():
+    return """
+    <h2>പത്രവാർത്തകൾ</h2>
+
+    <h3>🎧 Audio</h3>
+    <a href="/static/audio/Pathravarthakal.mp3">Pathravarthakal</a><br><br>
+    <a href="/static/audio/DailyCa.mp3">DailyCa</a><br><br>
+
+    <h3>📰 Feeds</h3>
+    <a href="/telegram/Pathravarthakal">Pathravarthakal</a><br><br>
+    <a href="/telegram/DailyCa">DailyCa</a>
+    """
 
 # ------------------ Run ------------------
 if __name__ == "__main__":
