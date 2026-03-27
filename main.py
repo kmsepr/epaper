@@ -83,54 +83,27 @@ def generate_audio_from_feed(channel_name):
     full_text = "ഇന്നത്തെ പ്രധാന വാർത്തകൾ. "
 
     for e in entries:
-        raw_text = e.get("description", "")
+        desc_text = e.get("description", "")
 
-        # 🔥 SPLIT CONTENT (MAIN FIX)
-        parts = re.split(r"[👉🔰•\n]+", raw_text)
+        # 🔥 REMOVE ONLY EMOJIS
+        desc_text = re.sub(r"[\U0001F300-\U0001FAFF]", " ", desc_text)
+        desc_text = re.sub(r"[\U0001F600-\U0001F64F]", " ", desc_text)
+        desc_text = re.sub(r"[\u2600-\u27BF]", " ", desc_text)
+        desc_text = re.sub(r"[\uFE0F\u200D]", " ", desc_text)
 
-        for part in parts:
-            desc_text = part.strip()
+        # Clean spaces
+        desc_text = re.sub(r"\s+", " ", desc_text).strip()
 
-            if not desc_text:
-                continue
+        if not desc_text:
+            continue
 
-            # ---------------- CLEAN ----------------
-            desc_text = re.sub(r"http\S+", "", desc_text)
-            desc_text = re.sub(r"@\w+", "", desc_text)
+        full_text += f"{desc_text}. "
 
-            # Remove emojis fully
-            desc_text = re.sub(r"[\U0001F000-\U0001FFFF]", " ", desc_text)
-            desc_text = re.sub(r"[\u2600-\u27BF]", " ", desc_text)
-            desc_text = re.sub(r"[\uFE0F\u200D]", " ", desc_text)
+    # ✅ Always generate MP3
+    if len(full_text.strip()) < 10:
+        full_text = "ഇന്ന് വാർത്തകൾ ലഭ്യമല്ല."
 
-            # Remove hashtags
-            desc_text = re.sub(r"#\w+", "", desc_text)
-
-            # Keep Malayalam + English
-            desc_text = re.sub(r"[^\u0D00-\u0D7Fa-zA-Z0-9\s.,!?:-]", " ", desc_text)
-
-            desc_text = re.sub(r"\s+", " ", desc_text).strip()
-
-            # ---------------- FILTER ----------------
-            skip_words = [
-                "join", "demo", "class", "batch", "pdf",
-                "whatsapp", "വാട്സ്ആപ്പ്",
-                "channel", "message", "click",
-                "fee", "psc", "keralapsc", "dailycamalayalam"
-            ]
-
-            if any(word in desc_text.lower() for word in skip_words):
-                continue
-
-            if len(desc_text) < 20 or len(desc_text) > 250:
-                continue
-
-            # ---------------- ADD ----------------
-            full_text += f"വാർത്ത. {desc_text}. . . "
-
-    if len(full_text) < 50:
-        return
-
+    # Limit for gTTS
     if len(full_text) > 3500:
         full_text = full_text[:3500]
 
@@ -162,7 +135,6 @@ def telegram_html(channel_name):
 
     path = os.path.join(XML_FOLDER, f"{channel_name}.xml")
 
-    # 🔥 Refresh button trigger
     if request.args.get("refresh") == "1":
         fetch_telegram_xml(channel_name, TELEGRAM_CHANNELS[channel_name])
 
@@ -200,15 +172,59 @@ def telegram_html(channel_name):
 @app.route("/")
 def home():
     return """
-    <h2>പത്രവാർത്തകൾ</h2>
+    <html>
+    <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+            body {
+                font-family: system-ui;
+                background: linear-gradient(135deg, #4facfe, #00f2fe);
+                margin: 0;
+                padding: 20px;
+                text-align: center;
+                color: white;
+            }
+            .card {
+                background: white;
+                color: #333;
+                margin: 15px auto;
+                padding: 20px;
+                border-radius: 15px;
+                max-width: 300px;
+            }
+            .btn {
+                display: block;
+                margin: 10px 0;
+                padding: 12px;
+                border-radius: 10px;
+                text-decoration: none;
+                color: white;
+                font-weight: bold;
+            }
+            .a1 { background:#ff6f61; }
+            .a2 { background:#6a11cb; }
+            .f1 { background:#11998e; }
+            .f2 { background:#f7971e; }
+        </style>
+    </head>
+    <body>
 
-    <h3>🎧 Audio</h3>
-    <a href="/static/audio/Pathravarthakal.mp3">Pathravarthakal</a><br><br>
-    <a href="/static/audio/DailyCa.mp3">DailyCa</a><br><br>
+    <h1>📰 പത്രവാർത്തകൾ</h1>
 
-    <h3>📰 Feeds</h3>
-    <a href="/telegram/Pathravarthakal">Pathravarthakal</a><br><br>
-    <a href="/telegram/DailyCa">DailyCa</a>
+    <div class="card">
+        <h3>🎧 Audio</h3>
+        <a class="btn a1" href="/static/audio/Pathravarthakal.mp3">Pathravarthakal</a>
+        <a class="btn a2" href="/static/audio/DailyCa.mp3">Daily CA</a>
+    </div>
+
+    <div class="card">
+        <h3>📰 Feeds</h3>
+        <a class="btn f1" href="/telegram/Pathravarthakal">Pathravarthakal</a>
+        <a class="btn f2" href="/telegram/DailyCa">Daily CA</a>
+    </div>
+
+    </body>
+    </html>
     """
 
 # ------------------ Run ------------------
