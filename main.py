@@ -2,7 +2,6 @@ import os
 import time
 import feedparser
 import threading
-import datetime
 import requests
 import re
 from flask import Flask, request
@@ -23,8 +22,6 @@ TELEGRAM_CHANNELS = {
 
 os.makedirs(XML_FOLDER, exist_ok=True)
 os.makedirs(AUDIO_FOLDER, exist_ok=True)
-
-LAST_AUDIO_DATE = {}
 
 # ------------------ Telegram Fetch ------------------
 def fetch_telegram_xml(name, url):
@@ -63,24 +60,19 @@ def telegram_updater():
     while True:
         for name, url in TELEGRAM_CHANNELS.items():
             fetch_telegram_xml(name, url)
-        time.sleep(600)
+        time.sleep(600)  # every 10 minutes
 
 # ------------------ 🔊 AUDIO ------------------
 def generate_audio_from_feed(channel_name):
-    today = datetime.date.today().isoformat()
-
-    if LAST_AUDIO_DATE.get(channel_name) == today:
-        return
-
     path = os.path.join(XML_FOLDER, f"{channel_name}.xml")
 
     if not os.path.exists(path):
         fetch_telegram_xml(channel_name, TELEGRAM_CHANNELS[channel_name])
 
     feed = feedparser.parse(path)
-    entries = list(feed.entries)[-60:]
+    entries = list(feed.entries)[-25:]   # limit size
 
-    full_text = "ഇന്നത്തെ പ്രധാന വാർത്തകൾ. "
+    full_text = "ഇന്നത്തെ പ്രധാന വാർത്തകൾ.\n\n"
 
     for e in entries:
         desc_text = e.get("description", "")
@@ -88,56 +80,50 @@ def generate_audio_from_feed(channel_name):
         # 🔥 Remove emojis
         desc_text = re.sub(r"[\U0001F300-\U0001FAFF]", " ", desc_text)
         desc_text = re.sub(r"[\U0001F600-\U0001F64F]", " ", desc_text)
-        desc_text = re.sub(r"[\u2600-\u27BF]", " ", desc_text)
         desc_text = re.sub(r"[\uFE0F\u200D]", " ", desc_text)
 
         # 🔥 Remove hashtags
         desc_text = re.sub(r"#\w+", "", desc_text)
 
-        # 🔥 Remove @mentions
-        desc_text = re.sub(r"@\w+", "", desc_text)
-
         # 🔥 Remove URLs
         desc_text = re.sub(r"http\S+", "", desc_text)
 
-        # 🔥 Remove only unwanted words (NOT full sentence)
-        desc_text = re.sub(r"\bjoin\b", "", desc_text, flags=re.IGNORECASE)
-        desc_text = re.sub(r"\b(batch|course|class|demo|pdf|fee|whatsapp|channel)\b", "", desc_text, flags=re.IGNORECASE)
+        # 🔥 Remove trailing join text
+        desc_text = re.sub(r"(join\s*@\w+.*)$", "", desc_text, flags=re.IGNORECASE)
+
+        # 🔥 Remove @mentions
+        desc_text = re.sub(r"@\w+", "", desc_text)
 
         # Clean spaces
         desc_text = re.sub(r"\s+", " ", desc_text).strip()
 
+        # 🔥 Fallback if empty
+        if not desc_text or len(desc_text) < 5:
+            desc_text = e.get("title", "")
+
         if not desc_text:
             continue
 
-        full_text += f"{desc_text}. "
+        full_text += f"{desc_text}.\n\n"
 
-    # Always generate
     if len(full_text.strip()) < 10:
         full_text = "ഇന്ന് വാർത്തകൾ ലഭ്യമല്ല."
-
-    if len(full_text) > 3500:
-        full_text = full_text[:3500]
 
     try:
         tts = gTTS(full_text, lang='ml')
         output_path = os.path.join(AUDIO_FOLDER, f"{channel_name}.mp3")
         tts.save(output_path)
 
-        LAST_AUDIO_DATE[channel_name] = today
-        print(f"[Audio Generated] {channel_name}")
+        print(f"[Audio Updated] {channel_name}")
 
     except Exception as e:
         print(f"[TTS Error] {e}")
 
 def audio_updater():
-    for name in TELEGRAM_CHANNELS:
-        generate_audio_from_feed(name)
-
     while True:
         for name in TELEGRAM_CHANNELS:
             generate_audio_from_feed(name)
-        time.sleep(600)
+        time.sleep(600)  # every 10 minutes
 
 # ------------------ Feed Page ------------------
 @app.route("/telegram/<channel_name>")
