@@ -70,16 +70,17 @@ def generate_audio_from_feed(channel_name):
         fetch_telegram_xml(channel_name, TELEGRAM_CHANNELS[channel_name])
 
     feed = feedparser.parse(path)
-    entries = list(feed.entries)[-25:]   # limit size
+    entries = list(feed.entries)[-25:]
 
     full_text = "ഇന്നത്തെ പ്രധാന വാർത്തകൾ.\n\n"
 
     for e in entries:
         desc_text = e.get("description", "")
 
-        # 🔥 Remove emojis
+        # 🔥 Remove emojis (FULL FIX)
         desc_text = re.sub(r"[\U0001F300-\U0001FAFF]", " ", desc_text)
         desc_text = re.sub(r"[\U0001F600-\U0001F64F]", " ", desc_text)
+        desc_text = re.sub(r"[\u2600-\u27BF]", " ", desc_text)   # ✅ ✔ ☑ etc
         desc_text = re.sub(r"[\uFE0F\u200D]", " ", desc_text)
 
         # 🔥 Remove hashtags
@@ -94,7 +95,7 @@ def generate_audio_from_feed(channel_name):
         # 🔥 Remove @mentions
         desc_text = re.sub(r"@\w+", "", desc_text)
 
-        # 🔥 Replace punctuation (FIX)
+        # 🔥 Replace punctuation (avoid "ആശ്ചര്യ ചിഹ്നം")
         desc_text = re.sub(r"[!?:;]+", ". ", desc_text)
 
         # 🔥 Remove other unwanted symbols
