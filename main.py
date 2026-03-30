@@ -94,15 +94,14 @@ def generate_audio_from_feed(channel_name):
         # 🔥 Remove @mentions
         desc_text = re.sub(r"@\w+", "", desc_text)
 
+        # 🔥 Replace punctuation (FIX)
+        desc_text = re.sub(r"[!?:;]+", ". ", desc_text)
+
+        # 🔥 Remove other unwanted symbols
+        desc_text = re.sub(r"[\"'(){}\[\]<>]", " ", desc_text)
+
         # Clean spaces
-
-desc_text = re.sub(r"[!?:;]+", ". ", desc_text)
-
-# Remove other unwanted symbols
-desc_text = re.sub(r"[\"'(){}\[\]<>]", " ", desc_text)
-
-# Clean spaces
-desc_text = re.sub(r"\s+", " ", desc_text).strip()
+        desc_text = re.sub(r"\s+", " ", desc_text).strip()
 
         # 🔥 Fallback if empty
         if not desc_text or len(desc_text) < 5:
