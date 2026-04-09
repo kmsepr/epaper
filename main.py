@@ -23,6 +23,38 @@ TELEGRAM_CHANNELS = {
 os.makedirs(XML_FOLDER, exist_ok=True)
 os.makedirs(AUDIO_FOLDER, exist_ok=True)
 
+# ------------------ 🔥 PROMO FILTER ------------------
+def is_promo_message(text):
+    text_lower = text.lower()
+
+    promo_keywords = [
+        "batch", "class", "demo", "pdf", "fee", "join",
+        "message", "contact", "click", "whatsapp", "telegram",
+        "course", "offer", "register", "subscription",
+        "admin"
+    ]
+
+    # keyword scoring
+    score = sum(1 for word in promo_keywords if word in text_lower)
+
+    # strong patterns
+    if re.search(r"\bfee\b|\bjoin\b|\bdemo\b|\bclass\b", text_lower):
+        return True
+
+    # Malayalam promo words
+    if re.search(r"ഫീസ്|ജോയിൻ|ക്ലാസ്|ഡെമോ|ബാച്ച്", text):
+        return True
+
+    # too many promo keywords
+    if score >= 3:
+        return True
+
+    # long marketing text with links
+    if len(text) > 200 and "http" in text_lower:
+        return True
+
+    return False
+
 # ------------------ Telegram Fetch ------------------
 def fetch_telegram_xml(name, url):
     try:
@@ -60,7 +92,7 @@ def telegram_updater():
     while True:
         for name, url in TELEGRAM_CHANNELS.items():
             fetch_telegram_xml(name, url)
-        time.sleep(600)  # every 10 minutes
+        time.sleep(600)
 
 # ------------------ 🔊 AUDIO ------------------
 def generate_audio_from_feed(channel_name):
@@ -77,34 +109,22 @@ def generate_audio_from_feed(channel_name):
     for e in entries:
         desc_text = e.get("description", "")
 
-        # 🔥 Remove emojis (FULL FIX)
+        # 🔥 Clean text
         desc_text = re.sub(r"[\U0001F300-\U0001FAFF]", " ", desc_text)
         desc_text = re.sub(r"[\U0001F600-\U0001F64F]", " ", desc_text)
-        desc_text = re.sub(r"[\u2600-\u27BF]", " ", desc_text)   # ✅ ✔ ☑ etc
+        desc_text = re.sub(r"[\u2600-\u27BF]", " ", desc_text)
         desc_text = re.sub(r"[\uFE0F\u200D]", " ", desc_text)
-
-        # 🔥 Remove hashtags
         desc_text = re.sub(r"#\w+", "", desc_text)
-
-        # 🔥 Remove URLs
         desc_text = re.sub(r"http\S+", "", desc_text)
-
-        # 🔥 Remove trailing join text
-        desc_text = re.sub(r"(join\s*@\w+.*)$", "", desc_text, flags=re.IGNORECASE)
-
-        # 🔥 Remove @mentions
         desc_text = re.sub(r"@\w+", "", desc_text)
-
-        # 🔥 Replace punctuation (avoid "ആശ്ചര്യ ചിഹ്നം")
         desc_text = re.sub(r"[!?:;]+", ". ", desc_text)
-
-        # 🔥 Remove other unwanted symbols
         desc_text = re.sub(r"[\"'(){}\[\]<>]", " ", desc_text)
-
-        # Clean spaces
         desc_text = re.sub(r"\s+", " ", desc_text).strip()
 
-        # 🔥 Fallback if empty
+        # 🔥 Skip promotional messages
+        if is_promo_message(desc_text):
+            continue
+
         if not desc_text or len(desc_text) < 5:
             desc_text = e.get("title", "")
 
@@ -130,7 +150,7 @@ def audio_updater():
     while True:
         for name in TELEGRAM_CHANNELS:
             generate_audio_from_feed(name)
-        time.sleep(600)  # every 10 minutes
+        time.sleep(600)
 
 # ------------------ Feed Page ------------------
 @app.route("/telegram/<channel_name>")
