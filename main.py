@@ -182,56 +182,69 @@ def home():
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <style>
             body {
-                font-family: system-ui;
-                background: linear-gradient(135deg, #4facfe, #00f2fe);
+                font-family: Arial, sans-serif;
+                background: #ffffff;
                 margin: 0;
-                padding: 20px;
+                padding: 10px;
                 text-align: center;
-                color: white;
             }
-            .card {
-                background: white;
-                color: #333;
-                margin: 15px auto;
-                padding: 20px;
-                border-radius: 15px;
-                max-width: 300px;
+
+            h1 {
+                font-size: 20px;
+                margin-bottom: 15px;
             }
+
             .btn {
                 display: block;
-                margin: 10px 0;
-                padding: 12px;
-                border-radius: 10px;
+                width: 100%;
+                margin: 8px 0;
+                padding: 14px;
+                font-size: 18px;
                 text-decoration: none;
-                color: white;
-                font-weight: bold;
+                border-radius: 6px;
+                border: 1px solid #ccc;
+                background: #f2f2f2;
+                color: #000;
             }
-            .a1 { background:#ff6f61; }
-            .a2 { background:#6a11cb; }
-            .f1 { background:#11998e; }
-            .f2 { background:#f7971e; }
+
+            .btn:active {
+                background: #ddd;
+            }
+
+            .section {
+                margin-top: 20px;
+                font-weight: bold;
+                font-size: 16px;
+            }
         </style>
     </head>
     <body>
 
-    <h1>📰 പത്രവാർത്തകൾ</h1>
+    <h1>📰 വാർത്തകൾ</h1>
 
-    <div class="card">
-        <h3>🎧 Audio</h3>
-        <a class="btn a1" href="/static/audio/Pathravarthakal.mp3">Pathravarthakal</a>
-        <a class="btn a2" href="/static/audio/DailyCa.mp3">Daily CA</a>
-    </div>
+    <div class="section">🎧 Audio</div>
 
-    <div class="card">
-        <h3>📰 Feeds</h3>
-        <a class="btn f1" href="/telegram/Pathravarthakal">Pathravarthakal</a>
-        <a class="btn f2" href="/telegram/DailyCa">Daily CA</a>
-    </div>
+    <a class="btn" href="/static/audio/Pathravarthakal.mp3">
+        1. Pathravarthakal
+    </a>
+
+    <a class="btn" href="/static/audio/DailyCa.mp3">
+        2. Daily CA
+    </a>
+
+    <div class="section">📰 Feeds</div>
+
+    <a class="btn" href="/telegram/Pathravarthakal">
+        3. Pathravarthakal Feed
+    </a>
+
+    <a class="btn" href="/telegram/DailyCa">
+        4. Daily CA Feed
+    </a>
 
     </body>
     </html>
     """
-
 # ------------------ Run ------------------
 if __name__ == "__main__":
     threading.Thread(target=telegram_updater, daemon=True).start()
