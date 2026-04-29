@@ -177,44 +177,73 @@ def telegram_html(channel_name):
 @app.route("/")
 def home():
     return """
+    <!DOCTYPE html>
     <html>
     <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
         <style>
             body {
-                font-family: Arial, sans-serif;
-                background: #ffffff;
+                font-family: 'Segoe UI', Roboto, sans-serif;
+                background: #f0f2f5;
                 margin: 0;
                 padding: 10px;
                 text-align: center;
+                color: #333;
             }
 
             h1 {
-                font-size: 20px;
-                margin-bottom: 15px;
+                font-size: 22px;
+                color: #d32f2f; /* Deep Red */
+                margin: 10px 0;
+                border-bottom: 2px solid #d32f2f;
+                padding-bottom: 5px;
             }
 
+            .section-header {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                margin-top: 15px;
+                font-weight: bold;
+                font-size: 14px;
+                text-transform: uppercase;
+                color: #555;
+            }
+
+            /* Keypad Friendly Buttons */
             .btn {
                 display: block;
-                width: 100%;
-                margin: 8px 0;
-                padding: 14px;
+                width: 90%;
+                margin: 10px auto;
+                padding: 15px 5px;
                 font-size: 18px;
-                text-decoration: none;
-                border-radius: 6px;
-                border: 1px solid #ccc;
-                background: #f2f2f2;
-                color: #000;
-            }
-
-            .btn:active {
-                background: #ddd;
-            }
-
-            .section {
-                margin-top: 20px;
                 font-weight: bold;
-                font-size: 16px;
+                text-decoration: none;
+                border-radius: 10px;
+                border: 2px solid transparent;
+                transition: all 0.2s;
+                box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            }
+
+            /* Specific Colors for clarity */
+            .audio-btn { background: #e3f2fd; color: #1565c0; border-color: #bbdefb; }
+            .feed-btn { background: #f1f8e9; color: #2e7d32; border-color: #c8e6c9; }
+
+            /* Focus state is CRITICAL for keypad navigation */
+            .btn:focus, .btn:active {
+                background: #ffeb3b !important; /* Bright Yellow focus */
+                color: #000 !important;
+                border: 3px solid #000 !important;
+                outline: none;
+                transform: scale(1.02);
+            }
+
+            .key-hint {
+                font-size: 12px;
+                background: rgba(0,0,0,0.1);
+                padding: 2px 6px;
+                border-radius: 4px;
+                margin-right: 8px;
             }
         </style>
     </head>
@@ -222,25 +251,27 @@ def home():
 
     <h1>📰 വാർത്തകൾ</h1>
 
-    <div class="section">🎧 Audio</div>
+    <div class="section-header">🎧 AUDIO CONTENT</div>
 
-    <a class="btn" href="/static/audio/Pathravarthakal.mp3">
-        1. Pathravarthakal
+    <a class="btn audio-btn" href="/static/audio/Pathravarthakal.mp3" accesskey="1">
+        <span class="key-hint">1</span> Pathravarthakal
     </a>
 
-    <a class="btn" href="/static/audio/DailyCa.mp3">
-        2. Daily CA
+    <a class="btn audio-btn" href="/static/audio/DailyCa.mp3" accesskey="2">
+        <span class="key-hint">2</span> Daily CA
     </a>
 
-    <div class="section">📰 Feeds</div>
+    <div class="section-header">📰 NEWS FEEDS</div>
 
-    <a class="btn" href="/telegram/Pathravarthakal">
-        3. Pathravarthakal Feed
+    <a class="btn feed-btn" href="/telegram/Pathravarthakal" accesskey="3">
+        <span class="key-hint">3</span> Pathravarthakal Feed
     </a>
 
-    <a class="btn" href="/telegram/DailyCa">
-        4. Daily CA Feed
+    <a class="btn feed-btn" href="/telegram/DailyCa" accesskey="4">
+        <span class="key-hint">4</span> Daily CA Feed
     </a>
+
+    <p style="font-size: 10px; color: #888; margin-top: 20px;">Use Up/Down keys to navigate</p>
 
     </body>
     </html>
