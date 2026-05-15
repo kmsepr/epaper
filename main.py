@@ -6,7 +6,7 @@ import requests
 import re
 import shutil
 from datetime import datetime
-from flask import Flask, request
+from flask import Flask, request, send_from_directory
 from bs4 import BeautifulSoup
 import xml.etree.ElementTree as ET
 from gtts import gTTS
@@ -33,7 +33,6 @@ def archive_feed(xml_path):
         if not os.path.exists(xml_path):
             return
 
-        # Example: 2026-05
         month_folder = datetime.now().strftime("%Y-%m")
 
         archive_dir = os.path.join(
@@ -113,7 +112,7 @@ def fetch_telegram_xml(name, url):
             xml_declaration=True
         )
 
-        # Archive monthly copy
+        # Archive copy
         archive_feed(xml_path)
 
         print(f"[Feed Updated] {name}")
@@ -126,7 +125,7 @@ def telegram_updater():
         for name, url in TELEGRAM_CHANNELS.items():
             fetch_telegram_xml(name, url)
 
-        time.sleep(600)  # every 10 minutes
+        time.sleep(600)
 
 # ------------------ 🔊 AUDIO ------------------
 def generate_audio_from_feed(channel_name):
@@ -152,7 +151,6 @@ def generate_audio_from_feed(channel_name):
 
         desc_text = e.get("description", "")
 
-        # Remove emojis
         desc_text = re.sub(
             r"[\U0001F300-\U0001FAFF]",
             " ",
@@ -177,21 +175,18 @@ def generate_audio_from_feed(channel_name):
             desc_text
         )
 
-        # Remove hashtags
         desc_text = re.sub(
             r"#\w+",
             "",
             desc_text
         )
 
-        # Remove URLs
         desc_text = re.sub(
             r"http\S+",
             "",
             desc_text
         )
 
-        # Remove join text
         desc_text = re.sub(
             r"(join\s*@\w+.*)$",
             "",
@@ -199,35 +194,30 @@ def generate_audio_from_feed(channel_name):
             flags=re.IGNORECASE
         )
 
-        # Remove mentions
         desc_text = re.sub(
             r"@\w+",
             "",
             desc_text
         )
 
-        # Replace punctuation
         desc_text = re.sub(
             r"[!?:;]+",
             ". ",
             desc_text
         )
 
-        # Remove symbols
         desc_text = re.sub(
             r"[\"'(){}\[\]<>]",
             " ",
             desc_text
         )
 
-        # Clean spaces
         desc_text = re.sub(
             r"\s+",
             " ",
             desc_text
         ).strip()
 
-        # Fallback
         if not desc_text or len(desc_text) < 5:
             desc_text = e.get("title", "")
 
@@ -332,6 +322,107 @@ def telegram_html(channel_name):
     </html>
     """
 
+# ------------------ Archive Page ------------------
+@app.route("/archives")
+def archives():
+
+    months = sorted(
+        os.listdir(ARCHIVE_FOLDER),
+        reverse=True
+    )
+
+    html = """
+    <html>
+    <head>
+    <meta name='viewport'
+          content='width=device-width,initial-scale=1.0'>
+
+    <style>
+
+    body{
+        font-family:system-ui;
+        padding:10px;
+        background:#f5f5f5;
+    }
+
+    h2{
+        text-align:center;
+    }
+
+    .card{
+        background:#fff;
+        padding:12px;
+        border-radius:10px;
+        margin-bottom:15px;
+        box-shadow:0 2px 5px rgba(0,0,0,0.1);
+    }
+
+    .file{
+        display:block;
+        padding:8px;
+        margin-top:5px;
+        background:#e3f2fd;
+        border-radius:6px;
+        text-decoration:none;
+        color:#1565c0;
+        font-weight:bold;
+    }
+
+    </style>
+    </head>
+    <body>
+
+    <h2>📦 Feed Archives</h2>
+    """
+
+    if not months:
+        html += "<p>No archives found.</p>"
+
+    for month in months:
+
+        month_path = os.path.join(
+            ARCHIVE_FOLDER,
+            month
+        )
+
+        if not os.path.isdir(month_path):
+            continue
+
+        html += f"<div class='card'><h3>{month}</h3>"
+
+        files = os.listdir(month_path)
+
+        for file in files:
+
+            html += f"""
+            <a class='file'
+               href='/archive/{month}/{file}'>
+
+               {file}
+
+            </a>
+            """
+
+        html += "</div>"
+
+    html += "</body></html>"
+
+    return html
+
+# ------------------ Archive Files ------------------
+@app.route("/archive/<month>/<filename>")
+def archive_file(month, filename):
+
+    archive_dir = os.path.join(
+        ARCHIVE_FOLDER,
+        month
+    )
+
+    return send_from_directory(
+        archive_dir,
+        filename
+    )
+
 # ------------------ Home ------------------
 @app.route("/")
 def home():
@@ -403,6 +494,12 @@ def home():
         border-color: #c8e6c9;
     }
 
+    .archive-btn {
+        background: #fff3e0;
+        color: #ef6c00;
+        border-color: #ffcc80;
+    }
+
     .btn:focus,
     .btn:active {
         background: #ffeb3b !important;
@@ -466,6 +563,18 @@ def home():
 
        <span class="key-hint">4</span>
        Daily CA Feed
+    </a>
+
+    <div class="section-header">
+        📦 ARCHIVES
+    </div>
+
+    <a class="btn archive-btn"
+       href="/archives"
+       accesskey="5">
+
+       <span class="key-hint">5</span>
+       Feed Archives
     </a>
 
     <p style="font-size:10px;
