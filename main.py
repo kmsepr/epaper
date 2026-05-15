@@ -413,15 +413,111 @@ def archives():
 @app.route("/archive/<month>/<filename>")
 def archive_file(month, filename):
 
-    archive_dir = os.path.join(
+    archive_path = os.path.join(
         ARCHIVE_FOLDER,
-        month
-    )
-
-    return send_from_directory(
-        archive_dir,
+        month,
         filename
     )
+
+    if not os.path.exists(archive_path):
+        return "Archive not found"
+
+    feed = feedparser.parse(archive_path)
+
+    entries = list(feed.entries)[::-1]
+
+    posts = ""
+
+    for e in entries[:100]:
+
+        title = e.get("title", "")
+
+        desc = e.get("description", "")
+
+        link = e.get("link", "#")
+
+        posts += f"""
+        <div class='post'>
+            <h3>{title}</h3>
+
+            <p>{desc}</p>
+
+            <a class='open-btn'
+               href='{link}'
+               target='_blank'>
+
+               Open Source
+
+            </a>
+        </div>
+        """
+
+    return f"""
+    <html>
+
+    <head>
+
+    <meta name='viewport'
+          content='width=device-width,
+                   initial-scale=1.0'>
+
+    <style>
+
+    body{{
+        font-family:system-ui;
+        padding:10px;
+        background:#f5f5f5;
+    }}
+
+    h2{{
+        text-align:center;
+        color:#d32f2f;
+    }}
+
+    .post{{
+        background:#fff;
+        padding:12px;
+        border-radius:10px;
+        margin-bottom:15px;
+        box-shadow:0 2px 5px rgba(0,0,0,0.1);
+    }}
+
+    .post h3{{
+        margin-top:0;
+        color:#1565c0;
+        font-size:18px;
+    }}
+
+    .post p{{
+        line-height:1.5;
+        color:#333;
+    }}
+
+    .open-btn{{
+        display:inline-block;
+        margin-top:10px;
+        background:#00695c;
+        color:#fff;
+        padding:8px 12px;
+        border-radius:6px;
+        text-decoration:none;
+        font-size:14px;
+    }}
+
+    </style>
+
+    </head>
+
+    <body>
+
+    <h2>📦 Archive Feed</h2>
+
+    {posts}
+
+    </body>
+
+    </html>
+    """
 
 # ------------------ Home ------------------
 @app.route("/")
