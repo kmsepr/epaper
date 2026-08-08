@@ -13,7 +13,7 @@ import json
 from gtts import gTTS
 
 import firebase_admin
-from firebase_admin import credentials, firestore
+from firebase_admin import credentials, firestore, auth
 
 app = Flask(__name__)
 
@@ -48,6 +48,20 @@ def get_firestore():
 
     _firestore_db = firestore.client()
     return _firestore_db
+
+
+# ------------------ FIREBASE WEB AUTH CONFIG ------------------
+# These values are for the browser Firebase Authentication client.
+# Set them in Koyeb environment variables, or replace the placeholders.
+FIREBASE_WEB_CONFIG = {
+    "apiKey": os.environ.get("FIREBASE_WEB_API_KEY", "YOUR_FIREBASE_WEB_API_KEY"),
+    "authDomain": os.environ.get("FIREBASE_WEB_AUTH_DOMAIN", "YOUR_PROJECT_ID.firebaseapp.com"),
+    "projectId": os.environ.get("FIREBASE_PROJECT_ID", "YOUR_PROJECT_ID"),
+    "storageBucket": os.environ.get("FIREBASE_STORAGE_BUCKET", "YOUR_PROJECT_ID.firebasestorage.app"),
+    "messagingSenderId": os.environ.get("FIREBASE_MESSAGING_SENDER_ID", "YOUR_MESSAGING_SENDER_ID"),
+    "appId": os.environ.get("FIREBASE_WEB_APP_ID", "YOUR_FIREBASE_WEB_APP_ID")
+}
+
 
 
 # -------------------- Config --------------------
@@ -727,7 +741,7 @@ def home():
 
 @app.route("/quiz")
 def quiz_app():
-    return """
+    html = """
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -738,9 +752,7 @@ def quiz_app():
     <title>CA Blockbuster Quiz</title>
 
     <style>
-        * {
-            box-sizing: border-box;
-        }
+        * { box-sizing: border-box; }
 
         body {
             font-family: system-ui, -apple-system, BlinkMacSystemFont,
@@ -751,14 +763,14 @@ def quiz_app():
         }
 
         .container {
-            width: min(760px, 100%);
+            width: min(900px, 100%);
             margin: auto;
-            padding: 20px 16px 40px;
+            padding: 16px 16px 40px;
         }
 
         .header {
             text-align: center;
-            padding: 18px 0 10px;
+            padding: 12px 0 10px;
         }
 
         .header h1 {
@@ -772,16 +784,14 @@ def quiz_app():
             margin: 8px 0 0;
         }
 
-        h2 {
-            margin-top: 20px;
-        }
+        h2 { margin-top: 20px; }
 
         .card {
             background: #fff;
             padding: 18px;
             margin: 12px 0;
             border-radius: 14px;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.09);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, .09);
             border: 1px solid #e7eaf0;
         }
 
@@ -812,9 +822,7 @@ def quiz_app():
             margin-top: 8px;
         }
 
-        .hidden {
-            display: none !important;
-        }
+        .hidden { display: none !important; }
 
         .topbar {
             display: flex;
@@ -834,13 +842,9 @@ def quiz_app():
             cursor: pointer;
         }
 
-        button:hover {
-            opacity: .92;
-        }
+        button:hover { opacity: .92; }
 
-        .back {
-            background: #555;
-        }
+        .back { background: #555; }
 
         .timer {
             font-weight: 700;
@@ -869,9 +873,7 @@ def quiz_app():
             line-height: 1.45;
         }
 
-        .option:hover {
-            background: #f5f9ff;
-        }
+        .option:hover { background: #f5f9ff; }
 
         .option.correct {
             background: #d8f3dc !important;
@@ -883,9 +885,7 @@ def quiz_app():
             border-color: #c62828;
         }
 
-        .explanation {
-            line-height: 1.5;
-        }
+        .explanation { line-height: 1.5; }
 
         .actions {
             display: flex;
@@ -918,17 +918,226 @@ def quiz_app():
             text-align: center;
         }
 
-        .center {
+        .center { text-align: center; }
+
+        /* Google login */
+        .account-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            background: #fff;
+            border: 1px solid #e5e7eb;
+            border-radius: 16px;
+            padding: 10px 12px;
+            margin-bottom: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,.06);
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-width: 0;
+        }
+
+        .user-photo,
+        .leader-photo,
+        .leader-avatar {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            object-fit: cover;
+            flex: 0 0 44px;
+        }
+
+        .leader-avatar {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #e3f2fd;
+            font-size: 22px;
+        }
+
+        .user-name {
+            font-weight: 700;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .user-email {
+            color: #777;
+            font-size: 12px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .google-btn {
+            background: #fff;
+            color: #333;
+            border: 1px solid #dadce0;
+            font-weight: 600;
+            white-space: nowrap;
+            box-shadow: 0 1px 3px rgba(0,0,0,.08);
+        }
+
+        .logout-btn {
+            background: #f1f3f4;
+            color: #444;
+            font-size: 13px;
+            padding: 8px 12px;
+        }
+
+        .leaderboard-button {
+            width: 100%;
+            margin-top: 18px;
+            padding: 15px;
+            border-radius: 14px;
+            background: linear-gradient(135deg, #1565c0, #42a5f5);
+            font-size: 17px;
+            font-weight: 700;
+            box-shadow: 0 4px 10px rgba(21,101,192,.22);
+        }
+
+        /* Attractive category grid */
+        #categories {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 14px;
+            margin-top: 14px;
+        }
+
+        .category-card {
+            min-height: 128px;
+            padding: 18px 12px;
+            background: #fff;
+            border: 1px solid #e5eaf2;
+            border-radius: 18px;
+            box-shadow: 0 4px 12px rgba(0,0,0,.07);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
             text-align: center;
+            cursor: pointer;
+            transition: transform .15s, box-shadow .15s, background .15s;
+        }
+
+        .category-card:hover {
+            transform: translateY(-3px);
+            background: #f8fbff;
+            box-shadow: 0 7px 18px rgba(0,0,0,.10);
+        }
+
+        .category-icon {
+            font-size: 34px;
+            line-height: 1;
+            margin-bottom: 10px;
+        }
+
+        .category-name {
+            font-size: 16px;
+            font-weight: 750;
+            line-height: 1.25;
+        }
+
+        .category-tests {
+            font-size: 12px;
+            color: #777;
+            margin-top: 6px;
+        }
+
+        /* Test cards */
+        #testList {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 14px;
+        }
+
+        #testList .card { margin: 0; }
+
+        /* Leaderboard */
+        .leader-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: #fff;
+            padding: 13px;
+            margin: 10px 0;
+            border-radius: 15px;
+            border: 1px solid #e7eaf0;
+            box-shadow: 0 3px 10px rgba(0,0,0,.06);
+        }
+
+        .rank {
+            width: 34px;
+            flex: 0 0 34px;
+            text-align: center;
+            font-size: 17px;
+            font-weight: 800;
+        }
+
+        .leader-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .leader-name {
+            font-weight: 750;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .leader-badge {
+            color: #777;
+            font-size: 12px;
+            margin-top: 3px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .leader-points {
+            color: #1565c0;
+            font-weight: 800;
+            text-align: right;
+            white-space: nowrap;
+        }
+
+        .leader-points small {
+            display: block;
+            color: #777;
+            font-size: 10px;
+            font-weight: 500;
         }
 
         @media (max-width: 600px) {
-            .header h1 {
-                font-size: 26px;
+            .container { padding: 12px 12px 30px; }
+            .header h1 { font-size: 26px; }
+            .question { font-size: 18px; }
+
+            #categories,
+            #testList {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
             }
 
-            .question {
-                font-size: 18px;
+            .account-bar {
+                align-items: flex-start;
+            }
+
+            .google-btn,
+            .logout-btn {
+                padding: 9px 10px;
+            }
+        }
+
+        @media (max-width: 380px) {
+            #categories,
+            #testList {
+                grid-template-columns: 1fr;
             }
         }
     </style>
@@ -940,6 +1149,23 @@ def quiz_app():
 
     <!-- HOME / CATEGORIES -->
     <section id="home">
+
+        <div id="accountBar" class="account-bar">
+            <div class="user-info">
+                <div class="leader-avatar">👤</div>
+                <div>
+                    <div class="user-name">Not signed in</div>
+                    <div class="user-email">Sign in to your Google account</div>
+                </div>
+            </div>
+
+            <button id="googleLoginButton"
+                    class="google-btn"
+                    onclick="loginWithGoogle()">
+                🔐 Google Login
+            </button>
+        </div>
+
         <div class="header">
             <h1>🎯 CA Blockbuster</h1>
             <p>Daily CA Revision</p>
@@ -950,6 +1176,12 @@ def quiz_app():
         <div id="categories">
             <div class="status">Loading...</div>
         </div>
+
+        <button class="leaderboard-button"
+                onclick="showLeaderboard()">
+            🏆 View Leaderboard
+        </button>
+
     </section>
 
 
@@ -1017,6 +1249,24 @@ def quiz_app():
 
     </section>
 
+    <!-- LEADERBOARD -->
+    <section id="leaderboard" class="hidden">
+
+        <div class="topbar">
+            <button class="back" onclick="showHome()">← Back</button>
+        </div>
+
+        <div class="header">
+            <h1>🏆 Leaderboard</h1>
+            <p>Top performers</p>
+        </div>
+
+        <div id="leaderboardList">
+            <div class="status">Loading leaderboard...</div>
+        </div>
+
+    </section>
+
 </div>
 
 
@@ -1024,8 +1274,6 @@ def quiz_app():
 "use strict";
 
 /*
-    The browser does NOT connect directly to Firestore.
-
     Browser
        ↓
     Flask /quiz/api/...
@@ -1033,7 +1281,36 @@ def quiz_app():
     Firebase Admin SDK
        ↓
     Firestore
+
+    Google Login is handled by Firebase Authentication in the browser.
 */
+
+const firebaseConfig = __FIREBASE_WEB_CONFIG__;
+
+let firebaseApp = null;
+let firebaseAuth = null;
+let currentUser = null;
+
+try {
+    if (
+        firebaseConfig.apiKey &&
+        !firebaseConfig.apiKey.startsWith("YOUR_") &&
+        firebaseConfig.projectId &&
+        !firebaseConfig.projectId.startsWith("YOUR_")
+    ) {
+        firebaseApp = firebase.initializeApp(firebaseConfig);
+        firebaseAuth = firebase.auth();
+
+        firebaseAuth.onAuthStateChanged(function(user) {
+            currentUser = user || null;
+            updateAccountUI();
+        });
+    } else {
+        console.warn("Firebase Web Authentication is not configured.");
+    }
+} catch (e) {
+    console.error("Firebase Authentication initialization failed:", e);
+}
 
 let allTests = [];
 let currentTests = [];
@@ -1052,13 +1329,26 @@ let timerInterval = null;
 
 /* ------------------ API ------------------ */
 
-async function apiGet(url) {
+async function apiGet(url, requireLogin = false) {
+
+    const headers = {
+        "Accept": "application/json"
+    };
+
+    if (firebaseAuth && currentUser) {
+        try {
+            headers["Authorization"] =
+                "Bearer " + await currentUser.getIdToken();
+        } catch (e) {
+            console.warn("Could not get Firebase ID token:", e);
+        }
+    } else if (requireLogin) {
+        throw new Error("Please sign in with Google first.");
+    }
 
     const response = await fetch(url, {
         method: "GET",
-        headers: {
-            "Accept": "application/json"
-        }
+        headers: headers
     });
 
     let data;
@@ -1156,14 +1446,24 @@ function displayCategories() {
         const card =
             document.createElement("div");
 
-        card.className = "card clickable";
+        card.className = "category-card";
+
+        const icons = [
+            "📚", "🌍", "📰", "🔬",
+            "🏛️", "💡", "🇮🇳", "🎯"
+        ];
+
+        const icon =
+            icons[topicIds.indexOf(topicId) % icons.length];
 
         card.innerHTML = `
-            <div class="title">
-                📚 ${escapeHtml(topicId)}
+            <div class="category-icon">${icon}</div>
+
+            <div class="category-name">
+                ${escapeHtml(topicId)}
             </div>
 
-            <div class="subtitle">
+            <div class="category-tests">
                 ${topicTests.length}
                 ${topicTests.length === 1 ? "Test" : "Tests"}
             </div>
@@ -1570,6 +1870,9 @@ window.showHome = function() {
 
     document.getElementById("result")
         .classList.add("hidden");
+
+    document.getElementById("leaderboard")
+        .classList.add("hidden");
 };
 
 
@@ -1583,8 +1886,229 @@ window.showTests = function() {
     document.getElementById("result")
         .classList.add("hidden");
 
+    document.getElementById("leaderboard")
+        .classList.add("hidden");
+
     document.getElementById("tests")
         .classList.remove("hidden");
+};
+
+
+/* ------------------ GOOGLE LOGIN ------------------ */
+
+window.loginWithGoogle = async function() {
+
+    if (!firebaseAuth) {
+        alert(
+            "Google Login is not configured yet.\n\n" +
+            "Add the Firebase Web App configuration " +
+            "to the Koyeb environment variables."
+        );
+        return;
+    }
+
+    try {
+        const provider =
+            new firebase.auth.GoogleAuthProvider();
+
+        provider.setCustomParameters({
+            prompt: "select_account"
+        });
+
+        await firebaseAuth.signInWithPopup(provider);
+
+    } catch (error) {
+        console.error("Google login error:", error);
+
+        alert(
+            "Google Login failed:\n" +
+            (error.message || "Unknown error")
+        );
+    }
+};
+
+
+window.logoutGoogle = async function() {
+
+    if (!firebaseAuth)
+        return;
+
+    try {
+        await firebaseAuth.signOut();
+    } catch (error) {
+        console.error("Logout error:", error);
+    }
+};
+
+
+function updateAccountUI() {
+
+    const bar =
+        document.getElementById("accountBar");
+
+    if (!bar)
+        return;
+
+    const info =
+        bar.querySelector(".user-info");
+
+    const button =
+        document.getElementById("googleLoginButton");
+
+    if (currentUser) {
+
+        const photo =
+            currentUser.photoURL
+                ? `<img class="user-photo"
+                        src="${escapeHtml(currentUser.photoURL)}"
+                        alt="">`
+                : `<div class="leader-avatar">👤</div>`;
+
+        info.innerHTML = `
+            ${photo}
+
+            <div>
+                <div class="user-name">
+                    ${escapeHtml(
+                        currentUser.displayName || "Google User"
+                    )}
+                </div>
+
+                <div class="user-email">
+                    ${escapeHtml(currentUser.email || "")}
+                </div>
+            </div>
+        `;
+
+        button.textContent = "Logout";
+        button.className = "logout-btn";
+        button.onclick = window.logoutGoogle;
+
+    } else {
+
+        info.innerHTML = `
+            <div class="leader-avatar">👤</div>
+
+            <div>
+                <div class="user-name">
+                    Not signed in
+                </div>
+
+                <div class="user-email">
+                    Sign in to your Google account
+                </div>
+            </div>
+        `;
+
+        button.textContent = "🔐 Google Login";
+        button.className = "google-btn";
+        button.onclick = window.loginWithGoogle;
+    }
+}
+
+
+/* ------------------ LEADERBOARD ------------------ */
+
+window.showLeaderboard = async function() {
+
+    clearInterval(timerInterval);
+
+    document.getElementById("home")
+        .classList.add("hidden");
+
+    document.getElementById("tests")
+        .classList.add("hidden");
+
+    document.getElementById("quiz")
+        .classList.add("hidden");
+
+    document.getElementById("result")
+        .classList.add("hidden");
+
+    document.getElementById("leaderboard")
+        .classList.remove("hidden");
+
+    const container =
+        document.getElementById("leaderboardList");
+
+    container.innerHTML =
+        '<div class="status">Loading leaderboard...</div>';
+
+    try {
+
+        const users =
+            await apiGet("/quiz/api/leaderboard");
+
+        if (!Array.isArray(users) || users.length === 0) {
+            container.innerHTML =
+                '<div class="empty">No leaderboard data found.</div>';
+            return;
+        }
+
+        container.innerHTML = "";
+
+        users.forEach(function(user, index) {
+
+            const row =
+                document.createElement("div");
+
+            row.className = "leader-row";
+
+            const medal =
+                index === 0 ? "🥇" :
+                index === 1 ? "🥈" :
+                index === 2 ? "🥉" :
+                String(index + 1);
+
+            const photo =
+                user.profilePhotoUri
+                    ? `<img class="leader-photo"
+                            src="${escapeHtml(user.profilePhotoUri)}"
+                            alt="">`
+                    : `<div class="leader-avatar">
+                            ${escapeHtml(
+                                user.avatarEmoji || "👤"
+                            )}
+                       </div>`;
+
+            row.innerHTML = `
+                <div class="rank">${medal}</div>
+
+                ${photo}
+
+                <div class="leader-info">
+                    <div class="leader-name">
+                        ${escapeHtml(user.name || "User")}
+                    </div>
+
+                    <div class="leader-badge">
+                        ${escapeHtml(
+                            user.badgeTitle || ""
+                        )}
+                    </div>
+                </div>
+
+                <div class="leader-points">
+                    ${Number(user.points || 0)}
+                    <small>points</small>
+                </div>
+            `;
+
+            container.appendChild(row);
+        });
+
+    } catch (error) {
+
+        console.error(error);
+
+        container.innerHTML = `
+            <div class="status error">
+                <strong>Unable to load leaderboard.</strong>
+                <br><br>
+                ${escapeHtml(error.message)}
+            </div>
+        `;
+    }
 };
 
 
@@ -1610,6 +2134,12 @@ loadData();
 </body>
 </html>
 """
+
+    return html.replace(
+        "__FIREBASE_WEB_CONFIG__",
+        json.dumps(FIREBASE_WEB_CONFIG)
+    )
+
 
 
 # ------------------ QUIZ FIRESTORE API ------------------
@@ -1716,6 +2246,51 @@ def quiz_questions(test_id):
 
     except Exception as e:
         print(f"[Quiz Firestore questions error] {e}")
+
+        return {
+            "error": str(e)
+        }, 500
+
+
+
+# ------------------ QUIZ LEADERBOARD API ------------------
+
+@app.route("/quiz/api/leaderboard")
+def quiz_leaderboard():
+    try:
+        db = get_firestore()
+
+        docs = db.collection("leaderboard").stream()
+
+        entries = []
+
+        for doc in docs:
+            data = doc.to_dict()
+
+            try:
+                points = int(data.get("points", 0) or 0)
+            except (TypeError, ValueError):
+                points = 0
+
+            entries.append({
+                "name": data.get("name") or "User",
+                "points": points,
+                "accuracy": data.get("accuracy", 0),
+                "stars": data.get("stars", 0),
+                "badgeTitle": data.get("badgeTitle") or "",
+                "avatarEmoji": data.get("avatarEmoji") or "👤",
+                "profilePhotoUri": data.get("profilePhotoUri") or ""
+            })
+
+        entries.sort(
+            key=lambda item: item["points"],
+            reverse=True
+        )
+
+        return entries[:50]
+
+    except Exception as e:
+        print(f"[Quiz Firestore leaderboard error] {e}")
 
         return {
             "error": str(e)
