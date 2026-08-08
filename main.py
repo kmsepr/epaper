@@ -751,6 +751,10 @@ def quiz_app():
 
     <title>CA Blockbuster Quiz</title>
 
+    <!-- Firebase Web SDK: required for Google Sign-In -->
+    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+
     <style>
         * { box-sizing: border-box; }
 
@@ -983,6 +987,20 @@ def quiz_app():
             box-shadow: 0 1px 3px rgba(0,0,0,.08);
         }
 
+        .login-status {
+            text-align: center;
+            font-size: 12px;
+            min-height: 18px;
+            margin: -4px 0 10px;
+        }
+
+        .google-btn,
+        .logout-btn {
+            position: relative;
+            z-index: 5;
+            pointer-events: auto;
+        }
+
         .logout-btn {
             background: #f1f3f4;
             color: #444;
@@ -1160,10 +1178,15 @@ def quiz_app():
             </div>
 
             <button id="googleLoginButton"
+                    type="button"
                     class="google-btn"
                     onclick="loginWithGoogle()">
                 🔐 Google Login
             </button>
+        </div>
+
+        <div id="loginStatus" class="login-status">
+            Initializing Google Login...
         </div>
 
         <div class="header">
@@ -1276,13 +1299,15 @@ def quiz_app():
 /*
     Browser
        ↓
+    Firebase Authentication (Google)
+       ↓
+    Firebase ID token
+       ↓
     Flask /quiz/api/...
        ↓
     Firebase Admin SDK
        ↓
     Firestore
-
-    Google Login is handled by Firebase Authentication in the browser.
 */
 
 const firebaseConfig = __FIREBASE_WEB_CONFIG__;
@@ -1290,8 +1315,26 @@ const firebaseConfig = __FIREBASE_WEB_CONFIG__;
 let firebaseApp = null;
 let firebaseAuth = null;
 let currentUser = null;
+let firebaseAuthReady = false;
+
+function setLoginStatus(message, isError = false) {
+    const el = document.getElementById("loginStatus");
+    if (!el) return;
+    el.textContent = message || "";
+    el.style.color = isError ? "#b71c1c" : "#666";
+}
 
 try {
+    console.log("[Google Login] Starting Firebase Web Authentication...");
+    console.log("[Google Login] Firebase project:", firebaseConfig.projectId || "missing");
+    console.log("[Google Login] Auth domain:", firebaseConfig.authDomain || "missing");
+
+    if (!window.firebase) {
+        throw new Error(
+            "Firebase Web SDK did not load. Check internet access/CSP and the Firebase SDK script URLs."
+        );
+    }
+
     if (
         firebaseConfig.apiKey &&
         !firebaseConfig.apiKey.startsWith("YOUR_") &&
@@ -1300,16 +1343,37 @@ try {
     ) {
         firebaseApp = firebase.initializeApp(firebaseConfig);
         firebaseAuth = firebase.auth();
+        firebaseAuthReady = true;
+
+        console.log("[Google Login] Firebase initialized successfully.");
+        setLoginStatus("Google sign-in is ready.");
 
         firebaseAuth.onAuthStateChanged(function(user) {
             currentUser = user || null;
+
+            if (currentUser) {
+                console.log("[Google Login] Signed in:", currentUser.email);
+                setLoginStatus("Signed in with Google.");
+            } else {
+                console.log("[Google Login] No user signed in.");
+                setLoginStatus("Sign in with Google to continue.");
+            }
+
             updateAccountUI();
         });
     } else {
-        console.warn("Firebase Web Authentication is not configured.");
+        console.error("[Google Login] Firebase Web configuration is missing.", firebaseConfig);
+        setLoginStatus(
+            "Google Login is not configured. Add the Firebase Web variables in Koyeb.",
+            true
+        );
     }
 } catch (e) {
-    console.error("Firebase Authentication initialization failed:", e);
+    console.error("[Google Login] Firebase initialization failed:", e);
+    setLoginStatus(
+        "Google Login initialization failed: " + e.message,
+        true
+    );
 }
 
 let allTests = [];
@@ -1898,16 +1962,30 @@ window.showTests = function() {
 
 window.loginWithGoogle = async function() {
 
-    if (!firebaseAuth) {
-        alert(
-            "Google Login is not configured yet.\n\n" +
-            "Add the Firebase Web App configuration " +
-            "to the Koyeb environment variables."
-        );
+    console.log("[Google Login] Button clicked.");
+
+    const button = document.getElementById("googleLoginButton");
+
+    if (!firebaseAuthReady || !firebaseAuth) {
+        const message =
+            "Google Login is not ready.\n\n" +
+            "Open browser Developer Console (F12) for the exact error.\n" +
+            "Also check the Firebase Web variables in Koyeb.";
+
+        console.error("[Google Login]", message);
+        setLoginStatus(message.replace(/\n/g, " "), true);
+        alert(message);
         return;
     }
 
     try {
+        if (button) {
+            button.disabled = true;
+            button.textContent = "Connecting...";
+        }
+
+        setLoginStatus("Opening Google sign-in...");
+
         const provider =
             new firebase.auth.GoogleAuthProvider();
 
@@ -1915,15 +1993,50 @@ window.loginWithGoogle = async function() {
             prompt: "select_account"
         });
 
+        console.log("[Google Login] Calling signInWithPopup...");
+
         await firebaseAuth.signInWithPopup(provider);
 
-    } catch (error) {
-        console.error("Google login error:", error);
+        console.log("[Google Login] Popup sign-in completed.");
 
-        alert(
-            "Google Login failed:\n" +
-            (error.message || "Unknown error")
-        );
+    } catch (error) {
+
+        console.error("[Google Login] Sign-in error:", error);
+        console.error("[Google Login] Error code:", error.code);
+        console.error("[Google Login] Error message:", error.message);
+
+        if (error.code === "auth/popup-blocked" ||
+            error.code === "auth/cancelled-popup-request") {
+
+            try {
+                console.log("[Google Login] Popup blocked. Switching to redirect...");
+                setLoginStatus("Redirecting to Google sign-in...");
+                await firebaseAuth.signInWithRedirect(provider);
+                return;
+            } catch (redirectError) {
+                console.error("[Google Login] Redirect sign-in error:", redirectError);
+                setLoginStatus(
+                    "Google Login failed: " + redirectError.message,
+                    true
+                );
+            }
+        } else {
+            setLoginStatus(
+                "Google Login failed: " +
+                (error.message || "Unknown error"),
+                true
+            );
+            alert(
+                "Google Login failed\n\n" +
+                "Code: " + (error.code || "unknown") + "\n\n" +
+                (error.message || "Unknown error")
+            );
+        }
+    } finally {
+        if (button && !currentUser) {
+            button.disabled = false;
+            button.textContent = "🔐 Google Login";
+        }
     }
 };
 
@@ -1980,6 +2093,7 @@ function updateAccountUI() {
             </div>
         `;
 
+        button.type = "button";
         button.textContent = "Logout";
         button.className = "logout-btn";
         button.onclick = window.logoutGoogle;
@@ -2000,6 +2114,7 @@ function updateAccountUI() {
             </div>
         `;
 
+        button.type = "button";
         button.textContent = "🔐 Google Login";
         button.className = "google-btn";
         button.onclick = window.loginWithGoogle;
@@ -2299,6 +2414,18 @@ def quiz_leaderboard():
 
 # ------------------ Run ------------------
 if __name__ == "__main__":
+
+    print("[Startup] CA Blockbuster server starting...")
+    print("[Startup] Firebase Web project:", FIREBASE_WEB_CONFIG.get("projectId"))
+    print("[Startup] Firebase Web authDomain:", FIREBASE_WEB_CONFIG.get("authDomain"))
+    print("[Startup] Firebase Web API key configured:", bool(
+        FIREBASE_WEB_CONFIG.get("apiKey") and
+        not str(FIREBASE_WEB_CONFIG.get("apiKey")).startswith("YOUR_")
+    ))
+    print("[Startup] Firebase Web appId configured:", bool(
+        FIREBASE_WEB_CONFIG.get("appId") and
+        not str(FIREBASE_WEB_CONFIG.get("appId")).startswith("YOUR_")
+    ))
 
     threading.Thread(
         target=telegram_updater,
