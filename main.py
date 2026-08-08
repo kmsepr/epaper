@@ -4462,71 +4462,8 @@ def quiz_leaderboard():
 # ============================================================
 
 if __name__ == "__main__":
-
-    print(
-        "[Startup] CA Blockbuster server starting..."
-    )
-
-
-    print(
-        "[Startup] Firebase Web project:",
-        FIREBASE_WEB_CONFIG.get(
-            "projectId"
-        )
-    )
-
-
-    print(
-        "[Startup] Firebase Web authDomain:",
-        FIREBASE_WEB_CONFIG.get(
-            "authDomain"
-        )
-    )
-
-
-    print(
-        "[Startup] Firebase Web API key configured:",
-        bool(
-            FIREBASE_WEB_CONFIG.get(
-                "apiKey"
-            )
-            and
-            not str(
-                FIREBASE_WEB_CONFIG.get(
-                    "apiKey"
-                )
-            ).startswith("YOUR_")
-        )
-    )
-
-
-    print(
-        "[Startup] Firebase Web appId configured:",
-        bool(
-            FIREBASE_WEB_CONFIG.get(
-                "appId"
-            )
-            and
-            not str(
-                FIREBASE_WEB_CONFIG.get(
-                    "appId"
-                )
-            ).startswith("YOUR_")
-        )
-    )
-
-
-    threading.Thread(
-        target=telegram_updater,
-        daemon=True
-    ).start()
-
-
-    threading.Thread(
-        target=audio_updater,
-        daemon=True
-    ).start()
-
+    print("[Startup] CA Blockbuster server starting...")
+    print("[Startup] Firebase Web project:", FIREBASE_WEB_CONFIG.get("projectId"))
 
     app.run(
         host="0.0.0.0",
