@@ -942,7 +942,7 @@ def quiz_app():
     <section id="home">
         <div class="header">
             <h1>🎯 CA Blockbuster</h1>
-            <p>Practice tests from Firestore</p>
+            <p>Daily CA Revision</p>
         </div>
 
         <h2>Categories</h2>
