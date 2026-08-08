@@ -9,9 +9,46 @@ from datetime import datetime
 from flask import Flask, request, send_from_directory
 from bs4 import BeautifulSoup
 import xml.etree.ElementTree as ET
+import json
 from gtts import gTTS
 
+import firebase_admin
+from firebase_admin import credentials, firestore
+
 app = Flask(__name__)
+
+# ------------------ FIRESTORE ------------------
+# Firebase service-account JSON is kept in the Koyeb
+# environment variable FIREBASE_SERVICE_ACCOUNT_JSON.
+_firestore_db = None
+
+def get_firestore():
+    global _firestore_db
+
+    if _firestore_db is not None:
+        return _firestore_db
+
+    firebase_json = os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON")
+
+    if not firebase_json:
+        raise RuntimeError(
+            "FIREBASE_SERVICE_ACCOUNT_JSON is not configured in Koyeb"
+        )
+
+    try:
+        service_account_info = json.loads(firebase_json)
+    except json.JSONDecodeError as e:
+        raise RuntimeError(
+            "FIREBASE_SERVICE_ACCOUNT_JSON is not valid JSON"
+        ) from e
+
+    if not firebase_admin._apps:
+        cred = credentials.Certificate(service_account_info)
+        firebase_admin.initialize_app(cred)
+
+    _firestore_db = firestore.client()
+    return _firestore_db
+
 
 # -------------------- Config --------------------
 AUDIO_FOLDER = "static/audio"
@@ -519,748 +556,6 @@ def archive_file(month, filename):
     </html>
     """
 
-
-# ------------------ QUIZ APP ------------------
-@app.route("/quiz")
-def quiz_app():
-    return """
-<!DOCTYPE html>
-<html>
-<head>
-    <meta name="viewport"
-          content="width=device-width, initial-scale=1.0">
-
-    <title>CA Blockbuster Quiz</title>
-
-    <style>
-        body {
-            font-family: system-ui, sans-serif;
-            background: #f5f7fb;
-            margin: 0;
-            padding: 15px;
-            color: #222;
-        }
-
-        .container {
-            max-width: 700px;
-            margin: auto;
-        }
-
-        h1 {
-            text-align: center;
-            color: #1565c0;
-        }
-
-        .card {
-            background: white;
-            padding: 18px;
-            margin: 12px 0;
-            border-radius: 14px;
-            box-shadow: 0 2px 8px rgba(0,0,0,.1);
-            cursor: pointer;
-        }
-
-        .card:hover {
-            background: #e3f2fd;
-        }
-
-        .title {
-            font-size: 18px;
-            font-weight: bold;
-        }
-
-        .subtitle {
-            color: #666;
-            margin-top: 5px;
-        }
-
-        .hidden {
-            display: none;
-        }
-
-        .option {
-            background: white;
-            border: 2px solid #ddd;
-            padding: 14px;
-            margin: 10px 0;
-            border-radius: 10px;
-            cursor: pointer;
-        }
-
-        .option:hover {
-            background: #f0f7ff;
-        }
-
-        .correct {
-            background: #c8e6c9 !important;
-            border-color: #2e7d32;
-        }
-
-        .wrong {
-            background: #ffcdd2 !important;
-            border-color: #c62828;
-        }
-
-        button {
-            border: none;
-            background: #1565c0;
-            color: white;
-            padding: 12px 20px;
-            border-radius: 8px;
-            font-size: 16px;
-            cursor: pointer;
-        }
-
-        .topbar {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 15px;
-        }
-
-        #timer {
-            font-weight: bold;
-            color: #d32f2f;
-        }
-
-        .back {
-            background: #555;
-        }
-    </style>
-</head>
-
-<body>
-
-<div class="container">
-
-    <!-- HOME -->
-    <div id="home">
-        <h1>🎯 CA Blockbuster</h1>
-        <h2>Categories</h2>
-        <div id="categories">
-            Loading...
-        </div>
-    </div>
-
-    <!-- TEST LIST -->
-    <div id="tests" class="hidden">
-        <div class="topbar">
-            <button class="back" onclick="showHome()">← Back</button>
-        </div>
-
-        <h2 id="topicTitle"></h2>
-
-        <div id="testList">
-            Loading...
-        </div>
-    </div>
-
-    <!-- QUIZ -->
-    <div id="quiz" class="hidden">
-
-        <div class="topbar">
-            <button class="back" onclick="showTests()">← Tests</button>
-            <span id="timer">00:00</span>
-        </div>
-
-        <h2 id="testTitle"></h2>
-
-        <p id="questionNumber"></p>
-
-        <div class="card">
-            <div id="questionText"></div>
-        </div>
-
-        <div id="options"></div>
-
-        <div class="card">
-            <b>Explanation</b>
-            <p id="explanation"></p>
-        </div>
-
-        <button onclick="nextQuestion()">Next →</button>
-
-    </div>
-
-    <!-- RESULT -->
-    <div id="result" class="hidden">
-        <h1>🎉 Result</h1>
-
-        <div class="card">
-            <h2 id="scoreText"></h2>
-        </div>
-
-        <button onclick="showHome()">Back to Home</button>
-    </div>
-
-</div>
-
-
-<script type="module">
-
-import { initializeApp }
-    from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
-
-import {
-    getFirestore,
-    collection,
-    getDocs
-} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
-
-
-/*
-==================================================
-PUT YOUR FIREBASE WEB CONFIG HERE
-==================================================
-*/
-
-const firebaseConfig = {
-
-    apiKey: "YOUR_API_KEY",
-
-    authDomain: "YOUR_PROJECT.firebaseapp.com",
-
-    projectId: "YOUR_PROJECT_ID",
-
-    storageBucket: "YOUR_PROJECT.firebasestorage.app",
-
-    messagingSenderId: "YOUR_SENDER_ID",
-
-    appId: "YOUR_APP_ID"
-
-};
-
-
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-
-
-/*
-==================================================
-DATA
-==================================================
-*/
-
-let tests = [];
-let questions = [];
-
-let selectedTopic = "";
-let selectedTest = null;
-
-let currentQuestion = 0;
-let score = 0;
-let answered = false;
-
-let timerSeconds = 0;
-let timerInterval;
-
-
-/*
-==================================================
-LOAD FIRESTORE
-==================================================
-*/
-
-async function loadData() {
-
-    try {
-
-        const testSnapshot =
-            await getDocs(collection(db, "custom_tests"));
-
-        tests = [];
-
-        testSnapshot.forEach(doc => {
-
-            const data = doc.data();
-
-            tests.push({
-                id: data.id || doc.id,
-                topicId: data.topicId || "unknown",
-                title: data.title || data.name || "",
-                subtitle:
-                    data.subtitle ||
-                    data.description ||
-                    "",
-                durationMinutes:
-                    data.durationMinutes || 10,
-                difficulty:
-                    data.difficulty || "Medium",
-                dateMillis:
-                    data.dateMillis || null
-            });
-
-        });
-
-
-        const questionSnapshot =
-            await getDocs(
-                collection(db, "custom_questions")
-            );
-
-        questions = [];
-
-        questionSnapshot.forEach(doc => {
-
-            const data = doc.data();
-
-            questions.push({
-                id: data.id || doc.id,
-
-                testId: data.testId,
-
-                topicId: data.topicId || "",
-
-                questionText:
-                    data.questionText ||
-                    data.question ||
-                    "",
-
-                options: [
-                    data.option0 || "",
-                    data.option1 || "",
-                    data.option2 || "",
-                    data.option3 || ""
-                ],
-
-                correctOptionIndex:
-                    data.correctOptionIndex ?? 0,
-
-                explanation:
-                    data.explanation || "",
-
-                hint:
-                    data.hint || ""
-            });
-
-        });
-
-
-        displayCategories();
-
-    } catch (error) {
-
-        console.error(error);
-
-        document.getElementById("categories")
-            .innerHTML =
-            "<p>Unable to load quiz.</p>";
-
-    }
-
-}
-
-
-/*
-==================================================
-CATEGORIES
-==================================================
-*/
-
-function displayCategories() {
-
-    const container =
-        document.getElementById("categories");
-
-    container.innerHTML = "";
-
-    const topicIds =
-        [...new Set(
-            tests.map(test => test.topicId)
-        )];
-
-
-    topicIds.forEach(topicId => {
-
-        const topicTests =
-            tests.filter(
-                test => test.topicId === topicId
-            );
-
-
-        const card =
-            document.createElement("div");
-
-        card.className = "card";
-
-        card.innerHTML = `
-            <div class="title">
-                📚 ${topicId}
-            </div>
-
-            <div class="subtitle">
-                ${topicTests.length} Tests
-            </div>
-        `;
-
-
-        card.onclick = () =>
-            showTestsForTopic(topicId);
-
-
-        container.appendChild(card);
-
-    });
-
-}
-
-
-/*
-==================================================
-TEST LIST
-==================================================
-*/
-
-function showTestsForTopic(topicId) {
-
-    selectedTopic = topicId;
-
-    document.getElementById("home")
-        .classList.add("hidden");
-
-    document.getElementById("tests")
-        .classList.remove("hidden");
-
-    document.getElementById("quiz")
-        .classList.add("hidden");
-
-    document.getElementById("result")
-        .classList.add("hidden");
-
-
-    document.getElementById("topicTitle")
-        .textContent = topicId;
-
-
-    const container =
-        document.getElementById("testList");
-
-    container.innerHTML = "";
-
-
-    const topicTests =
-        tests.filter(
-            test => test.topicId === topicId
-        );
-
-
-    topicTests.forEach(test => {
-
-        const questionCount =
-            questions.filter(
-                q => q.testId === test.id
-            ).length;
-
-
-        const card =
-            document.createElement("div");
-
-        card.className = "card";
-
-        card.innerHTML = `
-            <div class="title">
-                ${test.title}
-            </div>
-
-            <div class="subtitle">
-                ${test.subtitle}
-            </div>
-
-            <div class="subtitle">
-                ${questionCount} Questions
-                • ${test.durationMinutes} min
-                • ${test.difficulty}
-            </div>
-        `;
-
-
-        card.onclick = () =>
-            startQuiz(test);
-
-
-        container.appendChild(card);
-
-    });
-
-}
-
-
-/*
-==================================================
-START QUIZ
-==================================================
-*/
-
-function startQuiz(test) {
-
-    selectedTest = test;
-
-    currentQuestion = 0;
-    score = 0;
-    answered = false;
-
-
-    questions =
-        questions.filter(
-            q => q.testId === test.id
-        );
-
-
-    document.getElementById("tests")
-        .classList.add("hidden");
-
-    document.getElementById("quiz")
-        .classList.remove("hidden");
-
-
-    document.getElementById("testTitle")
-        .textContent = test.title;
-
-
-    startTimer();
-
-    displayQuestion();
-
-}
-
-
-/*
-==================================================
-QUESTION
-==================================================
-*/
-
-function displayQuestion() {
-
-    const q =
-        questions[currentQuestion];
-
-
-    if (!q) {
-
-        finishQuiz();
-
-        return;
-
-    }
-
-
-    answered = false;
-
-
-    document.getElementById("questionNumber")
-        .textContent =
-        `Question ${currentQuestion + 1} / ${questions.length}`;
-
-
-    document.getElementById("questionText")
-        .textContent = q.questionText;
-
-
-    document.getElementById("explanation")
-        .textContent = "";
-
-
-    const options =
-        document.getElementById("options");
-
-    options.innerHTML = "";
-
-
-    q.options.forEach(
-        (option, index) => {
-
-            const div =
-                document.createElement("div");
-
-            div.className = "option";
-
-            div.textContent = option;
-
-
-            div.onclick = () =>
-                selectAnswer(index, div);
-
-
-            options.appendChild(div);
-
-        }
-    );
-
-}
-
-
-/*
-==================================================
-ANSWER
-==================================================
-*/
-
-function selectAnswer(index, element) {
-
-    if (answered)
-        return;
-
-    answered = true;
-
-
-    const q =
-        questions[currentQuestion];
-
-
-    const optionElements =
-        document.querySelectorAll(".option");
-
-
-    if (index === q.correctOptionIndex) {
-
-        element.classList.add("correct");
-
-        score++;
-
-    } else {
-
-        element.classList.add("wrong");
-
-        optionElements[
-            q.correctOptionIndex
-        ].classList.add("correct");
-
-    }
-
-
-    document.getElementById("explanation")
-        .textContent =
-        q.explanation || "";
-
-}
-
-
-/*
-==================================================
-NEXT
-==================================================
-*/
-
-window.nextQuestion = function() {
-
-    if (!answered)
-        return;
-
-
-    currentQuestion++;
-
-    displayQuestion();
-
-};
-
-
-/*
-==================================================
-TIMER
-==================================================
-*/
-
-function startTimer() {
-
-    clearInterval(timerInterval);
-
-    timerSeconds = 0;
-
-
-    timerInterval =
-        setInterval(() => {
-
-            timerSeconds++;
-
-
-            const minutes =
-                Math.floor(timerSeconds / 60);
-
-            const seconds =
-                timerSeconds % 60;
-
-
-            document.getElementById("timer")
-                .textContent =
-                String(minutes).padStart(2, "0")
-                + ":" +
-                String(seconds).padStart(2, "0");
-
-        }, 1000);
-
-}
-
-
-/*
-==================================================
-RESULT
-==================================================
-*/
-
-function finishQuiz() {
-
-    clearInterval(timerInterval);
-
-
-    document.getElementById("quiz")
-        .classList.add("hidden");
-
-    document.getElementById("result")
-        .classList.remove("hidden");
-
-
-    document.getElementById("scoreText")
-        .textContent =
-        `${score} / ${questions.length}`;
-
-}
-
-
-/*
-==================================================
-NAVIGATION
-==================================================
-*/
-
-window.showHome = function() {
-
-    clearInterval(timerInterval);
-
-    document.getElementById("home")
-        .classList.remove("hidden");
-
-    document.getElementById("tests")
-        .classList.add("hidden");
-
-    document.getElementById("quiz")
-        .classList.add("hidden");
-
-    document.getElementById("result")
-        .classList.add("hidden");
-
-};
-
-
-window.showTests = function() {
-
-    clearInterval(timerInterval);
-
-    document.getElementById("quiz")
-        .classList.add("hidden");
-
-    document.getElementById("tests")
-        .classList.remove("hidden");
-
-};
-
-
-loadData();
-
-</script>
-
-</body>
-</html>
-"""
 # ------------------ Home ------------------
 @app.route("/")
 def home():
@@ -1426,6 +721,1006 @@ def home():
     </body>
     </html>
     """
+
+
+# ------------------ QUIZ APP ------------------
+
+@app.route("/quiz")
+def quiz_app():
+    return """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
+
+    <title>CA Blockbuster Quiz</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont,
+                         "Segoe UI", Roboto, sans-serif;
+            background: #f5f7fb;
+            margin: 0;
+            color: #222;
+        }
+
+        .container {
+            width: min(760px, 100%);
+            margin: auto;
+            padding: 20px 16px 40px;
+        }
+
+        .header {
+            text-align: center;
+            padding: 18px 0 10px;
+        }
+
+        .header h1 {
+            margin: 0;
+            color: #1565c0;
+            font-size: 32px;
+        }
+
+        .header p {
+            color: #666;
+            margin: 8px 0 0;
+        }
+
+        h2 {
+            margin-top: 20px;
+        }
+
+        .card {
+            background: #fff;
+            padding: 18px;
+            margin: 12px 0;
+            border-radius: 14px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.09);
+            border: 1px solid #e7eaf0;
+        }
+
+        .clickable {
+            cursor: pointer;
+            transition: transform .12s, background .12s;
+        }
+
+        .clickable:hover {
+            background: #eef6ff;
+            transform: translateY(-1px);
+        }
+
+        .title {
+            font-size: 18px;
+            font-weight: 700;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-top: 6px;
+            line-height: 1.4;
+        }
+
+        .meta {
+            color: #555;
+            font-size: 14px;
+            margin-top: 8px;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+
+        button {
+            border: none;
+            background: #1565c0;
+            color: white;
+            padding: 11px 18px;
+            border-radius: 9px;
+            font-size: 15px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            opacity: .92;
+        }
+
+        .back {
+            background: #555;
+        }
+
+        .timer {
+            font-weight: 700;
+            color: #d32f2f;
+            font-size: 17px;
+        }
+
+        .question-number {
+            color: #666;
+            margin-bottom: 8px;
+        }
+
+        .question {
+            font-size: 20px;
+            line-height: 1.55;
+            font-weight: 600;
+        }
+
+        .option {
+            background: #fff;
+            border: 2px solid #d9dee7;
+            padding: 14px;
+            margin: 10px 0;
+            border-radius: 10px;
+            cursor: pointer;
+            line-height: 1.45;
+        }
+
+        .option:hover {
+            background: #f5f9ff;
+        }
+
+        .option.correct {
+            background: #d8f3dc !important;
+            border-color: #2e7d32;
+        }
+
+        .option.wrong {
+            background: #ffd8d8 !important;
+            border-color: #c62828;
+        }
+
+        .explanation {
+            line-height: 1.5;
+        }
+
+        .actions {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 15px;
+        }
+
+        .status {
+            padding: 12px;
+            border-radius: 9px;
+            background: #fff3cd;
+            color: #664d03;
+            margin: 12px 0;
+        }
+
+        .error {
+            background: #ffebee;
+            color: #b71c1c;
+        }
+
+        .empty {
+            color: #777;
+            padding: 20px 0;
+        }
+
+        .score {
+            font-size: 42px;
+            font-weight: 800;
+            color: #1565c0;
+            text-align: center;
+        }
+
+        .center {
+            text-align: center;
+        }
+
+        @media (max-width: 600px) {
+            .header h1 {
+                font-size: 26px;
+            }
+
+            .question {
+                font-size: 18px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="container">
+
+    <!-- HOME / CATEGORIES -->
+    <section id="home">
+        <div class="header">
+            <h1>🎯 CA Blockbuster</h1>
+            <p>Practice tests from Firestore</p>
+        </div>
+
+        <h2>Categories</h2>
+
+        <div id="categories">
+            <div class="status">Loading...</div>
+        </div>
+    </section>
+
+
+    <!-- TEST LIST -->
+    <section id="tests" class="hidden">
+
+        <div class="topbar">
+            <button class="back" onclick="showHome()">← Back</button>
+        </div>
+
+        <h2 id="topicTitle"></h2>
+
+        <div id="testList"></div>
+
+    </section>
+
+
+    <!-- QUIZ -->
+    <section id="quiz" class="hidden">
+
+        <div class="topbar">
+            <button class="back" onclick="showTests()">← Tests</button>
+            <span id="timer" class="timer">00:00</span>
+        </div>
+
+        <h2 id="testTitle"></h2>
+
+        <div class="question-number" id="questionNumber"></div>
+
+        <div class="card">
+            <div id="questionText" class="question"></div>
+        </div>
+
+        <div id="options"></div>
+
+        <div id="explanationCard" class="card hidden">
+            <strong>Explanation</strong>
+            <div id="explanation" class="explanation"></div>
+        </div>
+
+        <div class="actions">
+            <button id="nextButton" onclick="nextQuestion()">
+                Next →
+            </button>
+        </div>
+
+    </section>
+
+
+    <!-- RESULT -->
+    <section id="result" class="hidden">
+
+        <div class="header">
+            <h1>🎉 Result</h1>
+        </div>
+
+        <div class="card center">
+            <div id="scoreText" class="score"></div>
+            <p id="resultDetails"></p>
+        </div>
+
+        <div class="center">
+            <button onclick="showHome()">Back to Categories</button>
+        </div>
+
+    </section>
+
+</div>
+
+
+<script>
+"use strict";
+
+/*
+    The browser does NOT connect directly to Firestore.
+
+    Browser
+       ↓
+    Flask /quiz/api/...
+       ↓
+    Firebase Admin SDK
+       ↓
+    Firestore
+*/
+
+let allTests = [];
+let currentTests = [];
+let currentQuestions = [];
+
+let selectedTopic = "";
+let selectedTest = null;
+
+let currentQuestion = 0;
+let score = 0;
+let answered = false;
+
+let timerSeconds = 0;
+let timerInterval = null;
+
+
+/* ------------------ API ------------------ */
+
+async function apiGet(url) {
+
+    const response = await fetch(url, {
+        method: "GET",
+        headers: {
+            "Accept": "application/json"
+        }
+    });
+
+    let data;
+
+    try {
+        data = await response.json();
+    } catch (e) {
+        throw new Error(
+            "Server returned an invalid response (" +
+            response.status + ")"
+        );
+    }
+
+    if (!response.ok) {
+        throw new Error(
+            data.error || ("Server error: " + response.status)
+        );
+    }
+
+    return data;
+}
+
+
+/* ------------------ LOAD TESTS ------------------ */
+
+async function loadData() {
+
+    const categories =
+        document.getElementById("categories");
+
+    try {
+
+        categories.innerHTML =
+            '<div class="status">Loading from Firestore...</div>';
+
+        allTests = await apiGet("/quiz/api/tests");
+
+        if (!Array.isArray(allTests)) {
+            throw new Error("Invalid test data received");
+        }
+
+        displayCategories();
+
+    } catch (error) {
+
+        console.error(error);
+
+        categories.innerHTML = `
+            <div class="status error">
+                <strong>Unable to load quiz.</strong>
+                <br><br>
+                ${escapeHtml(error.message)}
+                <br><br>
+                Check the Firebase service-account setting in Koyeb.
+            </div>
+        `;
+    }
+}
+
+
+/* ------------------ CATEGORIES ------------------ */
+
+function displayCategories() {
+
+    const container =
+        document.getElementById("categories");
+
+    container.innerHTML = "";
+
+    const topicIds = [
+        ...new Set(
+            allTests
+                .map(test => test.topicId)
+                .filter(topicId => topicId)
+        )
+    ];
+
+    if (topicIds.length === 0) {
+        container.innerHTML =
+            '<div class="empty">No categories found.</div>';
+        return;
+    }
+
+    topicIds.sort((a, b) =>
+        String(a).localeCompare(String(b))
+    );
+
+    topicIds.forEach(topicId => {
+
+        const topicTests =
+            allTests.filter(
+                test => test.topicId === topicId
+            );
+
+        const card =
+            document.createElement("div");
+
+        card.className = "card clickable";
+
+        card.innerHTML = `
+            <div class="title">
+                📚 ${escapeHtml(topicId)}
+            </div>
+
+            <div class="subtitle">
+                ${topicTests.length}
+                ${topicTests.length === 1 ? "Test" : "Tests"}
+            </div>
+        `;
+
+        card.onclick = () =>
+            showTestsForTopic(topicId);
+
+        container.appendChild(card);
+    });
+}
+
+
+/* ------------------ TEST LIST ------------------ */
+
+function showTestsForTopic(topicId) {
+
+    selectedTopic = topicId;
+
+    currentTests =
+        allTests.filter(
+            test => test.topicId === topicId
+        );
+
+    document.getElementById("home")
+        .classList.add("hidden");
+
+    document.getElementById("tests")
+        .classList.remove("hidden");
+
+    document.getElementById("quiz")
+        .classList.add("hidden");
+
+    document.getElementById("result")
+        .classList.add("hidden");
+
+    document.getElementById("topicTitle")
+        .textContent = topicId;
+
+    const container =
+        document.getElementById("testList");
+
+    container.innerHTML = "";
+
+    if (currentTests.length === 0) {
+        container.innerHTML =
+            '<div class="empty">No tests found.</div>';
+        return;
+    }
+
+    currentTests.forEach(test => {
+
+        const card =
+            document.createElement("div");
+
+        card.className = "card clickable";
+
+        card.innerHTML = `
+            <div class="title">
+                ${escapeHtml(test.title || test.id)}
+            </div>
+
+            ${
+                test.subtitle
+                    ? `<div class="subtitle">
+                           ${escapeHtml(test.subtitle)}
+                       </div>`
+                    : ""
+            }
+
+            <div class="meta">
+                ${escapeHtml(
+                    String(test.questionCount || 0)
+                )} Questions
+                •
+                ${escapeHtml(
+                    String(test.durationMinutes || 0)
+                )} min
+                •
+                ${escapeHtml(
+                    String(test.difficulty || "")
+                )}
+            </div>
+        `;
+
+        card.onclick = () =>
+            startQuiz(test);
+
+        container.appendChild(card);
+    });
+}
+
+
+/* ------------------ START QUIZ ------------------ */
+
+async function startQuiz(test) {
+
+    selectedTest = test;
+
+    try {
+
+        document.getElementById("tests")
+            .classList.add("hidden");
+
+        document.getElementById("quiz")
+            .classList.remove("hidden");
+
+        document.getElementById("result")
+            .classList.add("hidden");
+
+        document.getElementById("testTitle")
+            .textContent = test.title || test.id;
+
+        document.getElementById("questionText")
+            .textContent = "Loading questions...";
+
+        document.getElementById("options")
+            .innerHTML = "";
+
+        currentQuestions =
+            await apiGet(
+                "/quiz/api/questions/" +
+                encodeURIComponent(test.id)
+            );
+
+        if (!Array.isArray(currentQuestions) ||
+            currentQuestions.length === 0) {
+
+            throw new Error(
+                "No questions found for this test."
+            );
+        }
+
+        currentQuestion = 0;
+        score = 0;
+        answered = false;
+
+        startTimer(
+            Number(test.durationMinutes) || 0
+        );
+
+        displayQuestion();
+
+    } catch (error) {
+
+        console.error(error);
+
+        document.getElementById("questionText")
+            .textContent = "";
+
+        document.getElementById("options")
+            .innerHTML = `
+                <div class="status error">
+                    ${escapeHtml(error.message)}
+                </div>
+            `;
+    }
+}
+
+
+/* ------------------ QUESTION ------------------ */
+
+function displayQuestion() {
+
+    const q =
+        currentQuestions[currentQuestion];
+
+    if (!q) {
+        finishQuiz();
+        return;
+    }
+
+    answered = false;
+
+    document.getElementById("questionNumber")
+        .textContent =
+        "Question " +
+        (currentQuestion + 1) +
+        " / " +
+        currentQuestions.length;
+
+    document.getElementById("questionText")
+        .textContent =
+        q.questionText || "";
+
+    document.getElementById("explanationCard")
+        .classList.add("hidden");
+
+    document.getElementById("explanation")
+        .textContent = "";
+
+    document.getElementById("nextButton")
+        .textContent =
+        currentQuestion === currentQuestions.length - 1
+            ? "Finish ✓"
+            : "Next →";
+
+    const options =
+        document.getElementById("options");
+
+    options.innerHTML = "";
+
+    const optionValues = [
+        q.option0 || "",
+        q.option1 || "",
+        q.option2 || "",
+        q.option3 || ""
+    ];
+
+    optionValues.forEach((option, index) => {
+
+        const div =
+            document.createElement("div");
+
+        div.className = "option";
+
+        div.textContent = option;
+
+        div.onclick = () =>
+            selectAnswer(index, div);
+
+        options.appendChild(div);
+    });
+}
+
+
+/* ------------------ ANSWER ------------------ */
+
+function selectAnswer(index, element) {
+
+    if (answered)
+        return;
+
+    answered = true;
+
+    const q =
+        currentQuestions[currentQuestion];
+
+    const correctIndex =
+        Number(q.correctOptionIndex);
+
+    const optionElements =
+        document.querySelectorAll(".option");
+
+    if (index === correctIndex) {
+
+        element.classList.add("correct");
+        score++;
+
+    } else {
+
+        element.classList.add("wrong");
+
+        if (optionElements[correctIndex]) {
+            optionElements[correctIndex]
+                .classList.add("correct");
+        }
+    }
+
+    if (q.explanation) {
+
+        document.getElementById("explanation")
+            .textContent = q.explanation;
+
+        document.getElementById("explanationCard")
+            .classList.remove("hidden");
+    }
+}
+
+
+/* ------------------ NEXT ------------------ */
+
+window.nextQuestion = function() {
+
+    if (!answered)
+        return;
+
+    if (
+        currentQuestion >=
+        currentQuestions.length - 1
+    ) {
+
+        finishQuiz();
+        return;
+    }
+
+    currentQuestion++;
+
+    displayQuestion();
+};
+
+
+/* ------------------ TIMER ------------------ */
+
+function startTimer(durationMinutes) {
+
+    clearInterval(timerInterval);
+
+    /*
+       Use the test duration when available.
+       If duration is 0, count elapsed time instead.
+    */
+
+    const hasLimit =
+        Number(durationMinutes) > 0;
+
+    const totalSeconds =
+        Number(durationMinutes) * 60;
+
+    timerSeconds = hasLimit
+        ? totalSeconds
+        : 0;
+
+    updateTimerDisplay(hasLimit);
+
+    timerInterval =
+        setInterval(() => {
+
+            if (hasLimit) {
+
+                timerSeconds--;
+
+                updateTimerDisplay(true);
+
+                if (timerSeconds <= 0) {
+                    clearInterval(timerInterval);
+                    finishQuiz();
+                }
+
+            } else {
+
+                timerSeconds++;
+
+                updateTimerDisplay(false);
+            }
+
+        }, 1000);
+}
+
+
+function updateTimerDisplay(hasLimit) {
+
+    const minutes =
+        Math.floor(timerSeconds / 60);
+
+    const seconds =
+        timerSeconds % 60;
+
+    const display =
+        String(minutes).padStart(2, "0") +
+        ":" +
+        String(seconds).padStart(2, "0");
+
+    document.getElementById("timer")
+        .textContent =
+        hasLimit ? "⏱ " + display : "⏱ " + display;
+}
+
+
+/* ------------------ RESULT ------------------ */
+
+function finishQuiz() {
+
+    clearInterval(timerInterval);
+
+    document.getElementById("quiz")
+        .classList.add("hidden");
+
+    document.getElementById("result")
+        .classList.remove("hidden");
+
+    const total =
+        currentQuestions.length;
+
+    document.getElementById("scoreText")
+        .textContent =
+        score + " / " + total;
+
+    const percentage =
+        total > 0
+            ? Math.round((score / total) * 100)
+            : 0;
+
+    document.getElementById("resultDetails")
+        .textContent =
+        percentage + "% correct";
+}
+
+
+/* ------------------ NAVIGATION ------------------ */
+
+window.showHome = function() {
+
+    clearInterval(timerInterval);
+
+    document.getElementById("home")
+        .classList.remove("hidden");
+
+    document.getElementById("tests")
+        .classList.add("hidden");
+
+    document.getElementById("quiz")
+        .classList.add("hidden");
+
+    document.getElementById("result")
+        .classList.add("hidden");
+};
+
+
+window.showTests = function() {
+
+    clearInterval(timerInterval);
+
+    document.getElementById("quiz")
+        .classList.add("hidden");
+
+    document.getElementById("result")
+        .classList.add("hidden");
+
+    document.getElementById("tests")
+        .classList.remove("hidden");
+};
+
+
+/* ------------------ HTML SAFETY ------------------ */
+
+function escapeHtml(value) {
+
+    return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+
+/* ------------------ START ------------------ */
+
+loadData();
+
+</script>
+
+</body>
+</html>
+"""
+
+
+# ------------------ QUIZ FIRESTORE API ------------------
+
+@app.route("/quiz/api/tests")
+def quiz_tests():
+    try:
+        db = get_firestore()
+
+        docs = db.collection("custom_tests").stream()
+
+        tests = []
+
+        for doc in docs:
+            data = doc.to_dict()
+
+            tests.append({
+                "id": data.get("id") or doc.id,
+                "topicId": data.get("topicId") or "",
+                "title": data.get("title") or "",
+                "subtitle": data.get("subtitle") or "",
+                "durationMinutes":
+                    data.get("durationMinutes") or 0,
+                "difficulty":
+                    data.get("difficulty") or "",
+                "dateMillis":
+                    data.get("dateMillis"),
+                "questionCount": 0
+            })
+
+        # Count questions for each test.
+        # This keeps the category/test UI useful without
+        # requiring the browser to access Firestore.
+        question_counts = {}
+
+        question_docs = (
+            db.collection("custom_questions")
+            .stream()
+        )
+
+        for qdoc in question_docs:
+            qdata = qdoc.to_dict()
+            test_id = qdata.get("testId")
+
+            if test_id:
+                question_counts[test_id] = (
+                    question_counts.get(test_id, 0) + 1
+                )
+
+        for test in tests:
+            test["questionCount"] = question_counts.get(
+                test["id"], 0
+            )
+
+        return tests
+
+    except Exception as e:
+        print(f"[Quiz Firestore tests error] {e}")
+
+        return {
+            "error": str(e)
+        }, 500
+
+
+@app.route("/quiz/api/questions/<path:test_id>")
+def quiz_questions(test_id):
+    try:
+        db = get_firestore()
+
+        docs = (
+            db.collection("custom_questions")
+            .where("testId", "==", test_id)
+            .stream()
+        )
+
+        questions = []
+
+        for doc in docs:
+            data = doc.to_dict()
+
+            questions.append({
+                "id": data.get("id") or doc.id,
+                "testId": data.get("testId") or "",
+                "topicId": data.get("topicId") or "",
+                "questionText":
+                    data.get("questionText") or "",
+                "option0":
+                    data.get("option0") or "",
+                "option1":
+                    data.get("option1") or "",
+                "option2":
+                    data.get("option2") or "",
+                "option3":
+                    data.get("option3") or "",
+                "correctOptionIndex":
+                    data.get("correctOptionIndex", 0),
+                "explanation":
+                    data.get("explanation") or "",
+                "hint":
+                    data.get("hint") or ""
+            })
+
+        return questions
+
+    except Exception as e:
+        print(f"[Quiz Firestore questions error] {e}")
+
+        return {
+            "error": str(e)
+        }, 500
+
 
 # ------------------ Run ------------------
 if __name__ == "__main__":
