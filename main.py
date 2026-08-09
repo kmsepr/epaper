@@ -57,7 +57,7 @@ def get_firestore():
 # FIREBASE WEB CONFIG
 # ============================================================
 
-FIREBASE_WEB_CONFIG = {
+FIREBASE_WEB_CONFIG_REMOVED = {
     "apiKey": os.environ.get("FIREBASE_WEB_API_KEY", ""),
     "authDomain": os.environ.get("FIREBASE_WEB_AUTH_DOMAIN", ""),
     "projectId": os.environ.get("FIREBASE_PROJECT_ID", ""),
@@ -550,7 +550,7 @@ def home():
 def quiz_app():
 
     firebase_config = json.dumps(
-        FIREBASE_WEB_CONFIG
+        FIREBASE_WEB_CONFIG_REMOVED
     )
 
     html = r"""
@@ -565,8 +565,6 @@ def quiz_app():
 
 <title>CA Blockbuster Quiz</title>
 
-<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 
 <style>
 
@@ -1001,7 +999,7 @@ Loading...
 
 
 <script>
-window.__FIREBASE_WEB_CONFIG__ =
+window.__FIREBASE_WEB_CONFIG_REMOVED__ =
 __FIREBASE_CONFIG__;
 </script>
 
@@ -1380,7 +1378,7 @@ function initializeGoogleLogin(){
 
 
         const config =
-            window.__FIREBASE_WEB_CONFIG__;
+            window.__FIREBASE_WEB_CONFIG_REMOVED__;
 
 
         if(!config){
@@ -2698,14 +2696,14 @@ if __name__ == "__main__":
 
     print(
         "[Startup] Firebase project:",
-        FIREBASE_WEB_CONFIG.get(
+        FIREBASE_WEB_CONFIG_REMOVED.get(
             "projectId"
         )
     )
 
     print(
         "[Startup] Firebase authDomain:",
-        FIREBASE_WEB_CONFIG.get(
+        FIREBASE_WEB_CONFIG_REMOVED.get(
             "authDomain"
         )
     )
@@ -2713,7 +2711,7 @@ if __name__ == "__main__":
     print(
         "[Startup] Firebase API key configured:",
         bool(
-            FIREBASE_WEB_CONFIG.get(
+            FIREBASE_WEB_CONFIG_REMOVED.get(
                 "apiKey"
             )
         )
@@ -2722,7 +2720,7 @@ if __name__ == "__main__":
     print(
         "[Startup] Firebase appId configured:",
         bool(
-            FIREBASE_WEB_CONFIG.get(
+            FIREBASE_WEB_CONFIG_REMOVED.get(
                 "appId"
             )
         )
