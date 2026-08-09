@@ -356,8 +356,6 @@ button:active{transform:scale(.97)}
   </div>
   <button class="leaderboard-icon-btn" id="leaderboardButton">
     <span class="leaderboard-icon">🏆</span>
-    <span>LEADER</span>
-  </button>
 </div>
 
 <h2 style="color:white;margin:10px 4px">Categories</h2>
