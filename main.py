@@ -201,10 +201,12 @@ def archives():
     months = sorted(os.listdir(ARCHIVE_FOLDER), reverse=True) if os.path.exists(ARCHIVE_FOLDER) else []
     html = """<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
     <style>body{font-family:system-ui;padding:16px;background:#f5f7fb}.card{background:white;padding:16px;border-radius:16px;margin-bottom:16px;box-shadow:0 4px 12px rgba(0,0,0,.05)}.file{display:block;padding:10px;margin-top:8px;background:#e3f2fd;border-radius:10px;text-decoration:none;color:#1565c0;font-weight:500}</style></head><body><h2>📦 Feed Archives</h2>"""
-    if not months: html += "<p>No archives found.</p>"
+    if not months:
+        html += "<p>No archives found.</p>"
     for month in months:
         month_path = os.path.join(ARCHIVE_FOLDER, month)
-        if not os.path.isdir(month_path): continue
+        if not os.path.isdir(month_path):
+            continue
         html += f"<div class='card'><h3>{month}</h3>"
         for filename in os.listdir(month_path):
             html += f"<a class='file' href='/archive/{month}/{filename}'>{filename}</a>"
@@ -215,7 +217,8 @@ def archives():
 @app.route("/archive/<month>/<filename>")
 def archive_file(month, filename):
     archive_path = os.path.join(ARCHIVE_FOLDER, month, filename)
-    if not os.path.exists(archive_path): return "Archive not found", 404
+    if not os.path.exists(archive_path):
+        return "Archive not found", 404
     feed = feedparser.parse(archive_path)
     posts = ""
     for entry in list(feed.entries)[::-1][:100]:
@@ -284,7 +287,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-s
 .container{max-width:900px;margin:auto;padding:12px}.hidden{display:none!important}
 .header{display:flex;justify-content:space-between;align-items:center;padding:12px 0 18px;color:white}.header h1{margin:0;font-size:21px;line-height:1.2}.header p{margin:7px 0 0;color:#b9bfd0;font-size:12px}
 .headerBrand{display:flex;align-items:center;gap:10px}.brandIcon{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#4134b9;font-size:20px}
-.leaderboard-icon-btn{background:transparent;border:0;box-shadow:none;padding:7px;cursor:pointer;color:#aeb6cb;font-size:23px}.leaderboard-icon{font-size:22px}
 .globalRankCard{display:flex;align-items:center;gap:15px;background:linear-gradient(105deg,#11213c,#302681);border-radius:28px;padding:18px 20px;margin:4px 0 14px;cursor:pointer;box-shadow:0 12px 30px rgba(0,0,0,.18)}
 .rankTrophy{width:52px;height:52px;border-radius:50%;background:rgba(255,205,45,.17);display:flex;align-items:center;justify-content:center;font-size:28px;flex:0 0 auto}.globalRankCard h2{margin:0;font-size:19px}.globalRankCard p{margin:5px 0 0;color:#aeb6cb;font-size:12px}.rankArrow{margin-left:auto;font-size:28px;color:#9ca6c2}
 .sectionTitle{font-size:18px;margin:20px 0 12px}
@@ -317,7 +319,6 @@ button{border:0;border-radius:13px;padding:12px 18px;background:linear-gradient(
 <section id="home">
 <div class="header">
   <div class="headerBrand"><div class="brandIcon">✦</div><div><h1>CA Blockbuster</h1><p>CA Revision</p></div></div>
-  <button class="leaderboard-icon-btn" id="leaderboardButton" aria-label="Global Rank List">⇥</button>
 </div>
 <div class="globalRankCard" id="globalRankCard">
   <div class="rankTrophy">🏆</div><div><h2>Global Rank List</h2><p>See your standing in the community</p></div><div class="rankArrow">›</div>
@@ -372,11 +373,11 @@ button{border:0;border-radius:13px;padding:12px 18px;background:linear-gradient(
 
 <section id="leaderboard" class="hidden">
 <div class="rankPage">
-  <div class="rankHeader"><button id="leaderboardBackButton" class="rankBack">‹</button><div><h1>Rank Board 🏆</h1><p>Aspirant Rankings &amp; Standings</p></div></div>
+  <div class="rankHeader"><button id="leaderboardBackButton" class="rankBack">‹</button><div><h1>Rank Board 🏆</h1><p>Top 10 Aspirant Rankings &amp; Standings</p></div></div>
   <div id="myRankCard"></div>
   <div class="rankSectionTitle">Top 3 Rankers</div>
   <div id="topThree" class="topThree"></div>
-  <div class="stateHeader"><h2>Global Rank List</h2><span id="aspirantCount" class="aspirantCount">0 Aspirants</span></div>
+  <div class="stateHeader"><h2>Top 10 Global Rank List</h2><span id="aspirantCount" class="aspirantCount">0 Aspirants</span></div>
   <div id="rankRows" class="rankRows"></div>
 </div>
 </section>
@@ -594,15 +595,27 @@ try{
 const users=await apiGet("/quiz/api/leaderboard");
 if(!Array.isArray(users))throw new Error("Invalid leaderboard data.");
 users.sort((a,b)=>Number(b.points||0)-Number(a.points||0));
-document.getElementById("aspirantCount").textContent=users.length+" Aspirants";
-if(!users.length){myCard.innerHTML='<div class="status">No leaderboard data.</div>';rows.innerHTML='';return;}
-const me=users[0];
+
+const topUsers = users.slice(0,10);
+
+document.getElementById("aspirantCount").textContent=topUsers.length+" Aspirants";
+if(!topUsers.length){myCard.innerHTML='<div class="status">No leaderboard data.</div>';rows.innerHTML='';return;}
+
+const me=topUsers[0];
 const av=me.profilePhotoUri?'<div class="avatar"><img src="'+esc(me.profilePhotoUri)+'" alt=""></div>':'<div class="avatar">'+esc(me.avatarEmoji||"👤")+'</div>';
 myCard.innerHTML='<div class="myRankCard"><div class="myRankTop">'+av+'<div style="min-width:0"><div class="myRankName">'+esc(me.name||"Aspirant")+(me.badgeTitle?'<span class="badge">'+esc(me.badgeTitle)+'</span>':'')+'</div><div class="myRankRole">Aspirant Member</div></div><div class="rankNumber"><small>RANK</small><strong>#1</strong></div></div><div class="rankStats"><div class="rankStat"><div class="rsLabel">TOTAL POINTS</div><div class="rsValue">🏆 '+Number(me.points||0)+'</div></div><div class="rankStat"><div class="rsLabel">STARS EARNED</div><div class="rsValue">⭐ '+Number(me.stars||0)+'</div></div><div class="rankStat"><div class="rsLabel">ACCURACY</div><div class="rsValue">↗ '+Math.round(Number(me.accuracy||0))+'%</div></div></div></div>';
+
 const medals=["🥇","🥈","🥉"];
-users.slice(0,3).forEach((u,i)=>{const a=u.profilePhotoUri?'<div class="avatar podiumAvatar"><img src="'+esc(u.profilePhotoUri)+'" alt=""></div>':'<div class="avatar podiumAvatar">'+esc(u.avatarEmoji||"👤")+'</div>';top.innerHTML+='<div class="podium '+(i===0?'first':'')+'"><div class="medal">'+medals[i]+'</div>'+a+'<div class="podiumName">'+esc(u.name||"Aspirant")+'</div><div class="podiumRole">Aspirant</div><div class="podiumPoints">'+Number(u.points||0)+' pts</div></div>';});
+topUsers.slice(0,3).forEach((u,i)=>{
+  const a=u.profilePhotoUri?'<div class="avatar podiumAvatar"><img src="'+esc(u.profilePhotoUri)+'" alt=""></div>':'<div class="avatar podiumAvatar">'+esc(u.avatarEmoji||"👤")+'</div>';
+  top.innerHTML+='<div class="podium '+(i===0?'first':'')+'"><div class="medal">'+medals[i]+'</div>'+a+'<div class="podiumName">'+esc(u.name||"Aspirant")+'</div><div class="podiumRole">Aspirant</div><div class="podiumPoints">'+Number(u.points||0)+' pts</div></div>';
+});
+
 rows.innerHTML='';
-users.forEach((u,i)=>{const a=u.profilePhotoUri?'<div class="avatar"><img src="'+esc(u.profilePhotoUri)+'" alt=""></div>':'<div class="avatar">'+esc(u.avatarEmoji||"👤")+'</div>';rows.innerHTML+='<div class="rankRow"><div class="rankPos">#'+(i+1)+'</div>'+a+'<div class="rankRowMain"><div class="rankRowName">'+esc(u.name||"Aspirant")+'</div><div class="rankRowSub">'+esc(u.badgeTitle||"Aspirant")+' • '+Math.round(Number(u.accuracy||0))+'% accuracy</div></div><div class="rankRowPoints">'+Number(u.points||0)+' pts</div></div>';});
+topUsers.forEach((u,i)=>{
+  const a=u.profilePhotoUri?'<div class="avatar"><img src="'+esc(u.profilePhotoUri)+'" alt=""></div>':'<div class="avatar">'+esc(u.avatarEmoji||"👤")+'</div>';
+  rows.innerHTML+='<div class="rankRow"><div class="rankPos">#'+(i+1)+'</div>'+a+'<div class="rankRowMain"><div class="rankRowName">'+esc(u.name||"Aspirant")+'</div><div class="rankRowSub">'+esc(u.badgeTitle||"Aspirant")+' • '+Math.round(Number(u.accuracy||0))+'% accuracy</div></div><div class="rankRowPoints">'+Number(u.points||0)+' pts</div></div>';
+});
 }catch(error){myCard.innerHTML='<div class="status error">'+esc(error.message)+'</div>';top.innerHTML='';rows.innerHTML='';}
 }
 document.getElementById("backHomeButton").addEventListener("click",showHome);
@@ -610,7 +623,6 @@ document.getElementById("backTestsButton").addEventListener("click",showTests);
 document.getElementById("resultHomeButton").addEventListener("click",showHome);
 document.getElementById("resultTestsButton").addEventListener("click",showTests);
 document.getElementById("leaderboardBackButton").addEventListener("click",showHome);
-document.getElementById("leaderboardButton").addEventListener("click",showLeaderboard);
 document.getElementById("globalRankCard").addEventListener("click",showLeaderboard);
 document.getElementById("nextButton").addEventListener("click",nextQuestion);
 loadData();
@@ -619,6 +631,7 @@ loadData();
 </html>
 """
     return html
+
 # ============================================================
 # QUIZ FIRESTORE API
 # ============================================================
@@ -702,8 +715,11 @@ def quiz_leaderboard():
                 "testsCompleted": data.get("testsCompleted", 0),
                 "bestStreak": data.get("bestStreak", 0),
             })
+
+        # Sort by points and return only the top 10.
         entries.sort(key=lambda item: item["points"], reverse=True)
-        return jsonify(entries[:50])
+        return jsonify(entries[:10])
+
     except Exception as e:
         print("[Leaderboard error]", e)
         return jsonify({"error": str(e)}), 500
