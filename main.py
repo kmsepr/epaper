@@ -19,6 +19,7 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "change-this-secret-key")
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["PERMANENT_SESSION_LIFETIME"] = 60 * 60 * 24 * 30
 
 # ============================================================
 # FIRESTORE
@@ -328,6 +329,7 @@ def quiz_auth_login():
         data = request.get_json(silent=True) or {}
         email = str(data.get("email", "")).strip().lower()
         password = str(data.get("password", ""))
+        remember_me = bool(data.get("rememberMe", False))
         if not email or not password:
             return jsonify({"error": "Email and password are required."}), 400
         result = firebase_auth_request("accounts:signInWithPassword", {
@@ -335,7 +337,7 @@ def quiz_auth_login():
         })
         decoded = auth.verify_id_token(result["idToken"])
         session.clear()
-        session.permanent = True
+        session.permanent = remember_me
         session["uid"] = decoded["uid"]
         session["email"] = decoded.get("email", email)
         session["name"] = decoded.get("name", "")
@@ -486,7 +488,20 @@ button{border:0;border-radius:13px;padding:12px 18px;background:linear-gradient(
 .stateHeader{display:flex;align-items:center;justify-content:space-between;margin:30px 0 10px}.stateHeader h2{margin:0;font-size:18px}.aspirantCount{background:#9a4d16;padding:7px 11px;border-radius:13px;font-size:11px;font-weight:800}
 .rankRows{display:flex;flex-direction:column;gap:8px}.rankRow{display:flex;align-items:center;gap:10px;background:#18243b;padding:11px;border-radius:14px}.rankPos{width:28px;text-align:center;font-weight:800;color:#9fa8bd}.rankRow .avatar{width:38px;height:38px;font-size:16px}.rankRowMain{min-width:0}.rankRowName{font-size:13px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.rankRowSub{font-size:10px;color:#9fa8bd;margin-top:3px}.rankRowPoints{margin-left:auto;font-size:12px;font-weight:800;color:#9298ff;white-space:nowrap}
 /* Login */
-.loginScreen{min-height:calc(100vh - 24px);display:flex;align-items:flex-start;justify-content:center;padding:24px 12px 40px;background:#fff;color:#18304d;margin:0 -12px}.loginBox{width:100%;max-width:330px;margin-top:0}.loginBox h1,.loginBox .loginSubtitle{display:none}.formGroup{margin-bottom:22px}.formGroup label{display:block;color:#1d3654;font-weight:700;font-size:14px;margin-bottom:10px}.formGroup label .required{color:#e53935}.inputWrap{position:relative}.formInput{width:100%;height:41px;border:1px solid #c9d0d9;border-radius:0;padding:0 12px;font-size:14px;color:#18304d;outline:none;background:#fff}.formInput:focus{border-color:#278bd1;box-shadow:0 0 0 2px rgba(39,139,209,.08)}.passwordInput{padding-right:42px}.togglePassword{position:absolute;right:7px;top:50%;transform:translateY(-50%);border:0;background:transparent;box-shadow:none;color:#7d8792;padding:4px;font-size:15px;cursor:pointer}.loginButton{width:100%;height:48px;border-radius:0;background:linear-gradient(100deg,#0e86bd,#4a92df);font-size:16px;box-shadow:0 8px 16px rgba(28,130,194,.2);margin-top:1px}.loginLinks{margin-top:24px;padding-top:22px;border-top:1px solid #eee;text-align:center}.loginLinks p{margin:0 0 12px;color:#68788b;font-size:14px}.loginLinks a{color:#0072b8;text-decoration:none;font-weight:700;cursor:pointer}.loginError{display:none;background:#fff0f0;color:#c62828;border:1px solid #ffcdd2;padding:10px 12px;margin:0 0 15px;font-size:13px;border-radius:3px}.loginSuccess{display:none;background:#eef8f1;color:#267342;border:1px solid #c9e8d2;padding:10px 12px;margin:0 0 15px;font-size:13px;border-radius:3px}.loginLoading{opacity:.65;pointer-events:none}.logoutButton{background:#303449;box-shadow:none;padding:8px 12px;font-size:12px}
+.loginScreen{min-height:100vh;width:100%;margin:0;padding:24px 14px;display:flex;align-items:center;justify-content:center;background:#0b1328;color:#f7f7fb}
+.loginBox{width:min(100%,390px);padding:28px 24px 24px;background:#18233a;border:1px solid rgba(255,255,255,.06);border-radius:22px;box-shadow:0 18px 45px rgba(0,0,0,.35)}
+.loginBox h1{display:block;text-align:center;color:#fff;font-size:27px;font-weight:800;margin:0 0 8px;letter-spacing:.1px}
+.loginBox h1:after{content:"CA Revision";display:block;color:#9fa8bd;font-size:12px;font-weight:500;margin-top:6px}
+.loginBox .loginSubtitle{display:block;text-align:center;color:#9fa8bd;font-size:12px;margin:0 0 24px}
+.formGroup{margin-bottom:18px}.formGroup label{display:block;color:#f1f3fa;font-weight:700;font-size:14px;margin-bottom:8px}.formGroup label .required{color:#ff6d7a}
+.inputWrap{position:relative;width:100%}.formInput{display:block;width:100%;max-width:100%;height:46px;border:1px solid #344158;border-radius:11px;padding:0 13px;font-size:14px;color:#f7f7fb;outline:none;background:#111c31;box-shadow:inset 0 1px 2px rgba(0,0,0,.15)}.formInput::placeholder{color:#7f8ba1}.formInput:focus{border-color:#6e75ef;box-shadow:0 0 0 2px rgba(110,117,239,.16)}
+.passwordInput{padding-right:45px}.togglePassword{position:absolute;right:7px;top:50%;transform:translateY(-50%);width:34px;height:34px;border:0;background:transparent;box-shadow:none;color:#8f99ad;padding:4px;font-size:15px;cursor:pointer}
+.rememberRow{display:flex;align-items:center;gap:9px;margin:2px 0 20px;color:#b7bfd0;font-size:13px;cursor:pointer;user-select:none}.rememberRow input{width:17px;height:17px;margin:0;accent-color:#6269e8;cursor:pointer}
+.loginButton{display:block;width:100%;height:48px;border-radius:11px;background:linear-gradient(135deg,#5141ce,#3830a8);color:#fff;font-size:16px;font-weight:800;box-shadow:0 7px 18px rgba(54,48,168,.3);margin:0}
+.loginLinks{margin-top:22px;padding-top:20px;border-top:1px solid #303b51;text-align:center}.loginLinks p{margin:0;color:#9fa8bd;font-size:13px}.loginLinks a{color:#9298ff;text-decoration:none;font-weight:800;cursor:pointer}
+.loginError{display:none;background:#402329;color:#ffb5bd;border:1px solid #743640;padding:10px 12px;margin:0 0 15px;font-size:13px;border-radius:9px}.loginSuccess{display:none;background:#183b2b;color:#82e2a8;border:1px solid #286947;padding:10px 12px;margin:0 0 15px;font-size:13px;border-radius:9px}.loginLoading{opacity:.65;pointer-events:none}.logoutButton{background:#303449;box-shadow:none;padding:8px 12px;font-size:12px}
+@media(max-width:500px){.loginScreen{padding:16px 12px}.loginBox{padding:24px 20px 21px;border-radius:19px}.loginBox h1{font-size:25px}.formInput{height:45px}}
+@media(max-height:650px){.loginScreen{align-items:flex-start;padding-top:18px;padding-bottom:18px}.loginBox{padding-top:20px;padding-bottom:18px}.loginBox h1{margin-bottom:6px}.formGroup{margin-bottom:14px}.rememberRow{margin-bottom:15px}.loginLinks{margin-top:16px;padding-top:14px}}
 @media(max-width:500px){#categories,#testList{grid-template-columns:repeat(2,1fr)}.question{font-size:18px}.container{padding:10px 12px}}
 @media(max-width:360px){#categories,#testList{grid-template-columns:1fr}.rankStat .rsLabel{font-size:8px}.rankStat .rsValue{font-size:15px}}
 </style>
@@ -496,7 +511,7 @@ button{border:0;border-radius:13px;padding:12px 18px;background:linear-gradient(
 
 <section id="login" class="loginScreen">
   <div class="loginBox">
-
+    <h1>CA Blockbuster</h1>
     <div id="loginError" class="loginError"></div>
     <div id="loginSuccess" class="loginSuccess"></div>
     <form id="loginForm" autocomplete="on">
@@ -508,11 +523,11 @@ button{border:0;border-radius:13px;padding:12px 18px;background:linear-gradient(
         <label for="loginPassword"><span class="required">*</span> Password</label>
         <div class="inputWrap"><input id="loginPassword" class="formInput passwordInput" type="password" autocomplete="current-password" placeholder="Enter your password" required><button type="button" id="togglePassword" class="togglePassword" aria-label="Show password">◉</button></div>
       </div>
+      <label class="rememberRow"><input id="rememberMe" type="checkbox"> <span>Remember me</span></label>
       <button id="loginButton" class="loginButton" type="submit">Sign In</button>
     </form>
     <div class="loginLinks">
       <p>Don't have an account? <a id="signupLink">Sign Up</a></p>
-      <p><a id="forgotLink">Forgot your password?</a></p>
     </div>
   </div>
 </section>
@@ -532,15 +547,7 @@ button{border:0;border-radius:13px;padding:12px 18px;background:linear-gradient(
   </div>
 </section>
 
-<section id="forgot" class="loginScreen hidden">
-  <div class="loginBox">
-    <h1>Reset Password</h1>
-    <p class="loginSubtitle">We'll send a password reset link to your email</p>
-    <div id="forgotError" class="loginError"></div><div id="forgotSuccess" class="loginSuccess"></div>
-    <form id="forgotForm"><div class="formGroup"><label for="forgotEmail"><span class="required">*</span> Email</label><div class="inputWrap"><input id="forgotEmail" class="formInput" type="email" placeholder="Enter your email" required></div></div><button class="loginButton" type="submit">Send Reset Link</button></form>
-    <div class="loginLinks"><p><a id="forgotBackLink">← Back to Sign In</a></p></div>
-  </div>
-</section>
+
 
 <section id="home" class="hidden">
 <div class="header">
@@ -850,7 +857,7 @@ async function authPost(url,payload){
   return data;
 }
 function showOnlyAuth(id){
-  ["login","signup","forgot","home","tests","quiz","result","leaderboard"].forEach(x=>document.getElementById(x).classList.add("hidden"));
+  ["login","signup","home","tests","quiz","result","leaderboard"].forEach(x=>document.getElementById(x).classList.add("hidden"));
   document.getElementById(id).classList.remove("hidden");
 }
 function setLoginMessage(id,message,type){
@@ -874,7 +881,11 @@ document.getElementById("loginForm").addEventListener("submit",async function(e)
   const form=e.currentTarget;const button=document.getElementById("loginButton");
   setLoginBusy(form,true);button.textContent="Signing In...";
   try{
-    await authPost("/quiz/api/auth/login",{email:document.getElementById("loginEmail").value.trim(),password:document.getElementById("loginPassword").value});
+    const email=document.getElementById("loginEmail").value.trim();
+    const password=document.getElementById("loginPassword").value;
+    const rememberMe=document.getElementById("rememberMe").checked;
+    await authPost("/quiz/api/auth/login",{email:email,password:password,rememberMe:rememberMe});
+    if(rememberMe)localStorage.setItem("caBlockbusterEmail",email);else localStorage.removeItem("caBlockbusterEmail");
     showOnlyAuth("home");
     loadData();
   }catch(err){setLoginMessage("loginError",err.message,"error");}
@@ -890,7 +901,6 @@ document.getElementById("togglePassword").addEventListener("click",function(){
 document.getElementById("signupLink").addEventListener("click",()=>{setLoginMessage("loginError","");showOnlyAuth("signup");});
 document.getElementById("backToLoginLink").addEventListener("click",()=>showOnlyAuth("login"));
 document.getElementById("forgotLink").addEventListener("click",()=>{setLoginMessage("forgotError","");setLoginMessage("forgotSuccess","");showOnlyAuth("forgot");});
-document.getElementById("forgotBackLink").addEventListener("click",()=>showOnlyAuth("login"));
 
 document.getElementById("signupForm").addEventListener("submit",async function(e){
   e.preventDefault();
@@ -902,22 +912,17 @@ document.getElementById("signupForm").addEventListener("submit",async function(e
   finally{setLoginBusy(form,false);}
 });
 
-document.getElementById("forgotForm").addEventListener("submit",async function(e){
-  e.preventDefault();setLoginMessage("forgotError","");setLoginMessage("forgotSuccess","");
-  const form=e.currentTarget;setLoginBusy(form,true);
-  try{
-    await authPost("/quiz/api/auth/forgot",{email:document.getElementById("forgotEmail").value.trim()});
-    setLoginMessage("forgotSuccess","Password reset email sent. Check your inbox.");
-  }catch(err){setLoginMessage("forgotError",err.message,"error");}
-  finally{setLoginBusy(form,false);}
-});
-
 document.getElementById("logoutButton").addEventListener("click",async function(){
   try{await fetch("/quiz/api/auth/logout",{method:"POST"});}catch(e){console.error(e);}
   clearInterval(timerInterval);showOnlyAuth("login");
   document.getElementById("loginPassword").value="";
   setLoginMessage("loginError","");
 });
+
+try{
+  const rememberedEmail=localStorage.getItem("caBlockbusterEmail");
+  if(rememberedEmail)document.getElementById("loginEmail").value=rememberedEmail;
+}catch(e){}
 
 checkQuizAuth();
 </script>
