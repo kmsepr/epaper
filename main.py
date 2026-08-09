@@ -302,15 +302,11 @@ button{border:0;border-radius:13px;padding:12px 18px;background:linear-gradient(
 .review{margin-top:14px}.reviewItem{background:#18243b;color:#fff;padding:12px;border-radius:14px;margin:9px 0;border-left:5px solid #777}.reviewItem.correct{border-left-color:#3bc477}.reviewItem.wrong{border-left-color:#ef6372}.reviewItem.unanswered{border-left-color:#eebc35}.reviewQ{font-weight:700;font-size:14px}.reviewA{font-size:13px;color:#aeb6cb;margin-top:5px}
 .status{padding:14px;background:#2b2b21;color:#e8dfad;border-radius:14px;margin:12px 0;font-size:14px}.error{background:#402329;color:#ffb5bd}
 .rankPage{padding-bottom:30px}.rankHeader{display:flex;align-items:flex-start;gap:12px;padding:5px 0 18px}.rankBack{background:transparent;border:0;box-shadow:none;padding:0;font-size:30px;line-height:1;color:#fff}.rankHeader h1{margin:0;font-size:21px}.rankHeader p{margin:6px 0 0;color:#aeb6cb;font-size:12px}
-.myRankCard{background:linear-gradient(135deg,#7075ef,#8a8ef9);border-radius:24px;padding:18px;margin-bottom:18px}.myRankTop{display:flex;align-items:center;gap:11px}.avatar{width:48px;height:48px;border-radius:50%;object-fit:cover;display:flex;align-items:center;justify-content:center;background:#536072;color:#fff;font-size:20px;font-weight:800;flex:0 0 auto;overflow:hidden}.avatar img{width:100%;height:100%;object-fit:cover}
-.myRankName{font-size:17px;font-weight:800;display:flex;align-items:center;gap:7px;min-width:0}.badge{font-size:10px;background:rgba(255,255,255,.2);padding:6px 8px;border-radius:8px;white-space:nowrap}.myRankRole{font-size:12px;color:#e2e3ff;margin-top:4px}
-.rankNumber{margin-left:auto;background:#fff;color:#6b70e9;border-radius:15px;padding:9px 14px;text-align:center;min-width:62px}.rankNumber small{display:block;font-size:9px;font-weight:700;color:#74789a}.rankNumber strong{font-size:22px}
-.rankStats{display:grid;grid-template-columns:repeat(3,1fr);background:rgba(255,255,255,.12);border-radius:14px;margin-top:16px;padding:11px 4px}.rankStat{text-align:center;border-right:1px solid rgba(255,255,255,.18)}.rankStat:last-child{border-right:0}.rankStat .rsLabel{font-size:9px;color:#e0e1ff;font-weight:700;letter-spacing:.4px}.rankStat .rsValue{font-size:17px;font-weight:800;margin-top:7px}
-.rankSectionTitle{font-size:18px;font-weight:800;margin:18px 0 12px}.topThree{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;align-items:end}.podium{background:#4b4754;border-radius:16px 16px 12px 12px;padding:10px 6px 9px;text-align:center;min-width:0}.podium.first{padding-top:14px;background:#4e4a58}.podium .medal{font-size:22px}.podium .podiumAvatar{margin:4px auto 6px}.podiumName{font-size:12px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.podiumRole{font-size:9px;color:#bcb9c6;margin-top:5px}.podiumPoints{display:inline-block;margin-top:8px;padding:6px 9px;background:#d8d6d9;color:#222;border-radius:12px;font-size:11px;font-weight:800}.podium.first .podiumPoints{background:#ffe329}
-.stateHeader{display:flex;align-items:center;justify-content:space-between;margin:30px 0 10px}.stateHeader h2{margin:0;font-size:18px}.aspirantCount{background:#9a4d16;padding:7px 11px;border-radius:13px;font-size:11px;font-weight:800}
+.avatar{width:48px;height:48px;border-radius:50%;object-fit:cover;display:flex;align-items:center;justify-content:center;background:#536072;color:#fff;font-size:20px;font-weight:800;flex:0 0 auto;overflow:hidden}.avatar img{width:100%;height:100%;object-fit:cover}
+.badge{font-size:10px;background:rgba(255,255,255,.2);padding:6px 8px;border-radius:8px;white-space:nowrap}
 .rankRows{display:flex;flex-direction:column;gap:8px}.rankRow{display:flex;align-items:center;gap:10px;background:#18243b;padding:11px;border-radius:14px}.rankPos{width:28px;text-align:center;font-weight:800;color:#9fa8bd}.rankRow .avatar{width:38px;height:38px;font-size:16px}.rankRowMain{min-width:0}.rankRowName{font-size:13px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.rankRowSub{font-size:10px;color:#9fa8bd;margin-top:3px}.rankRowPoints{margin-left:auto;font-size:12px;font-weight:800;color:#9298ff;white-space:nowrap}
 @media(max-width:500px){#categories,#testList{grid-template-columns:repeat(2,1fr)}.question{font-size:18px}.container{padding:10px 12px}}
-@media(max-width:360px){#categories,#testList{grid-template-columns:1fr}.rankStat .rsLabel{font-size:8px}.rankStat .rsValue{font-size:15px}}
+@media(max-width:360px){#categories,#testList{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -373,12 +369,16 @@ button{border:0;border-radius:13px;padding:12px 18px;background:linear-gradient(
 
 <section id="leaderboard" class="hidden">
 <div class="rankPage">
-  <div class="rankHeader"><button id="leaderboardBackButton" class="rankBack">‹</button><div><h1>Rank Board 🏆</h1><p>Top 10 Aspirant Rankings &amp; Standings</p></div></div>
-  <div id="myRankCard"></div>
-  <div class="rankSectionTitle">Top 3 Rankers</div>
-  <div id="topThree" class="topThree"></div>
-  <div class="stateHeader"><h2>Top 10 Global Rank List</h2><span id="aspirantCount" class="aspirantCount">0 Aspirants</span></div>
-  <div id="rankRows" class="rankRows"></div>
+  <div class="rankHeader">
+    <button id="leaderboardBackButton" class="rankBack" aria-label="Back">‹</button>
+    <div>
+      <h1>Top 10 Global Rank List 🏆</h1>
+      <p>Top 10 Aspirant Rankings &amp; Standings</p>
+    </div>
+  </div>
+  <div id="rankRows" class="rankRows">
+    <div class="status">Loading...</div>
+  </div>
 </div>
 </section>
 </div>
@@ -588,35 +588,44 @@ function hideAll(){["home","tests","quiz","result","leaderboard"].forEach(id => 
 function showHome(){clearInterval(timerInterval);hideAll();document.getElementById("home").classList.remove("hidden");}
 function showTests(){clearInterval(timerInterval);hideAll();document.getElementById("tests").classList.remove("hidden");}
 async function showLeaderboard(){
-hideAll();document.getElementById("leaderboard").classList.remove("hidden");
-const myCard=document.getElementById("myRankCard"),top=document.getElementById("topThree"),rows=document.getElementById("rankRows");
-myCard.innerHTML='<div class="status">Loading rank board...</div>';top.innerHTML='';rows.innerHTML='<div class="status">Loading...</div>';
+hideAll();
+document.getElementById("leaderboard").classList.remove("hidden");
+
+const rows = document.getElementById("rankRows");
+rows.innerHTML = '<div class="status">Loading Top 10...</div>';
+
 try{
-const users=await apiGet("/quiz/api/leaderboard");
-if(!Array.isArray(users))throw new Error("Invalid leaderboard data.");
-users.sort((a,b)=>Number(b.points||0)-Number(a.points||0));
+  const users = await apiGet("/quiz/api/leaderboard");
+  if(!Array.isArray(users)) throw new Error("Invalid leaderboard data.");
 
-const topUsers = users.slice(0,10);
+  users.sort((a,b) => Number(b.points||0) - Number(a.points||0));
+  const topUsers = users.slice(0,10);
 
-document.getElementById("aspirantCount").textContent=topUsers.length+" Aspirants";
-if(!topUsers.length){myCard.innerHTML='<div class="status">No leaderboard data.</div>';rows.innerHTML='';return;}
+  if(!topUsers.length){
+    rows.innerHTML = '<div class="status">No leaderboard data.</div>';
+    return;
+  }
 
-const me=topUsers[0];
-const av=me.profilePhotoUri?'<div class="avatar"><img src="'+esc(me.profilePhotoUri)+'" alt=""></div>':'<div class="avatar">'+esc(me.avatarEmoji||"👤")+'</div>';
-myCard.innerHTML='<div class="myRankCard"><div class="myRankTop">'+av+'<div style="min-width:0"><div class="myRankName">'+esc(me.name||"Aspirant")+(me.badgeTitle?'<span class="badge">'+esc(me.badgeTitle)+'</span>':'')+'</div><div class="myRankRole">Aspirant Member</div></div><div class="rankNumber"><small>RANK</small><strong>#1</strong></div></div><div class="rankStats"><div class="rankStat"><div class="rsLabel">TOTAL POINTS</div><div class="rsValue">🏆 '+Number(me.points||0)+'</div></div><div class="rankStat"><div class="rsLabel">STARS EARNED</div><div class="rsValue">⭐ '+Number(me.stars||0)+'</div></div><div class="rankStat"><div class="rsLabel">ACCURACY</div><div class="rsValue">↗ '+Math.round(Number(me.accuracy||0))+'%</div></div></div></div>';
+  rows.innerHTML = "";
+  topUsers.forEach((u,i) => {
+    const a = u.profilePhotoUri
+      ? '<div class="avatar"><img src="'+esc(u.profilePhotoUri)+'" alt=""></div>'
+      : '<div class="avatar">'+esc(u.avatarEmoji||"👤")+'</div>';
 
-const medals=["🥇","🥈","🥉"];
-topUsers.slice(0,3).forEach((u,i)=>{
-  const a=u.profilePhotoUri?'<div class="avatar podiumAvatar"><img src="'+esc(u.profilePhotoUri)+'" alt=""></div>':'<div class="avatar podiumAvatar">'+esc(u.avatarEmoji||"👤")+'</div>';
-  top.innerHTML+='<div class="podium '+(i===0?'first':'')+'"><div class="medal">'+medals[i]+'</div>'+a+'<div class="podiumName">'+esc(u.name||"Aspirant")+'</div><div class="podiumRole">Aspirant</div><div class="podiumPoints">'+Number(u.points||0)+' pts</div></div>';
-});
-
-rows.innerHTML='';
-topUsers.forEach((u,i)=>{
-  const a=u.profilePhotoUri?'<div class="avatar"><img src="'+esc(u.profilePhotoUri)+'" alt=""></div>':'<div class="avatar">'+esc(u.avatarEmoji||"👤")+'</div>';
-  rows.innerHTML+='<div class="rankRow"><div class="rankPos">#'+(i+1)+'</div>'+a+'<div class="rankRowMain"><div class="rankRowName">'+esc(u.name||"Aspirant")+'</div><div class="rankRowSub">'+esc(u.badgeTitle||"Aspirant")+' • '+Math.round(Number(u.accuracy||0))+'% accuracy</div></div><div class="rankRowPoints">'+Number(u.points||0)+' pts</div></div>';
-});
-}catch(error){myCard.innerHTML='<div class="status error">'+esc(error.message)+'</div>';top.innerHTML='';rows.innerHTML='';}
+    rows.innerHTML +=
+      '<div class="rankRow">' +
+        '<div class="rankPos">#'+(i+1)+'</div>' +
+        a +
+        '<div class="rankRowMain">' +
+          '<div class="rankRowName">'+esc(u.name||"Aspirant")+'</div>' +
+          '<div class="rankRowSub">'+esc(u.badgeTitle||"Aspirant")+' • '+Math.round(Number(u.accuracy||0))+'% accuracy</div>' +
+        '</div>' +
+        '<div class="rankRowPoints">'+Number(u.points||0)+' pts</div>' +
+      '</div>';
+  });
+}catch(error){
+  rows.innerHTML = '<div class="status error">'+esc(error.message)+'</div>';
+}
 }
 document.getElementById("backHomeButton").addEventListener("click",showHome);
 document.getElementById("backTestsButton").addEventListener("click",showTests);
