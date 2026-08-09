@@ -388,7 +388,7 @@ button:active{transform:scale(.97)}
 
 <section id="leaderboard" class="hidden">
 <div class="topbar"><button id="leaderboardBackButton" class="back">← Back</button></div>
-<div class="header"><h1>🏆 Leaderboard</h1></div>
+<div class="header"><h1>🏆</h1></div>
 <div id="leaderboardList"><div class="status">Loading...</div></div>
 </section>
 </div>
