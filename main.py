@@ -268,7 +268,6 @@ h1{color:white;font-size:28px;margin-bottom:20px}
 # ============================================================
 # QUIZ PAGE - ATTRACTIVE UI
 # ============================================================
-
 @app.route("/quiz")
 def quiz_app():
     html = r"""
@@ -281,11 +280,39 @@ def quiz_app():
 <style>
 *{box-sizing:border-box}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);margin:0;color:#222;min-height:100vh}
-.container{max-width:900px;margin:auto;padding:16px;padding-bottom:100px}
+.container{max-width:900px;margin:auto;padding:16px}
+
 .hidden{display:none!important}
-.header{text-align:center;padding:20px 12px;color:white}
+
+/* NEW HEADER WITH ICON */
+.header{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    padding:20px 4px;
+    color:white
+}
 .header h1{margin:0;font-size:26px}
-.header p{margin:4px 0 0;opacity:.9}
+.header p{margin:4px 0 0;opacity:.9;font-size:14px}
+
+.leaderboard-icon-btn{
+    background:rgba(255,255,255,.2);
+    backdrop-filter:blur(10px);
+    border:1px solid rgba(255,255,255,.3);
+    border-radius:14px;
+    padding:10px 12px;
+    cursor:pointer;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:2px;
+    color:white;
+    font-size:11px;
+    font-weight:700;
+    transition:.2s
+}
+.leaderboard-icon-btn:active{transform:scale(.95);background:rgba(255,255,255,.3)}
+.leaderboard-icon{font-size:22px}
 
 .card{background:rgba(255,255,255,.95);backdrop-filter:blur(10px);padding:18px;border-radius:20px;border:1px solid rgba(255,255,255,.2);box-shadow:0 8px 24px rgba(0,0,0,.15)}
 #categories,#testList{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
@@ -311,18 +338,6 @@ button:active{transform:scale(.97)}
 .status{padding:14px;background:#fff3cd;border-radius:14px;margin:12px 0;font-size:14px}
 .error{background:#ffebee;color:#b71c1c}
 
-/* Expanded Leaderboard Banner */
-.leaderboard-banner {
-    position: fixed; bottom: 0; left: 0; right: 0;
-    background: linear-gradient(135deg,#ff6b6b,#feca57);
-    color: white; padding: 18px 20px; display: flex;
-    align-items: center; justify-content: center; gap: 10px;
-    font-size: 18px; font-weight: 800; box-shadow: 0 -6px 20px rgba(0,0,0,.2);
-    cursor: pointer; z-index: 999; border: none; width: 100%;
-}
-.leaderboard-banner:active {opacity:.9}
-.trophy-icon {font-size: 24px}
-
 .leader{display:flex;align-items:center;gap:12px;background:white;padding:14px;border-radius:14px;margin:10px 0;box-shadow:0 2px 8px rgba(0,0,0,.05)}
 .points{margin-left:auto;font-weight:800;color:#667eea;font-size:16px}
 
@@ -334,8 +349,18 @@ button:active{transform:scale(.97)}
 <div class="container">
 
 <section id="home">
-<div class="header"><h1>🎯 CA Blockbuster</h1><p>Daily CA Revision</p></div>
-<h2 style="color:white">Categories</h2>
+<div class="header">
+  <div>
+    <h1>🎯 CA Blockbuster</h1>
+    <p>Daily CA Revision</p>
+  </div>
+  <button class="leaderboard-icon-btn" id="leaderboardButton">
+    <span class="leaderboard-icon">🏆</span>
+    <span>LEADER</span>
+  </button>
+</div>
+
+<h2 style="color:white;margin:10px 4px">Categories</h2>
 <div id="categories"><div class="status">Loading...</div></div>
 </section>
 
@@ -368,11 +393,6 @@ button:active{transform:scale(.97)}
 </section>
 </div>
 
-<button class="leaderboard-banner" id="leaderboardButton">
-  <span class="trophy-icon">🏆</span>
-  <span>View Leaderboard</span>
-</button>
-
 <script>
 "use strict";
 let allTests = [];let currentTests = [];let currentQuestions = [];let selectedTopic = "";let selectedTest = null;let currentQuestion = 0;let score = 0;let answered = false;let timerSeconds = 0;let timerInterval = null;
@@ -404,7 +424,6 @@ loadData();
 </html>
 """
     return html
-
 # ============================================================
 # QUIZ FIRESTORE API
 # ============================================================
