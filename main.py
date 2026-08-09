@@ -17,456 +17,2731 @@ from firebase_admin import credentials, firestore
 
 app = Flask(__name__)
 
-# ------------------ FIRESTORE ------------------
+# ============================================================
+# FIRESTORE
+# ============================================================
+
 _firestore_db = None
+
 
 def get_firestore():
     global _firestore_db
+
     if _firestore_db is not None:
         return _firestore_db
 
     firebase_json = os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON")
+
     if not firebase_json:
-        raise RuntimeError("FIREBASE_SERVICE_ACCOUNT_JSON is not configured in Koyeb")
+        raise RuntimeError(
+            "FIREBASE_SERVICE_ACCOUNT_JSON is not configured in Koyeb"
+        )
 
     try:
         service_account_info = json.loads(firebase_json)
     except json.JSONDecodeError as e:
-        raise RuntimeError("FIREBASE_SERVICE_ACCOUNT_JSON is not valid JSON") from e
+        raise RuntimeError(
+            "FIREBASE_SERVICE_ACCOUNT_JSON is not valid JSON"
+        ) from e
 
     if not firebase_admin._apps:
-        firebase_admin.initialize_app(credentials.Certificate(service_account_info))
+        firebase_admin.initialize_app(
+            credentials.Certificate(service_account_info)
+        )
 
     _firestore_db = firestore.client()
     return _firestore_db
 
-# ------------------ FIREBASE WEB AUTH CONFIG ------------------
+
+# ============================================================
+# FIREBASE WEB CONFIG
+# ============================================================
+
 FIREBASE_WEB_CONFIG = {
-    "apiKey": os.environ.get("FIREBASE_WEB_API_KEY", "YOUR_FIREBASE_WEB_API_KEY"),
-    "authDomain": os.environ.get("FIREBASE_WEB_AUTH_DOMAIN", "YOUR_PROJECT_ID.firebaseapp.com"),
-    "projectId": os.environ.get("FIREBASE_PROJECT_ID", "YOUR_PROJECT_ID"),
-    "storageBucket": os.environ.get("FIREBASE_STORAGE_BUCKET", "YOUR_PROJECT_ID.firebasestorage.app"),
-    "messagingSenderId": os.environ.get("FIREBASE_MESSAGING_SENDER_ID", "YOUR_MESSAGING_SENDER_ID"),
-    "appId": os.environ.get("FIREBASE_WEB_APP_ID", "YOUR_FIREBASE_WEB_APP_ID")
+    "apiKey": os.environ.get("FIREBASE_WEB_API_KEY", ""),
+    "authDomain": os.environ.get("FIREBASE_WEB_AUTH_DOMAIN", ""),
+    "projectId": os.environ.get("FIREBASE_PROJECT_ID", ""),
+    "storageBucket": os.environ.get("FIREBASE_STORAGE_BUCKET", ""),
+    "messagingSenderId": os.environ.get(
+        "FIREBASE_MESSAGING_SENDER_ID", ""
+    ),
+    "appId": os.environ.get("FIREBASE_WEB_APP_ID", ""),
 }
 
-# -------------------- Config --------------------
+
+# ============================================================
+# CONFIG
+# ============================================================
+
 AUDIO_FOLDER = "static/audio"
 XML_FOLDER = "telegram_xml"
 ARCHIVE_FOLDER = "archive"
+
 TELEGRAM_CHANNELS = {
     "Pathravarthakal": "https://t.me/s/Pathravarthakal",
-    "DailyCa": "https://t.me/s/DailyCAMalayalam"
+    "DailyCa": "https://t.me/s/DailyCAMalayalam",
 }
-os.makedirs(XML_FOLDER, exist_ok=True)
+
 os.makedirs(AUDIO_FOLDER, exist_ok=True)
+os.makedirs(XML_FOLDER, exist_ok=True)
 os.makedirs(ARCHIVE_FOLDER, exist_ok=True)
 
-# ------------------ Feed Archive ------------------
+
+# ============================================================
+# TELEGRAM FEED
+# ============================================================
+
 def archive_feed(xml_path):
     try:
         if not os.path.exists(xml_path):
             return
-        month_folder = datetime.now().strftime("%Y-%m")
-        archive_dir = os.path.join(ARCHIVE_FOLDER, month_folder)
-        os.makedirs(archive_dir, exist_ok=True)
-        archive_path = os.path.join(archive_dir, os.path.basename(xml_path))
-        shutil.copy2(xml_path, archive_path)
-        print(f"[Feed Archived] {archive_path}")
-    except Exception as e:
-        print(f"[Archive Error] {e}")
 
-# ------------------ Telegram Fetch ------------------
+        month_folder = datetime.now().strftime("%Y-%m")
+        archive_dir = os.path.join(
+            ARCHIVE_FOLDER,
+            month_folder
+        )
+        os.makedirs(archive_dir, exist_ok=True)
+
+        archive_path = os.path.join(
+            archive_dir,
+            os.path.basename(xml_path)
+        )
+
+        shutil.copy2(xml_path, archive_path)
+
+        print("[Feed Archived]", archive_path)
+
+    except Exception as e:
+        print("[Archive Error]", e)
+
+
 def fetch_telegram_xml(name, url):
     try:
-        r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+        r = requests.get(
+            url,
+            headers={"User-Agent": "Mozilla/5.0"},
+            timeout=15
+        )
+        r.raise_for_status()
+
         soup = BeautifulSoup(r.text, "html.parser")
+
         rss_root = ET.Element("rss", version="2.0")
-        ch = ET.SubElement(rss_root, "channel")
-        ET.SubElement(ch, "title").text = f"{name} Telegram Feed"
+        channel = ET.SubElement(rss_root, "channel")
 
-        for msg in soup.select(".tgme_widget_message_wrap")[:80]:
-            date_tag = msg.select_one("a.tgme_widget_message_date")
-            link = date_tag["href"] if date_tag and "href" in date_tag.attrs else url
-            text_tag = msg.select_one(".tgme_widget_message_text")
-            desc_html = text_tag.decode_contents() if text_tag else ""
-            clean_text = BeautifulSoup(desc_html, "html.parser").get_text(" ", strip=True)
-            item = ET.SubElement(ch, "item")
-            ET.SubElement(item, "title").text = clean_text[:100]
-            ET.SubElement(item, "link").text = link
-            ET.SubElement(item, "description").text = clean_text
+        ET.SubElement(channel, "title").text = (
+            f"{name} Telegram Feed"
+        )
 
-        xml_path = os.path.join(XML_FOLDER, f"{name}.xml")
-        ET.ElementTree(rss_root).write(xml_path, encoding="utf-8", xml_declaration=True)
+        for msg in soup.select(
+            ".tgme_widget_message_wrap"
+        )[:80]:
+
+            date_tag = msg.select_one(
+                "a.tgme_widget_message_date"
+            )
+
+            link = (
+                date_tag.get("href", url)
+                if date_tag
+                else url
+            )
+
+            text_tag = msg.select_one(
+                ".tgme_widget_message_text"
+            )
+
+            desc_html = (
+                text_tag.decode_contents()
+                if text_tag
+                else ""
+            )
+
+            clean_text = BeautifulSoup(
+                desc_html,
+                "html.parser"
+            ).get_text(" ", strip=True)
+
+            item = ET.SubElement(
+                channel,
+                "item"
+            )
+
+            ET.SubElement(
+                item,
+                "title"
+            ).text = clean_text[:100]
+
+            ET.SubElement(
+                item,
+                "link"
+            ).text = link
+
+            ET.SubElement(
+                item,
+                "description"
+            ).text = clean_text
+
+        xml_path = os.path.join(
+            XML_FOLDER,
+            f"{name}.xml"
+        )
+
+        ET.ElementTree(
+            rss_root
+        ).write(
+            xml_path,
+            encoding="utf-8",
+            xml_declaration=True
+        )
+
         archive_feed(xml_path)
-        print(f"[Feed Updated] {name}")
+
+        print("[Feed Updated]", name)
+
     except Exception as e:
-        print(f"[Error fetching {name}] {e}")
+        print("[Telegram Error]", name, e)
+
 
 def telegram_updater():
     while True:
         for name, url in TELEGRAM_CHANNELS.items():
             fetch_telegram_xml(name, url)
+
         time.sleep(600)
 
-# ------------------ AUDIO ------------------
+
+# ============================================================
+# AUDIO
+# ============================================================
+
 def generate_audio_from_feed(channel_name):
-    path = os.path.join(XML_FOLDER, f"{channel_name}.xml")
+    path = os.path.join(
+        XML_FOLDER,
+        f"{channel_name}.xml"
+    )
+
     if not os.path.exists(path):
-        fetch_telegram_xml(channel_name, TELEGRAM_CHANNELS[channel_name])
+        fetch_telegram_xml(
+            channel_name,
+            TELEGRAM_CHANNELS[channel_name]
+        )
+
     feed = feedparser.parse(path)
+
     entries = list(feed.entries)[-25:]
+
     full_text = "ഇന്നത്തെ പ്രധാന വാർത്തകൾ.\n\n"
 
-    for e in entries:
-        desc_text = e.get("description", "")
-        desc_text = re.sub(r"[\U0001F300-\U0001FAFF]", " ", desc_text)
-        desc_text = re.sub(r"[\U0001F600-\U0001F64F]", " ", desc_text)
-        desc_text = re.sub(r"[\u2600-\u27BF]", " ", desc_text)
-        desc_text = re.sub(r"[\uFE0F\u200D]", " ", desc_text)
-        desc_text = re.sub(r"#\w+", "", desc_text)
-        desc_text = re.sub(r"http\S+", "", desc_text)
-        desc_text = re.sub(r"(join\s*@\w+.*)$", "", desc_text, flags=re.IGNORECASE)
-        desc_text = re.sub(r"@\w+", "", desc_text)
-        desc_text = re.sub(r"[!?:;]+", ". ", desc_text)
-        desc_text = re.sub(r"[\"'(){}\[\]<>]", " ", desc_text)
-        desc_text = re.sub(r"\s+", " ", desc_text).strip()
-        if not desc_text or len(desc_text) < 5:
-            desc_text = e.get("title", "")
-        if desc_text:
-            full_text += f"{desc_text}.\n\n"
+    for entry in entries:
+        text = entry.get("description", "")
+
+        text = re.sub(
+            r"[\U0001F300-\U0001FAFF]",
+            " ",
+            text
+        )
+        text = re.sub(
+            r"[\U0001F600-\U0001F64F]",
+            " ",
+            text
+        )
+        text = re.sub(
+            r"[\u2600-\u27BF]",
+            " ",
+            text
+        )
+        text = re.sub(
+            r"[\uFE0F\u200D]",
+            " ",
+            text
+        )
+        text = re.sub(r"#\w+", "", text)
+        text = re.sub(r"http\S+", "", text)
+        text = re.sub(
+            r"(join\s*@\w+.*)$",
+            "",
+            text,
+            flags=re.IGNORECASE
+        )
+        text = re.sub(r"@\w+", "", text)
+        text = re.sub(r"[!?:;]+", ". ", text)
+        text = re.sub(
+            r"[\"'(){}\[\]<>]",
+            " ",
+            text
+        )
+        text = re.sub(
+            r"\s+",
+            " ",
+            text
+        ).strip()
+
+        if len(text) < 5:
+            text = entry.get("title", "")
+
+        if text:
+            full_text += text + ".\n\n"
 
     if len(full_text.strip()) < 10:
         full_text = "ഇന്ന് വാർത്തകൾ ലഭ്യമല്ല."
 
     try:
-        output_path = os.path.join(AUDIO_FOLDER, f"{channel_name}.mp3")
-        gTTS(full_text, lang="ml").save(output_path)
-        print(f"[Audio Updated] {channel_name}")
+        output_path = os.path.join(
+            AUDIO_FOLDER,
+            f"{channel_name}.mp3"
+        )
+
+        gTTS(
+            full_text,
+            lang="ml"
+        ).save(output_path)
+
+        print("[Audio Updated]", channel_name)
+
     except Exception as e:
-        print(f"[TTS Error] {e}")
+        print("[TTS Error]", e)
+
 
 def audio_updater():
     while True:
         for name in TELEGRAM_CHANNELS:
             generate_audio_from_feed(name)
+
         time.sleep(600)
 
-# ------------------ Feed Page ------------------
+
+# ============================================================
+# TELEGRAM PAGES
+# ============================================================
+
 @app.route("/telegram/<channel_name>")
 def telegram_html(channel_name):
     if channel_name not in TELEGRAM_CHANNELS:
-        return "Invalid channel"
-    path = os.path.join(XML_FOLDER, f"{channel_name}.xml")
+        return "Invalid channel", 404
+
+    path = os.path.join(
+        XML_FOLDER,
+        f"{channel_name}.xml"
+    )
+
     if request.args.get("refresh") == "1":
-        fetch_telegram_xml(channel_name, TELEGRAM_CHANNELS[channel_name])
+        fetch_telegram_xml(
+            channel_name,
+            TELEGRAM_CHANNELS[channel_name]
+        )
+
     if not os.path.exists(path):
-        fetch_telegram_xml(channel_name, TELEGRAM_CHANNELS[channel_name])
+        fetch_telegram_xml(
+            channel_name,
+            TELEGRAM_CHANNELS[channel_name]
+        )
+
     feed = feedparser.parse(path)
-    posts = "".join(f"<p>{e.get('description','')}</p><hr>" for e in list(feed.entries)[::-1][:50])
+
+    posts = ""
+
+    for entry in list(feed.entries)[::-1][:50]:
+        posts += (
+            "<p>"
+            + entry.get("description", "")
+            + "</p><hr>"
+        )
+
     return f"""
-    <html><head><meta name='viewport' content='width=device-width,initial-scale=1.0'>
-    <style>body{{font-family:system-ui;padding:10px}}.btn{{background:#00695c;color:#fff;padding:8px 12px;border-radius:6px;text-decoration:none}}</style>
-    </head><body><h2>{channel_name}</h2><a class='btn' href='?refresh=1'>🔄 Refresh</a><br><br>{posts}</body></html>
+    <!DOCTYPE html>
+    <html>
+    <head>
+    <meta name="viewport"
+          content="width=device-width,initial-scale=1">
+    <style>
+    body{{font-family:system-ui;padding:10px}}
+    .btn{{background:#00695c;color:white;
+    padding:8px 12px;border-radius:6px;
+    text-decoration:none}}
+    </style>
+    </head>
+    <body>
+    <h2>{channel_name}</h2>
+    <a class="btn" href="?refresh=1">🔄 Refresh</a>
+    <br><br>
+    {posts}
+    </body>
+    </html>
     """
 
-# ------------------ Archive Page ------------------
+
+# ============================================================
+# ARCHIVES
+# ============================================================
+
 @app.route("/archives")
 def archives():
-    months = sorted(os.listdir(ARCHIVE_FOLDER), reverse=True)
+    months = sorted(
+        os.listdir(ARCHIVE_FOLDER),
+        reverse=True
+    )
+
     html = """
-    <html><head><meta name='viewport' content='width=device-width,initial-scale=1.0'>
+    <!DOCTYPE html>
+    <html>
+    <head>
+    <meta name="viewport"
+          content="width=device-width,initial-scale=1">
     <style>
-    body{font-family:system-ui;padding:10px;background:#f5f5f5}h2{text-align:center}
-    .card{background:#fff;padding:12px;border-radius:10px;margin-bottom:15px;box-shadow:0 2px 5px rgba(0,0,0,.1)}
-    .file{display:block;padding:8px;margin-top:5px;background:#e3f2fd;border-radius:6px;text-decoration:none;color:#1565c0;font-weight:bold}
-    </style></head><body><h2>📦 Feed Archives</h2>
+    body{font-family:system-ui;padding:10px;background:#f5f5f5}
+    .card{background:white;padding:12px;
+    border-radius:10px;margin-bottom:15px}
+    .file{display:block;padding:9px;margin-top:5px;
+    background:#e3f2fd;border-radius:6px;
+    text-decoration:none;color:#1565c0}
+    </style>
+    </head>
+    <body>
+    <h2>📦 Feed Archives</h2>
     """
+
     if not months:
         html += "<p>No archives found.</p>"
+
     for month in months:
-        month_path = os.path.join(ARCHIVE_FOLDER, month)
+        month_path = os.path.join(
+            ARCHIVE_FOLDER,
+            month
+        )
+
         if not os.path.isdir(month_path):
             continue
-        html += f"<div class='card'><h3>{month}</h3>"
-        for file in os.listdir(month_path):
-            html += f"<a class='file' href='/archive/{month}/{file}'>{file}</a>"
-        html += "</div>"
-    return html + "</body></html>"
 
-# ------------------ Archive Files ------------------
+        html += (
+            f"<div class='card'><h3>{month}</h3>"
+        )
+
+        for filename in os.listdir(month_path):
+            html += (
+                f"<a class='file' "
+                f"href='/archive/{month}/{filename}'>"
+                f"{filename}</a>"
+            )
+
+        html += "</div>"
+
+    html += "</body></html>"
+
+    return html
+
+
 @app.route("/archive/<month>/<filename>")
 def archive_file(month, filename):
-    archive_path = os.path.join(ARCHIVE_FOLDER, month, filename)
+    archive_path = os.path.join(
+        ARCHIVE_FOLDER,
+        month,
+        filename
+    )
+
     if not os.path.exists(archive_path):
-        return "Archive not found"
+        return "Archive not found", 404
+
     feed = feedparser.parse(archive_path)
+
     posts = ""
-    for e in list(feed.entries)[::-1][:100]:
+
+    for entry in list(feed.entries)[::-1][:100]:
         posts += f"""
-        <div class='post'><h3>{e.get('title','')}</h3><p>{e.get('description','')}</p>
-        <a class='open-btn' href='{e.get('link','#')}' target='_blank'>Open Source</a></div>
+        <div class="post">
+        <h3>{entry.get('title','')}</h3>
+        <p>{entry.get('description','')}</p>
+        <a href="{entry.get('link','#')}"
+           target="_blank">Open Source</a>
+        </div>
         """
+
     return f"""
-    <html><head><meta name='viewport' content='width=device-width,initial-scale=1.0'>
+    <!DOCTYPE html>
+    <html>
+    <head>
+    <meta name="viewport"
+          content="width=device-width,initial-scale=1">
     <style>
-    body{{font-family:system-ui;padding:10px;background:#f5f5f5}}h2{{text-align:center;color:#d32f2f}}
-    .post{{background:#fff;padding:12px;border-radius:10px;margin-bottom:15px;box-shadow:0 2px 5px rgba(0,0,0,.1)}}
-    .post h3{{margin-top:0;color:#1565c0;font-size:18px}}.post p{{line-height:1.5;color:#333}}
-    .open-btn{{display:inline-block;margin-top:10px;background:#00695c;color:#fff;padding:8px 12px;border-radius:6px;text-decoration:none;font-size:14px}}
-    </style></head><body><h2>📦 Archive Feed</h2>{posts}</body></html>
+    body{{font-family:system-ui;padding:10px;background:#f5f5f5}}
+    .post{{background:white;padding:12px;
+    border-radius:10px;margin-bottom:15px}}
+    </style>
+    </head>
+    <body>
+    <h2>📦 Archive Feed</h2>
+    {posts}
+    </body>
+    </html>
     """
 
-# ------------------ Home ------------------
+
+# ============================================================
+# HOME
+# ============================================================
+
 @app.route("/")
 def home():
     return """
-    <!DOCTYPE html><html><head>
-    <meta name='viewport' content='width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no'>
+    <!DOCTYPE html>
+    <html>
+    <head>
+    <meta name="viewport"
+          content="width=device-width,initial-scale=1">
     <style>
-    body{font-family:'Segoe UI',Roboto,sans-serif;background:#f0f2f5;margin:0;padding:10px;text-align:center;color:#333}
-    h1{font-size:22px;color:#d32f2f;margin:10px 0;border-bottom:2px solid #d32f2f;padding-bottom:5px}
-    .section-header{display:flex;align-items:center;justify-content:center;margin-top:15px;font-weight:bold;font-size:14px;text-transform:uppercase;color:#555}
-    .btn{display:block;width:90%;margin:10px auto;padding:15px 5px;font-size:18px;font-weight:bold;text-decoration:none;border-radius:10px;border:2px solid transparent;box-shadow:0 4px 6px rgba(0,0,0,.1)}
-    .audio-btn{background:#e3f2fd;color:#1565c0;border-color:#bbdefb}.feed-btn{background:#f1f8e9;color:#2e7d32;border-color:#c8e6c9}.archive-btn{background:#fff3e0;color:#ef6c00;border-color:#ffcc80}
-    .btn:focus,.btn:active{background:#ffeb3b!important;color:#000!important;border:3px solid #000!important;outline:none;transform:scale(1.02)}
-    .key-hint{font-size:12px;background:rgba(0,0,0,.1);padding:2px 6px;border-radius:4px;margin-right:8px}
-    </style></head><body>
-    <h1>📰 വാർത്തകൾ</h1><div class='section-header'>🎧 AUDIO CONTENT</div>
-    <a class='btn audio-btn' href='/static/audio/Pathravarthakal.mp3' accesskey='1'><span class='key-hint'>1</span>Pathravarthakal</a>
-    <a class='btn audio-btn' href='/static/audio/DailyCa.mp3' accesskey='2'><span class='key-hint'>2</span>Daily CA</a>
-    <div class='section-header'>📰 NEWS FEEDS</div>
-    <a class='btn feed-btn' href='/telegram/Pathravarthakal' accesskey='3'><span class='key-hint'>3</span>Pathravarthakal Feed</a>
-    <a class='btn feed-btn' href='/telegram/DailyCa' accesskey='4'><span class='key-hint'>4</span>Daily CA Feed</a>
-    <div class='section-header'>📦 ARCHIVES</div>
-    <a class='btn archive-btn' href='/archives' accesskey='5'><span class='key-hint'>5</span>Feed Archives</a>
-    <p style='font-size:10px;color:#888;margin-top:20px'>Use Up/Down keys to navigate</p>
-    </body></html>
+    body{font-family:system-ui;background:#f0f2f5;
+    margin:0;padding:10px;text-align:center}
+    h1{color:#d32f2f}
+    .section{font-weight:bold;margin-top:18px}
+    .btn{display:block;width:90%;margin:10px auto;
+    padding:15px 5px;font-size:18px;font-weight:bold;
+    text-decoration:none;border-radius:10px}
+    .audio{background:#e3f2fd;color:#1565c0}
+    .feed{background:#f1f8e9;color:#2e7d32}
+    .archive{background:#fff3e0;color:#ef6c00}
+    </style>
+    </head>
+    <body>
+
+    <h1>📰 വാർത്തകൾ</h1>
+
+    <div class="section">🎧 AUDIO CONTENT</div>
+
+    <a class="btn audio"
+       href="/static/audio/Pathravarthakal.mp3">
+       1️⃣ Pathravarthakal
+    </a>
+
+    <a class="btn audio"
+       href="/static/audio/DailyCa.mp3">
+       2️⃣ Daily CA
+    </a>
+
+    <div class="section">📰 NEWS FEEDS</div>
+
+    <a class="btn feed"
+       href="/telegram/Pathravarthakal">
+       3️⃣ Pathravarthakal Feed
+    </a>
+
+    <a class="btn feed"
+       href="/telegram/DailyCa">
+       4️⃣ Daily CA Feed
+    </a>
+
+    <div class="section">📦 ARCHIVES</div>
+
+    <a class="btn archive"
+       href="/archives">
+       5️⃣ Feed Archives
+    </a>
+
+    </body>
+    </html>
     """
 
+
 # ============================================================
-# QUIZ APP
+# QUIZ PAGE
 # ============================================================
+
 @app.route("/quiz")
 def quiz_app():
-    html = r'''<!DOCTYPE html>
-<html lang="en"><head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    firebase_config = json.dumps(
+        FIREBASE_WEB_CONFIG
+    )
+
+    html = r"""
+<!DOCTYPE html>
+<html lang="en">
+<head>
+
+<meta charset="UTF-8">
+
+<meta name="viewport"
+      content="width=device-width,initial-scale=1">
+
 <title>CA Blockbuster Quiz</title>
+
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+
 <style>
-*{box-sizing:border-box}body{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#f5f7fb;margin:0;color:#222}.container{width:min(900px,100%);margin:auto;padding:16px 16px 40px}.header{text-align:center;padding:12px 0 10px}.header h1{margin:0;color:#1565c0;font-size:32px}.header p{color:#666;margin:8px 0 0}h2{margin-top:20px}.card{background:#fff;padding:18px;margin:12px 0;border-radius:14px;box-shadow:0 2px 8px rgba(0,0,0,.09);border:1px solid #e7eaf0}.clickable{cursor:pointer;transition:transform .12s,background .12s}.clickable:hover{background:#eef6ff;transform:translateY(-1px)}.title{font-size:18px;font-weight:700}.subtitle{color:#666;margin-top:6px;line-height:1.4}.meta{color:#555;font-size:14px;margin-top:8px}.hidden{display:none!important}.topbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:16px}button{border:none;background:#1565c0;color:#fff;padding:11px 18px;border-radius:9px;font-size:15px;cursor:pointer}button:hover{opacity:.92}button:disabled{opacity:.65;cursor:not-allowed}.back{background:#555}.timer{font-weight:700;color:#d32f2f;font-size:17px}.question-number{color:#666;margin-bottom:8px}.question{font-size:20px;line-height:1.55;font-weight:600}.option{background:#fff;border:2px solid #d9dee7;padding:14px;margin:10px 0;border-radius:10px;cursor:pointer;line-height:1.45}.option:hover{background:#f5f9ff}.option.correct{background:#d8f3dc!important;border-color:#2e7d32}.option.wrong{background:#ffd8d8!important;border-color:#c62828}.explanation{line-height:1.5}.actions{display:flex;justify-content:flex-end;margin-top:15px}.status{padding:12px;border-radius:9px;background:#fff3cd;color:#664d03;margin:12px 0}.error{background:#ffebee;color:#b71c1c}.empty{color:#777;padding:20px 0}.score{font-size:42px;font-weight:800;color:#1565c0;text-align:center}.center{text-align:center}
-.account-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;background:#fff;border:1px solid #e5e7eb;border-radius:16px;padding:10px 12px;margin-bottom:12px;box-shadow:0 2px 8px rgba(0,0,0,.06)}.user-info{display:flex;align-items:center;gap:10px;min-width:0}.user-photo,.leader-photo,.leader-avatar{width:44px;height:44px;border-radius:50%;object-fit:cover;flex:0 0 44px}.leader-avatar{display:flex;align-items:center;justify-content:center;background:#e3f2fd;font-size:22px}.user-name{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.user-email{color:#777;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.google-btn{background:#fff;color:#333;border:1px solid #dadce0;font-weight:600;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,.08)}.login-status{text-align:center;font-size:12px;min-height:18px;margin:-4px 0 10px}.logout-btn{background:#f1f3f4;color:#444;font-size:13px;padding:8px 12px}.leaderboard-button{width:100%;margin-top:18px;padding:15px;border-radius:14px;background:linear-gradient(135deg,#1565c0,#42a5f5);font-size:17px;font-weight:700;box-shadow:0 4px 10px rgba(21,101,192,.22)}
-#categories{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:14px}.category-card{min-height:128px;padding:18px 12px;background:#fff;border:1px solid #e5eaf2;border-radius:18px;box-shadow:0 4px 12px rgba(0,0,0,.07);display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;cursor:pointer;transition:transform .15s,box-shadow .15s,background .15s}.category-card:hover{transform:translateY(-3px);background:#f8fbff;box-shadow:0 7px 18px rgba(0,0,0,.1)}.category-icon{font-size:34px;line-height:1;margin-bottom:10px}.category-name{font-size:16px;font-weight:750;line-height:1.25}.category-tests{font-size:12px;color:#777;margin-top:6px}#testList{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}#testList .card{margin:0}.leader-row{display:flex;align-items:center;gap:12px;background:#fff;padding:13px;margin:10px 0;border-radius:15px;border:1px solid #e7eaf0;box-shadow:0 3px 10px rgba(0,0,0,.06)}.rank{width:34px;flex:0 0 34px;text-align:center;font-size:17px;font-weight:800}.leader-info{flex:1;min-width:0}.leader-name{font-weight:750;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.leader-badge{color:#777;font-size:12px;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.leader-points{color:#1565c0;font-weight:800;text-align:right;white-space:nowrap}.leader-points small{display:block;color:#777;font-size:10px;font-weight:500}@media(max-width:600px){.container{padding:12px 12px 30px}.header h1{font-size:26px}.question{font-size:18px}#categories,#testList{grid-template-columns:repeat(2,minmax(0,1fr))}.account-bar{align-items:flex-start}.google-btn,.logout-btn{padding:9px 10px}}@media(max-width:380px){#categories,#testList{grid-template-columns:1fr}}
-</style></head><body>
+
+*{box-sizing:border-box}
+
+body{
+font-family:system-ui,-apple-system,BlinkMacSystemFont,
+"Segoe UI",Roboto,sans-serif;
+background:#f5f7fb;
+margin:0;
+color:#222
+}
+
+.container{
+max-width:900px;
+margin:auto;
+padding:14px
+}
+
+.hidden{display:none!important}
+
+.header{text-align:center;padding:12px}
+
+.header h1{
+color:#1565c0;
+margin:0
+}
+
+.account{
+background:white;
+border:1px solid #ddd;
+border-radius:14px;
+padding:10px;
+display:flex;
+align-items:center;
+justify-content:space-between;
+gap:10px
+}
+
+.account-info{
+display:flex;
+align-items:center;
+gap:10px;
+min-width:0
+}
+
+.avatar{
+width:44px;
+height:44px;
+border-radius:50%;
+background:#e3f2fd;
+display:flex;
+align-items:center;
+justify-content:center;
+font-size:22px;
+object-fit:cover
+}
+
+.name{
+font-weight:bold;
+white-space:nowrap;
+overflow:hidden;
+text-overflow:ellipsis
+}
+
+.email{
+font-size:12px;
+color:#777;
+white-space:nowrap;
+overflow:hidden;
+text-overflow:ellipsis
+}
+
+button{
+border:0;
+border-radius:9px;
+padding:11px 16px;
+background:#1565c0;
+color:white;
+font-size:15px
+}
+
+button:disabled{
+opacity:.6
+}
+
+.login{
+background:white;
+color:#333;
+border:1px solid #ccc;
+font-weight:bold
+}
+
+.logout{
+background:#eee;
+color:#444
+}
+
+.status{
+padding:12px;
+background:#fff3cd;
+border-radius:9px;
+margin:10px 0;
+font-size:13px
+}
+
+.error{
+background:#ffebee;
+color:#b71c1c
+}
+
+.debug{
+display:none;
+white-space:pre-wrap;
+padding:12px;
+background:#fff3cd;
+border-radius:9px;
+font-size:12px
+}
+
+.debug.show{display:block}
+
+#categories,#testList{
+display:grid;
+grid-template-columns:repeat(2,1fr);
+gap:12px
+}
+
+.category,.test{
+background:white;
+padding:18px;
+border-radius:14px;
+border:1px solid #e4e7ec;
+cursor:pointer
+}
+
+.category{
+text-align:center;
+min-height:120px
+}
+
+.icon{font-size:32px}
+
+.title{
+font-weight:bold;
+font-size:17px
+}
+
+.meta{
+font-size:13px;
+color:#777;
+margin-top:7px
+}
+
+.option{
+background:white;
+border:2px solid #d9dee7;
+padding:14px;
+margin:10px 0;
+border-radius:10px;
+cursor:pointer
+}
+
+.option.correct{
+background:#d8f3dc;
+border-color:#2e7d32
+}
+
+.option.wrong{
+background:#ffd8d8;
+border-color:#c62828
+}
+
+.card{
+background:white;
+padding:16px;
+border-radius:14px;
+margin:12px 0
+}
+
+.question{
+font-size:20px;
+font-weight:600;
+line-height:1.5
+}
+
+.topbar{
+display:flex;
+justify-content:space-between;
+align-items:center;
+margin-bottom:12px
+}
+
+.back{
+background:#555
+}
+
+.timer{
+font-weight:bold;
+color:#d32f2f
+}
+
+.score{
+font-size:42px;
+font-weight:bold;
+text-align:center;
+color:#1565c0
+}
+
+.center{text-align:center}
+
+.leader{
+display:flex;
+align-items:center;
+gap:10px;
+background:white;
+padding:12px;
+border-radius:12px;
+margin:8px 0
+}
+
+.points{
+margin-left:auto;
+font-weight:bold;
+color:#1565c0
+}
+
+@media(max-width:500px){
+#categories,#testList{
+grid-template-columns:repeat(2,1fr)
+}
+
+.question{
+font-size:18px
+}
+}
+
+@media(max-width:360px){
+#categories,#testList{
+grid-template-columns:1fr
+}
+}
+
+</style>
+</head>
+
+<body>
+
 <div class="container">
+
 <section id="home">
-<div id="accountBar" class="account-bar"><div class="user-info"><div id="accountAvatar" class="leader-avatar">👤</div><div><div id="accountName" class="user-name">Not signed in</div><div id="accountEmail" class="user-email">Sign in to your Google account</div></div></div><button id="googleLoginButton" type="button" class="google-btn">🔐 Google Login</button></div>
-<div id="loginStatus" class="login-status">Initializing Google Login...</div>
-<div class="header"><h1>🎯 CA Blockbuster</h1><p>Daily CA Revision</p></div><h2>Categories</h2>
-<div id="categories"><div class="status">Loading...</div></div>
-<button id="leaderboardButton" class="leaderboard-button" type="button">🏆 View Leaderboard</button>
-</section>
-<section id="tests" class="hidden"><div class="topbar"><button id="backHomeButton" class="back" type="button">← Back</button></div><h2 id="topicTitle"></h2><div id="testList"></div></section>
-<section id="quiz" class="hidden"><div class="topbar"><button id="backTestsButton" class="back" type="button">← Tests</button><span id="timer" class="timer">00:00</span></div><h2 id="testTitle"></h2><div class="question-number" id="questionNumber"></div><div class="card"><div id="questionText" class="question"></div></div><div id="options"></div><div id="explanationCard" class="card hidden"><strong>Explanation</strong><div id="explanation" class="explanation"></div></div><div class="actions"><button id="nextButton" type="button">Next →</button></div></section>
-<section id="result" class="hidden"><div class="header"><h1>🎉 Result</h1></div><div class="card center"><div id="scoreText" class="score"></div><p id="resultDetails"></p></div><div class="center"><button id="resultHomeButton" type="button">Back to Categories</button></div></section>
-<section id="leaderboard" class="hidden"><div class="topbar"><button id="leaderboardBackButton" class="back" type="button">← Back</button></div><div class="header"><h1>🏆 Leaderboard</h1><p>Top performers</p></div><div id="leaderboardList"><div class="status">Loading leaderboard...</div></div></section>
+
+<div class="account">
+
+<div class="account-info">
+
+<div id="accountAvatar"
+     class="avatar">👤</div>
+
+<div>
+
+<div id="accountName"
+     class="name">
+Not signed in
 </div>
 
-<!-- Firebase configuration is injected by Flask. -->
-<script>window.__FIREBASE_WEB_CONFIG__=__FIREBASE_WEB_CONFIG__;</script>
+<div id="accountEmail"
+     class="email">
+Sign in to your Google account
+</div>
 
-<!-- Independent Google login script.  It exposes loginWithGoogle globally, so old cached inline onclick handlers also work. -->
+</div>
+
+</div>
+
+<button id="googleLoginButton"
+        class="login"
+        type="button">
+🔐 Google Login
+</button>
+
+</div>
+
+<div id="loginStatus"
+     class="status">
+Initializing Google Login...
+</div>
+
+<div id="authDebug"
+     class="debug"></div>
+
+<div class="header">
+<h1>🎯 CA Blockbuster</h1>
+<p>Daily CA Revision</p>
+</div>
+
+<h2>Categories</h2>
+
+<div id="categories">
+<div class="status">
+Loading...
+</div>
+</div>
+
+<br>
+
+<button id="leaderboardButton">
+🏆 View Leaderboard
+</button>
+
+</section>
+
+
+<section id="tests"
+         class="hidden">
+
+<div class="topbar">
+
+<button id="backHomeButton"
+        class="back">
+← Back
+</button>
+
+</div>
+
+<h2 id="topicTitle"></h2>
+
+<div id="testList"></div>
+
+</section>
+
+
+<section id="quiz"
+         class="hidden">
+
+<div class="topbar">
+
+<button id="backTestsButton"
+        class="back">
+← Tests
+</button>
+
+<span id="timer"
+      class="timer">
+00:00
+</span>
+
+</div>
+
+<h2 id="testTitle"></h2>
+
+<div id="questionNumber"></div>
+
+<div class="card">
+
+<div id="questionText"
+     class="question">
+</div>
+
+</div>
+
+<div id="options"></div>
+
+<div id="explanationCard"
+     class="card hidden">
+
+<b>Explanation</b>
+
+<div id="explanation"></div>
+
+</div>
+
+<div style="text-align:right">
+
+<button id="nextButton">
+Next →
+</button>
+
+</div>
+
+</section>
+
+
+<section id="result"
+         class="hidden">
+
+<div class="header">
+<h1>🎉 Result</h1>
+</div>
+
+<div class="card center">
+
+<div id="scoreText"
+     class="score"></div>
+
+<p id="resultDetails"></p>
+
+</div>
+
+<button id="resultHomeButton">
+Back to Categories
+</button>
+
+</section>
+
+
+<section id="leaderboard"
+         class="hidden">
+
+<div class="topbar">
+
+<button id="leaderboardBackButton"
+        class="back">
+← Back
+</button>
+
+</div>
+
+<div class="header">
+<h1>🏆 Leaderboard</h1>
+</div>
+
+<div id="leaderboardList">
+<div class="status">
+Loading...
+</div>
+</div>
+
+</section>
+
+</div>
+
+
 <script>
-(function(){
+window.__FIREBASE_WEB_CONFIG__ =
+__FIREBASE_CONFIG__;
+</script>
+
+
+<script>
 "use strict";
-let auth=null, initialized=false;
-function status(message,error){const el=document.getElementById("loginStatus");if(el){el.textContent=message||"";el.style.color=error?"#b71c1c":"#666";}}
-function esc(v){return String(v??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#039;");}
+
+/*
+ ============================================================
+ GOOGLE LOGIN
+ ============================================================
+
+ IMPORTANT:
+ This uses redirect instead of popup because the app is
+ expected to be used on Android/mobile browsers.
+
+ Firebase Console:
+ Authentication
+ -> Sign-in method
+ -> Google
+ -> Enable
+
+ Authentication
+ -> Settings
+ -> Authorized domains
+ -> Add your Koyeb domain
+ ============================================================
+*/
+
+let auth = null;
+let initialized = false;
+
+
+function setLoginStatus(message, error=false){
+
+    const el =
+        document.getElementById(
+            "loginStatus"
+        );
+
+    if(el){
+
+        el.textContent = message;
+
+        el.className =
+            error
+                ? "status error"
+                : "status";
+    }
+
+    console.log(
+        error
+            ? "[Google ERROR]"
+            : "[Google]",
+        message
+    );
+}
+
+
+function showAuthError(error){
+
+    const box =
+        document.getElementById(
+            "authDebug"
+        );
+
+    if(!box) return;
+
+    box.textContent =
+        "Firebase error code: " +
+        (error.code || "unknown") +
+        "\\n\\n" +
+        (error.message || "Unknown error");
+
+    box.classList.add("show");
+}
+
+
+function escapeHtml(value){
+
+    return String(value ?? "")
+        .replace(/&/g,"&amp;")
+        .replace(/</g,"&lt;")
+        .replace(/>/g,"&gt;")
+        .replace(/"/g,"&quot;")
+        .replace(/'/g,"&#039;");
+}
+
+
 function updateAccount(user){
- const avatar=document.getElementById("accountAvatar"),name=document.getElementById("accountName"),email=document.getElementById("accountEmail"),button=document.getElementById("googleLoginButton");
- if(!avatar||!name||!email||!button)return;
- if(user){
-  if(user.photoURL) avatar.outerHTML='<img id="accountAvatar" class="user-photo" src="'+esc(user.photoURL)+'" alt="">'; else {avatar.textContent="👤";avatar.className="leader-avatar";}
-  name.textContent=user.displayName||"Google User";email.textContent=user.email||"";button.textContent="Logout";button.className="logout-btn";button.disabled=false;status("Signed in with Google.");
- }else{
-  const a=document.getElementById("accountAvatar");if(a)a.outerHTML='<div id="accountAvatar" class="leader-avatar">👤</div>';
-  name.textContent="Not signed in";email.textContent="Sign in to your Google account";button.textContent="🔐 Google Login";button.className="google-btn";button.disabled=false;status(initialized?"Sign in with Google to continue.":"Initializing Google Login...");
- }
+
+    const avatar =
+        document.getElementById(
+            "accountAvatar"
+        );
+
+    const name =
+        document.getElementById(
+            "accountName"
+        );
+
+    const email =
+        document.getElementById(
+            "accountEmail"
+        );
+
+    const button =
+        document.getElementById(
+            "googleLoginButton"
+        );
+
+
+    if(!avatar || !name ||
+       !email || !button){
+
+        return;
+    }
+
+
+    if(user){
+
+        if(user.photoURL){
+
+            avatar.outerHTML =
+                '<img id="accountAvatar" ' +
+                'class="avatar" src="' +
+                escapeHtml(
+                    user.photoURL
+                ) +
+                '" alt="">';
+
+        }else{
+
+            avatar.textContent = "👤";
+        }
+
+
+        name.textContent =
+            user.displayName ||
+            "Google User";
+
+        email.textContent =
+            user.email || "";
+
+        button.textContent =
+            "Logout";
+
+        button.className =
+            "logout";
+
+        button.disabled = false;
+
+        setLoginStatus(
+            "Signed in with Google."
+        );
+
+        const debug =
+            document.getElementById(
+                "authDebug"
+            );
+
+        if(debug){
+            debug.classList.remove(
+                "show"
+            );
+        }
+
+    }else{
+
+        const a =
+            document.getElementById(
+                "accountAvatar"
+            );
+
+        if(a){
+
+            a.outerHTML =
+                '<div id="accountAvatar" ' +
+                'class="avatar">👤</div>';
+        }
+
+
+        name.textContent =
+            "Not signed in";
+
+        email.textContent =
+            "Sign in to your Google account";
+
+        button.textContent =
+            "🔐 Google Login";
+
+        button.className =
+            "login";
+
+        button.disabled = false;
+
+        if(initialized){
+
+            setLoginStatus(
+                "Sign in with Google to continue."
+            );
+        }
+    }
 }
+
+
 async function loginWithGoogle(){
- console.log("[Google Login] Button clicked.");
- const button=document.getElementById("googleLoginButton");
- if(!auth){const msg="Google Login is not ready. Check the Firebase Web settings in Koyeb.";console.error(msg);status(msg,true);alert(msg);return;}
- try{
-  button.disabled=true;button.textContent="Connecting...";status("Opening Google sign-in...");
-  const provider=new firebase.auth.GoogleAuthProvider();provider.setCustomParameters({prompt:"select_account"});
-  console.log("[Google Login] Calling signInWithPopup...");
-  await auth.signInWithPopup(provider);
-  console.log("[Google Login] Popup sign-in completed.");
- }catch(error){
-  console.error("[Google Login] Sign-in error:",error);
-  if(error.code==="auth/popup-blocked"||error.code==="auth/cancelled-popup-request"||error.code==="auth/popup-cancelled"){
-   try{status("Redirecting to Google sign-in...");const provider=new firebase.auth.GoogleAuthProvider();provider.setCustomParameters({prompt:"select_account"});await auth.signInWithRedirect(provider);return;}
-   catch(e){console.error(e);status("Google Login failed: "+e.message,true);}
-  }else{status("Google Login failed: "+(error.message||error.code||"Unknown error"),true);alert("Google Login failed\n\nCode: "+(error.code||"unknown")+"\n\n"+(error.message||"Unknown error"));}
- }finally{if(!window.currentFirebaseUser){button.disabled=false;button.textContent="🔐 Google Login";}}
+
+    console.log(
+        "[Google Login] Button clicked"
+    );
+
+
+    const button =
+        document.getElementById(
+            "googleLoginButton"
+        );
+
+
+    if(!auth){
+
+        const error =
+            new Error(
+                "Firebase Auth is not initialized."
+            );
+
+        setLoginStatus(
+            error.message,
+            true
+        );
+
+        showAuthError(error);
+
+        return;
+    }
+
+
+    try{
+
+        button.disabled = true;
+        button.textContent =
+            "Opening Google...";
+
+
+        setLoginStatus(
+            "Opening Google sign-in..."
+        );
+
+
+        const provider =
+            new firebase.auth.GoogleAuthProvider();
+
+
+        provider.setCustomParameters({
+            prompt:"select_account"
+        });
+
+
+        console.log(
+            "[Google Login] Starting redirect..."
+        );
+
+
+        await auth.signInWithRedirect(
+            provider
+        );
+
+
+    }catch(error){
+
+        console.error(
+            "[Google Login] Redirect failed",
+            error
+        );
+
+
+        button.disabled = false;
+        button.textContent =
+            "🔐 Google Login";
+
+
+        setLoginStatus(
+            "Google Login failed: " +
+            (
+                error.message ||
+                error.code ||
+                "Unknown error"
+            ),
+            true
+        );
+
+        showAuthError(error);
+    }
 }
-async function logoutGoogle(){if(!auth)return;try{await auth.signOut();}catch(e){console.error("Logout error:",e);}}
-window.loginWithGoogle=loginWithGoogle;window.logoutGoogle=logoutGoogle;
-function initialize(){
- const button=document.getElementById("googleLoginButton");
- if(!button){console.error("[Google Login] Button not found.");return;}
- button.addEventListener("click",function(){if(window.currentFirebaseUser)logoutGoogle();else loginWithGoogle();});
- console.log("[Google Login] Button listener attached.");
- try{
-  const config=window.__FIREBASE_WEB_CONFIG__;
-  if(!window.firebase)throw new Error("Firebase Web SDK did not load.");
-  if(!config||!config.apiKey||String(config.apiKey).startsWith("YOUR_")||!config.projectId||String(config.projectId).startsWith("YOUR_"))throw new Error("Firebase Web configuration is missing. Check the six FIREBASE_WEB_* variables in Koyeb.");
-  console.log("[Google Login] Firebase project:",config.projectId);
-  if(!firebase.apps.length)firebase.initializeApp(config);
-  auth=firebase.auth();window.firebaseAuthInstance=auth;window.googleLoginReady=true;initialized=true;
-  auth.getRedirectResult().catch(e=>console.error("[Google Login] Redirect result error:",e));
-  auth.onAuthStateChanged(function(user){window.currentFirebaseUser=user||null;console.log("[Google Login] Auth state:",user?user.email:"signed out");updateAccount(user);});
- }catch(error){console.error("[Google Login] Initialization failed:",error);status("Google Login unavailable: "+error.message,true);}
+
+
+async function logoutGoogle(){
+
+    if(!auth) return;
+
+    try{
+
+        await auth.signOut();
+
+    }catch(error){
+
+        console.error(
+            "[Google Logout]",
+            error
+        );
+
+        setLoginStatus(
+            "Logout failed: " +
+            error.message,
+            true
+        );
+    }
 }
-if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",initialize);else initialize();
-})();
+
+
+window.loginWithGoogle =
+    loginWithGoogle;
+
+window.logoutGoogle =
+    logoutGoogle;
+
+
+function initializeGoogleLogin(){
+
+    const button =
+        document.getElementById(
+            "googleLoginButton"
+        );
+
+
+    if(!button){
+
+        console.error(
+            "[Google Login] Button not found"
+        );
+
+        return;
+    }
+
+
+    /*
+     Listener is attached before Firebase
+     initialization so the button is never
+     just a dead visual button.
+    */
+
+    button.addEventListener(
+        "click",
+        function(){
+
+            if(window.currentFirebaseUser){
+
+                logoutGoogle();
+
+            }else{
+
+                loginWithGoogle();
+            }
+        }
+    );
+
+
+    try{
+
+        if(!window.firebase){
+
+            throw new Error(
+                "Firebase Web SDK did not load."
+            );
+        }
+
+
+        const config =
+            window.__FIREBASE_WEB_CONFIG__;
+
+
+        if(!config){
+
+            throw new Error(
+                "Firebase Web configuration is missing."
+            );
+        }
+
+
+        const required = [
+            "apiKey",
+            "authDomain",
+            "projectId",
+            "appId"
+        ];
+
+
+        const missing =
+            required.filter(
+                key => !config[key]
+            );
+
+
+        if(missing.length){
+
+            throw new Error(
+                "Missing Firebase Web settings: " +
+                missing.join(", ")
+            );
+        }
+
+
+        console.log(
+            "[Google Login] Project:",
+            config.projectId
+        );
+
+
+        if(!firebase.apps.length){
+
+            firebase.initializeApp(
+                config
+            );
+        }
+
+
+        auth = firebase.auth();
+
+        window.firebaseAuthInstance =
+            auth;
+
+        window.googleLoginReady =
+            true;
+
+        initialized = true;
+
+
+        /*
+         This is executed after returning
+         from Google's redirect.
+        */
+
+        auth.getRedirectResult()
+            .then(function(result){
+
+                if(result && result.user){
+
+                    console.log(
+                        "[Google Login] Login successful:",
+                        result.user.email
+                    );
+                }
+
+            })
+            .catch(function(error){
+
+                console.error(
+                    "[Google Login] Redirect result error:",
+                    error
+                );
+
+                setLoginStatus(
+                    "Google sign-in error: " +
+                    (
+                        error.message ||
+                        error.code ||
+                        "Unknown error"
+                    ),
+                    true
+                );
+
+                showAuthError(error);
+            });
+
+
+        auth.onAuthStateChanged(
+            function(user){
+
+                window.currentFirebaseUser =
+                    user || null;
+
+                updateAccount(user);
+            }
+        );
+
+
+        setLoginStatus(
+            "Sign in with Google to continue."
+        );
+
+
+    }catch(error){
+
+        console.error(
+            "[Google Login] Initialization failed:",
+            error
+        );
+
+        setLoginStatus(
+            "Google Login unavailable: " +
+            error.message,
+            true
+        );
+
+        showAuthError(error);
+    }
+}
+
+
+if(document.readyState === "loading"){
+
+    document.addEventListener(
+        "DOMContentLoaded",
+        initializeGoogleLogin
+    );
+
+}else{
+
+    initializeGoogleLogin();
+}
+
 </script>
 
-<!-- Main quiz script: no inline onclick handlers are required. -->
+
 <script>
 "use strict";
-let allTests=[],currentTests=[],currentQuestions=[],selectedTopic="",selectedTest=null,currentQuestion=0,score=0,answered=false,timerSeconds=0,timerInterval=null;
-function escapeHtml(value){return String(value??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#039;");}
-async function apiGet(url,requireLogin=false){
- const headers={Accept:"application/json"};const auth=window.firebaseAuthInstance,user=window.currentFirebaseUser;
- if(auth&&user){try{headers.Authorization="Bearer "+await user.getIdToken();}catch(e){console.warn("Could not get Firebase ID token:",e);}}else if(requireLogin)throw new Error("Please sign in with Google first.");
- const response=await fetch(url,{method:"GET",headers});let data;try{data=await response.json();}catch(e){throw new Error("Server returned an invalid response ("+response.status+")");}
- if(!response.ok)throw new Error(data.error||("Server error: "+response.status));return data;
+
+let allTests=[];
+let currentTests=[];
+let currentQuestions=[];
+let selectedTopic="";
+let selectedTest=null;
+let currentQuestion=0;
+let score=0;
+let answered=false;
+let timerSeconds=0;
+let timerInterval=null;
+
+
+function esc(value){
+
+    return String(value ?? "")
+        .replace(/&/g,"&amp;")
+        .replace(/</g,"&lt;")
+        .replace(/>/g,"&gt;")
+        .replace(/"/g,"&quot;")
+        .replace(/'/g,"&#039;");
 }
-async function loadData(){const categories=document.getElementById("categories");try{categories.innerHTML='<div class="status">Loading from Firestore...</div>';allTests=await apiGet("/quiz/api/tests");if(!Array.isArray(allTests))throw new Error("Invalid test data received");displayCategories();}catch(error){console.error("[Quiz] Load tests error:",error);categories.innerHTML='<div class="status error"><strong>Unable to load quiz.</strong><br><br>'+escapeHtml(error.message)+'<br><br>Check the Firebase service-account setting in Koyeb.</div>';}}
-function displayCategories(){const container=document.getElementById("categories");container.innerHTML="";const topicIds=[...new Set(allTests.map(t=>t.topicId).filter(Boolean))];if(!topicIds.length){container.innerHTML='<div class="empty">No categories found.</div>';return;}topicIds.sort((a,b)=>String(a).localeCompare(String(b)));const icons=["📚","🌍","📰","🔬","🏛️","💡","🇮🇳","🎯"];topicIds.forEach((topicId,index)=>{const topicTests=allTests.filter(t=>t.topicId===topicId),card=document.createElement("div");card.className="category-card";card.innerHTML='<div class="category-icon">'+icons[index%icons.length]+'</div><div class="category-name">'+escapeHtml(topicId)+'</div><div class="category-tests">'+topicTests.length+' '+(topicTests.length===1?"Test":"Tests")+'</div>';card.addEventListener("click",()=>showTestsForTopic(topicId));container.appendChild(card);});}
-function showTestsForTopic(topicId){selectedTopic=topicId;currentTests=allTests.filter(t=>t.topicId===topicId);document.getElementById("home").classList.add("hidden");document.getElementById("tests").classList.remove("hidden");document.getElementById("quiz").classList.add("hidden");document.getElementById("result").classList.add("hidden");document.getElementById("leaderboard").classList.add("hidden");document.getElementById("topicTitle").textContent=topicId;const container=document.getElementById("testList");container.innerHTML="";if(!currentTests.length){container.innerHTML='<div class="empty">No tests found.</div>';return;}currentTests.forEach(test=>{const card=document.createElement("div");card.className="card clickable";card.innerHTML='<div class="title">'+escapeHtml(test.title||test.id)+'</div>'+(test.subtitle?'<div class="subtitle">'+escapeHtml(test.subtitle)+'</div>':"")+'<div class="meta">'+escapeHtml(String(test.questionCount||0))+' Questions • '+escapeHtml(String(test.durationMinutes||0))+' min • '+escapeHtml(String(test.difficulty||""))+'</div>';card.addEventListener("click",()=>startQuiz(test));container.appendChild(card);});}
-async function startQuiz(test){selectedTest=test;try{document.getElementById("tests").classList.add("hidden");document.getElementById("quiz").classList.remove("hidden");document.getElementById("result").classList.add("hidden");document.getElementById("leaderboard").classList.add("hidden");document.getElementById("testTitle").textContent=test.title||test.id;document.getElementById("questionText").textContent="Loading questions...";document.getElementById("options").innerHTML="";currentQuestions=await apiGet("/quiz/api/questions/"+encodeURIComponent(test.id));if(!Array.isArray(currentQuestions)||!currentQuestions.length)throw new Error("No questions found for this test.");currentQuestion=0;score=0;answered=false;startTimer(Number(test.durationMinutes)||0);displayQuestion();}catch(error){console.error("[Quiz] Start error:",error);document.getElementById("questionText").textContent="";document.getElementById("options").innerHTML='<div class="status error">'+escapeHtml(error.message)+'</div>';}}
-function displayQuestion(){const q=currentQuestions[currentQuestion];if(!q){finishQuiz();return;}answered=false;document.getElementById("questionNumber").textContent="Question "+(currentQuestion+1)+" / "+currentQuestions.length;document.getElementById("questionText").textContent=q.questionText||"";document.getElementById("explanationCard").classList.add("hidden");document.getElementById("explanation").textContent="";document.getElementById("nextButton").textContent=currentQuestion===currentQuestions.length-1?"Finish ✓":"Next →";const options=document.getElementById("options");options.innerHTML="";[q.option0||"",q.option1||"",q.option2||"",q.option3||""].forEach((option,index)=>{const div=document.createElement("div");div.className="option";div.textContent=option;div.addEventListener("click",()=>selectAnswer(index,div));options.appendChild(div);});}
-function selectAnswer(index,element){if(answered)return;answered=true;const q=currentQuestions[currentQuestion],correctIndex=Number(q.correctOptionIndex),optionElements=document.querySelectorAll(".option");if(index===correctIndex){element.classList.add("correct");score++;}else{element.classList.add("wrong");if(optionElements[correctIndex])optionElements[correctIndex].classList.add("correct");}if(q.explanation){document.getElementById("explanation").textContent=q.explanation;document.getElementById("explanationCard").classList.remove("hidden");}}
-function nextQuestion(){if(!answered)return;if(currentQuestion>=currentQuestions.length-1){finishQuiz();return;}currentQuestion++;displayQuestion();}
-function startTimer(durationMinutes){clearInterval(timerInterval);const hasLimit=Number(durationMinutes)>0;timerSeconds=hasLimit?Number(durationMinutes)*60:0;updateTimerDisplay();timerInterval=setInterval(()=>{if(hasLimit){timerSeconds--;updateTimerDisplay();if(timerSeconds<=0){clearInterval(timerInterval);finishQuiz();}}else{timerSeconds++;updateTimerDisplay();}},1000);}
-function updateTimerDisplay(){const minutes=Math.floor(timerSeconds/60),seconds=timerSeconds%60;document.getElementById("timer").textContent="⏱ "+String(minutes).padStart(2,"0")+":"+String(seconds).padStart(2,"0");}
-function finishQuiz(){clearInterval(timerInterval);document.getElementById("quiz").classList.add("hidden");document.getElementById("result").classList.remove("hidden");const total=currentQuestions.length;document.getElementById("scoreText").textContent=score+" / "+total;document.getElementById("resultDetails").textContent=(total?Math.round(score/total*100):0)+"% correct";}
-function showHome(){clearInterval(timerInterval);document.getElementById("home").classList.remove("hidden");document.getElementById("tests").classList.add("hidden");document.getElementById("quiz").classList.add("hidden");document.getElementById("result").classList.add("hidden");document.getElementById("leaderboard").classList.add("hidden");}
-function showTests(){clearInterval(timerInterval);document.getElementById("quiz").classList.add("hidden");document.getElementById("result").classList.add("hidden");document.getElementById("leaderboard").classList.add("hidden");document.getElementById("tests").classList.remove("hidden");}
-async function showLeaderboard(){clearInterval(timerInterval);document.getElementById("home").classList.add("hidden");document.getElementById("tests").classList.add("hidden");document.getElementById("quiz").classList.add("hidden");document.getElementById("result").classList.add("hidden");document.getElementById("leaderboard").classList.remove("hidden");const container=document.getElementById("leaderboardList");container.innerHTML='<div class="status">Loading leaderboard...</div>';try{const users=await apiGet("/quiz/api/leaderboard");if(!Array.isArray(users)||!users.length){container.innerHTML='<div class="empty">No leaderboard data found.</div>';return;}container.innerHTML="";users.forEach((user,index)=>{const row=document.createElement("div");row.className="leader-row";const medal=index===0?"🥇":index===1?"🥈":index===2?"🥉":String(index+1);const photo=user.profilePhotoUri?'<img class="leader-photo" src="'+escapeHtml(user.profilePhotoUri)+'" alt="">':'<div class="leader-avatar">'+escapeHtml(user.avatarEmoji||"👤")+'</div>';row.innerHTML='<div class="rank">'+medal+'</div>'+photo+'<div class="leader-info"><div class="leader-name">'+escapeHtml(user.name||"User")+'</div><div class="leader-badge">'+escapeHtml(user.badgeTitle||"")+'</div></div><div class="leader-points">'+Number(user.points||0)+'<small>points</small></div>';container.appendChild(row);});}catch(error){console.error("[Leaderboard] Error:",error);container.innerHTML='<div class="status error"><strong>Unable to load leaderboard.</strong><br><br>'+escapeHtml(error.message)+'</div>';}}
 
-document.getElementById("backHomeButton").addEventListener("click",showHome);
-document.getElementById("backTestsButton").addEventListener("click",showTests);
-document.getElementById("resultHomeButton").addEventListener("click",showHome);
-document.getElementById("leaderboardBackButton").addEventListener("click",showHome);
-document.getElementById("leaderboardButton").addEventListener("click",showLeaderboard);
-document.getElementById("nextButton").addEventListener("click",nextQuestion);
+
+async function apiGet(url, requireLogin=false){
+
+    const headers={
+        Accept:"application/json"
+    };
+
+
+    const auth =
+        window.firebaseAuthInstance;
+
+    const user =
+        window.currentFirebaseUser;
+
+
+    if(auth && user){
+
+        try{
+
+            headers.Authorization =
+                "Bearer " +
+                await user.getIdToken();
+
+        }catch(error){
+
+            console.warn(
+                "ID token error:",
+                error
+            );
+        }
+
+    }else if(requireLogin){
+
+        throw new Error(
+            "Please sign in with Google first."
+        );
+    }
+
+
+    const response =
+        await fetch(
+            url,
+            {
+                method:"GET",
+                headers:headers
+            }
+        );
+
+
+    let data;
+
+    try{
+
+        data =
+            await response.json();
+
+    }catch(error){
+
+        throw new Error(
+            "Server returned invalid JSON (" +
+            response.status +
+            ")"
+        );
+    }
+
+
+    if(!response.ok){
+
+        throw new Error(
+            data.error ||
+            "Server error: " +
+            response.status
+        );
+    }
+
+
+    return data;
+}
+
+
+async function loadData(){
+
+    const container =
+        document.getElementById(
+            "categories"
+        );
+
+
+    try{
+
+        container.innerHTML =
+            '<div class="status">' +
+            'Loading from Firestore...' +
+            '</div>';
+
+
+        allTests =
+            await apiGet(
+                "/quiz/api/tests"
+            );
+
+
+        if(!Array.isArray(allTests)){
+
+            throw new Error(
+                "Invalid test data received."
+            );
+        }
+
+
+        displayCategories();
+
+    }catch(error){
+
+        console.error(
+            "[Quiz]",
+            error
+        );
+
+        container.innerHTML =
+            '<div class="status error">' +
+            escapeHtml(
+                error.message
+            ) +
+            '</div>';
+    }
+}
+
+
+function displayCategories(){
+
+    const container =
+        document.getElementById(
+            "categories"
+        );
+
+
+    container.innerHTML="";
+
+
+    const topicIds =
+        [...new Set(
+            allTests
+                .map(
+                    test => test.topicId
+                )
+                .filter(Boolean)
+        )];
+
+
+    if(!topicIds.length){
+
+        container.innerHTML =
+            '<div class="status">' +
+            'No categories found.' +
+            '</div>';
+
+        return;
+    }
+
+
+    topicIds.sort(
+        (a,b) =>
+            String(a).localeCompare(
+                String(b)
+            )
+    );
+
+
+    const icons=[
+        "📚","🌍","📰","🔬",
+        "🏛️","💡","🇮🇳","🎯"
+    ];
+
+
+    topicIds.forEach(
+        (topicId,index)=>{
+
+            const tests =
+                allTests.filter(
+                    test =>
+                        test.topicId ===
+                        topicId
+                );
+
+
+            const card =
+                document.createElement(
+                    "div"
+                );
+
+
+            card.className =
+                "category";
+
+
+            card.innerHTML =
+                '<div class="icon">' +
+                icons[
+                    index % icons.length
+                ] +
+                '</div>' +
+
+                '<div class="title">' +
+                esc(topicId) +
+                '</div>' +
+
+                '<div class="meta">' +
+                tests.length +
+                ' Tests</div>';
+
+
+            card.addEventListener(
+                "click",
+                () =>
+                    showTestsForTopic(
+                        topicId
+                    )
+            );
+
+
+            container.appendChild(card);
+        }
+    );
+}
+
+
+function showTestsForTopic(topicId){
+
+    selectedTopic=topicId;
+
+
+    currentTests =
+        allTests.filter(
+            test =>
+                test.topicId === topicId
+        );
+
+
+    hideAll();
+
+    document.getElementById(
+        "tests"
+    ).classList.remove(
+        "hidden"
+    );
+
+
+    document.getElementById(
+        "topicTitle"
+    ).textContent =
+        topicId;
+
+
+    const container =
+        document.getElementById(
+            "testList"
+        );
+
+
+    container.innerHTML="";
+
+
+    currentTests.forEach(
+        test=>{
+
+            const card =
+                document.createElement(
+                    "div"
+                );
+
+
+            card.className="test";
+
+
+            card.innerHTML =
+                '<div class="title">' +
+                esc(
+                    test.title ||
+                    test.id
+                ) +
+                '</div>' +
+
+                '<div class="meta">' +
+                (test.questionCount || 0) +
+                ' Questions • ' +
+                (test.durationMinutes || 0) +
+                ' min • ' +
+                esc(
+                    test.difficulty || ""
+                ) +
+                '</div>';
+
+
+            card.addEventListener(
+                "click",
+                () => startQuiz(test)
+            );
+
+
+            container.appendChild(card);
+        }
+    );
+}
+
+
+async function startQuiz(test){
+
+    selectedTest=test;
+
+    hideAll();
+
+    document.getElementById(
+        "quiz"
+    ).classList.remove(
+        "hidden"
+    );
+
+
+    document.getElementById(
+        "testTitle"
+    ).textContent =
+        test.title || test.id;
+
+
+    document.getElementById(
+        "questionText"
+    ).textContent =
+        "Loading questions...";
+
+
+    try{
+
+        currentQuestions =
+            await apiGet(
+                "/quiz/api/questions/" +
+                encodeURIComponent(
+                    test.id
+                )
+            );
+
+
+        if(
+            !Array.isArray(
+                currentQuestions
+            ) ||
+            !currentQuestions.length
+        ){
+
+            throw new Error(
+                "No questions found."
+            );
+        }
+
+
+        currentQuestion=0;
+        score=0;
+        answered=false;
+
+
+        startTimer(
+            Number(
+                test.durationMinutes
+            ) || 0
+        );
+
+
+        displayQuestion();
+
+    }catch(error){
+
+        document.getElementById(
+            "options"
+        ).innerHTML =
+            '<div class="status error">' +
+            esc(error.message) +
+            '</div>';
+    }
+}
+
+
+function displayQuestion(){
+
+    const q =
+        currentQuestions[
+            currentQuestion
+        ];
+
+
+    if(!q){
+
+        finishQuiz();
+        return;
+    }
+
+
+    answered=false;
+
+
+    document.getElementById(
+        "questionNumber"
+    ).textContent =
+        "Question " +
+        (currentQuestion+1) +
+        " / " +
+        currentQuestions.length;
+
+
+    document.getElementById(
+        "questionText"
+    ).textContent =
+        q.questionText || "";
+
+
+    document.getElementById(
+        "explanationCard"
+    ).classList.add(
+        "hidden"
+    );
+
+
+    document.getElementById(
+        "nextButton"
+    ).textContent =
+        currentQuestion ===
+        currentQuestions.length-1
+            ? "Finish ✓"
+            : "Next →";
+
+
+    const options =
+        document.getElementById(
+            "options"
+        );
+
+
+    options.innerHTML="";
+
+
+    [
+        q.option0 || "",
+        q.option1 || "",
+        q.option2 || "",
+        q.option3 || ""
+    ].forEach(
+        (option,index)=>{
+
+            const div =
+                document.createElement(
+                    "div"
+                );
+
+            div.className="option";
+
+            div.textContent=option;
+
+
+            div.addEventListener(
+                "click",
+                () =>
+                    selectAnswer(
+                        index,
+                        div
+                    )
+            );
+
+
+            options.appendChild(div);
+        }
+    );
+}
+
+
+function selectAnswer(index,element){
+
+    if(answered) return;
+
+    answered=true;
+
+
+    const q =
+        currentQuestions[
+            currentQuestion
+        ];
+
+
+    const correct =
+        Number(
+            q.correctOptionIndex
+        );
+
+
+    const options =
+        document.querySelectorAll(
+            ".option"
+        );
+
+
+    if(index === correct){
+
+        element.classList.add(
+            "correct"
+        );
+
+        score++;
+
+    }else{
+
+        element.classList.add(
+            "wrong"
+        );
+
+        if(options[correct]){
+
+            options[correct]
+                .classList.add(
+                    "correct"
+                );
+        }
+    }
+
+
+    if(q.explanation){
+
+        document.getElementById(
+            "explanation"
+        ).textContent =
+            q.explanation;
+
+
+        document.getElementById(
+            "explanationCard"
+        ).classList.remove(
+            "hidden"
+        );
+    }
+}
+
+
+function nextQuestion(){
+
+    if(!answered) return;
+
+
+    if(
+        currentQuestion >=
+        currentQuestions.length-1
+    ){
+
+        finishQuiz();
+        return;
+    }
+
+
+    currentQuestion++;
+
+    displayQuestion();
+}
+
+
+function startTimer(minutes){
+
+    clearInterval(
+        timerInterval
+    );
+
+
+    const limit =
+        Number(minutes) > 0;
+
+
+    timerSeconds =
+        limit
+            ? Number(minutes)*60
+            : 0;
+
+
+    updateTimer();
+
+
+    timerInterval =
+        setInterval(
+            function(){
+
+                if(limit){
+
+                    timerSeconds--;
+
+                    updateTimer();
+
+
+                    if(
+                        timerSeconds <= 0
+                    ){
+
+                        clearInterval(
+                            timerInterval
+                        );
+
+                        finishQuiz();
+                    }
+
+                }else{
+
+                    timerSeconds++;
+
+                    updateTimer();
+                }
+
+            },
+            1000
+        );
+}
+
+
+function updateTimer(){
+
+    const min =
+        Math.floor(
+            timerSeconds/60
+        );
+
+    const sec =
+        timerSeconds%60;
+
+
+    document.getElementById(
+        "timer"
+    ).textContent =
+        "⏱ " +
+        String(min).padStart(2,"0") +
+        ":" +
+        String(sec).padStart(2,"0");
+}
+
+
+function finishQuiz(){
+
+    clearInterval(
+        timerInterval
+    );
+
+
+    hideAll();
+
+
+    document.getElementById(
+        "result"
+    ).classList.remove(
+        "hidden"
+    );
+
+
+    const total =
+        currentQuestions.length;
+
+
+    document.getElementById(
+        "scoreText"
+    ).textContent =
+        score + " / " + total;
+
+
+    document.getElementById(
+        "resultDetails"
+    ).textContent =
+        (
+            total
+                ? Math.round(
+                    score/total*100
+                )
+                : 0
+        ) +
+        "% correct";
+}
+
+
+function hideAll(){
+
+    [
+        "home",
+        "tests",
+        "quiz",
+        "result",
+        "leaderboard"
+    ].forEach(
+        id =>
+            document.getElementById(id)
+                .classList.add("hidden")
+    );
+}
+
+
+function showHome(){
+
+    clearInterval(
+        timerInterval
+    );
+
+    hideAll();
+
+    document.getElementById(
+        "home"
+    ).classList.remove(
+        "hidden"
+    );
+}
+
+
+function showTests(){
+
+    clearInterval(
+        timerInterval
+    );
+
+    hideAll();
+
+    document.getElementById(
+        "tests"
+    ).classList.remove(
+        "hidden"
+    );
+}
+
+
+async function showLeaderboard(){
+
+    hideAll();
+
+    document.getElementById(
+        "leaderboard"
+    ).classList.remove(
+        "hidden"
+    );
+
+
+    const container =
+        document.getElementById(
+            "leaderboardList"
+        );
+
+
+    container.innerHTML =
+        '<div class="status">' +
+        'Loading leaderboard...' +
+        '</div>';
+
+
+    try{
+
+        const users =
+            await apiGet(
+                "/quiz/api/leaderboard"
+            );
+
+
+        if(
+            !Array.isArray(users) ||
+            !users.length
+        ){
+
+            container.innerHTML =
+                '<div class="status">' +
+                'No leaderboard data.' +
+                '</div>';
+
+            return;
+        }
+
+
+        container.innerHTML="";
+
+
+        users.forEach(
+            (user,index)=>{
+
+                const row =
+                    document.createElement(
+                        "div"
+                    );
+
+                row.className="leader";
+
+
+                row.innerHTML =
+                    '<b>' +
+                    (
+                        index+1
+                    ) +
+                    '.</b>' +
+
+                    '<div>' +
+                    '<b>' +
+                    esc(
+                        user.name ||
+                        "User"
+                    ) +
+                    '</b>' +
+
+                    '<div class="meta">' +
+                    esc(
+                        user.badgeTitle ||
+                        ""
+                    ) +
+                    '</div>' +
+
+                    '</div>' +
+
+                    '<div class="points">' +
+                    Number(
+                        user.points || 0
+                    ) +
+                    ' pts</div>';
+
+
+                container.appendChild(row);
+            }
+        );
+
+    }catch(error){
+
+        container.innerHTML =
+            '<div class="status error">' +
+            esc(error.message) +
+            '</div>';
+    }
+}
+
+
+document.getElementById(
+    "backHomeButton"
+).addEventListener(
+    "click",
+    showHome
+);
+
+
+document.getElementById(
+    "backTestsButton"
+).addEventListener(
+    "click",
+    showTests
+);
+
+
+document.getElementById(
+    "resultHomeButton"
+).addEventListener(
+    "click",
+    showHome
+);
+
+
+document.getElementById(
+    "leaderboardBackButton"
+).addEventListener(
+    "click",
+    showHome
+);
+
+
+document.getElementById(
+    "leaderboardButton"
+).addEventListener(
+    "click",
+    showLeaderboard
+);
+
+
+document.getElementById(
+    "nextButton"
+).addEventListener(
+    "click",
+    nextQuestion
+);
+
+
 loadData();
-</script>
-</body></html>'''
-    return html.replace("__FIREBASE_WEB_CONFIG__", json.dumps(FIREBASE_WEB_CONFIG))
 
-# ------------------ QUIZ FIRESTORE API ------------------
+</script>
+
+</body>
+</html>
+"""
+
+    return html.replace(
+        "__FIREBASE_CONFIG__",
+        firebase_config
+    )
+
+
+# ============================================================
+# QUIZ FIRESTORE API
+# ============================================================
+
 @app.route("/quiz/api/tests")
 def quiz_tests():
     try:
         db = get_firestore()
-        docs = db.collection("custom_tests").stream()
+
         tests = []
-        for doc in docs:
+
+        for doc in db.collection(
+            "custom_tests"
+        ).stream():
+
             data = doc.to_dict()
+
             tests.append({
                 "id": data.get("id") or doc.id,
                 "topicId": data.get("topicId") or "",
                 "title": data.get("title") or "",
                 "subtitle": data.get("subtitle") or "",
-                "durationMinutes": data.get("durationMinutes") or 0,
-                "difficulty": data.get("difficulty") or "",
-                "dateMillis": data.get("dateMillis"),
-                "questionCount": 0
+                "durationMinutes": data.get(
+                    "durationMinutes"
+                ) or 0,
+                "difficulty": data.get(
+                    "difficulty"
+                ) or "",
+                "dateMillis": data.get(
+                    "dateMillis"
+                ),
+                "questionCount": 0,
             })
 
+
         question_counts = {}
-        for qdoc in db.collection("custom_questions").stream():
-            qdata = qdoc.to_dict()
-            test_id = qdata.get("testId")
+
+        for doc in db.collection(
+            "custom_questions"
+        ).stream():
+
+            data = doc.to_dict()
+
+            test_id = data.get("testId")
+
             if test_id:
-                question_counts[test_id] = question_counts.get(test_id, 0) + 1
+                question_counts[test_id] = (
+                    question_counts.get(
+                        test_id,
+                        0
+                    ) + 1
+                )
+
 
         for test in tests:
-            test["questionCount"] = question_counts.get(test["id"], 0)
-        return tests
-    except Exception as e:
-        print(f"[Quiz Firestore tests error] {e}")
-        return {"error": str(e)}, 500
+            test["questionCount"] = (
+                question_counts.get(
+                    test["id"],
+                    0
+                )
+            )
 
-@app.route("/quiz/api/questions/<path:test_id>")
+
+        return tests
+
+    except Exception as e:
+        print(
+            "[Quiz Firestore tests error]",
+            e
+        )
+
+        return {
+            "error": str(e)
+        }, 500
+
+
+@app.route(
+    "/quiz/api/questions/<path:test_id>"
+)
 def quiz_questions(test_id):
     try:
         db = get_firestore()
-        docs = db.collection("custom_questions").where("testId", "==", test_id).stream()
+
         questions = []
+
+        docs = db.collection(
+            "custom_questions"
+        ).where(
+            "testId",
+            "==",
+            test_id
+        ).stream()
+
+
         for doc in docs:
+
             data = doc.to_dict()
+
             questions.append({
                 "id": data.get("id") or doc.id,
-                "testId": data.get("testId") or "",
-                "topicId": data.get("topicId") or "",
-                "questionText": data.get("questionText") or "",
-                "option0": data.get("option0") or "",
-                "option1": data.get("option1") or "",
-                "option2": data.get("option2") or "",
-                "option3": data.get("option3") or "",
-                "correctOptionIndex": data.get("correctOptionIndex", 0),
-                "explanation": data.get("explanation") or "",
-                "hint": data.get("hint") or ""
+                "testId": data.get(
+                    "testId"
+                ) or "",
+                "topicId": data.get(
+                    "topicId"
+                ) or "",
+                "questionText": data.get(
+                    "questionText"
+                ) or "",
+                "option0": data.get(
+                    "option0"
+                ) or "",
+                "option1": data.get(
+                    "option1"
+                ) or "",
+                "option2": data.get(
+                    "option2"
+                ) or "",
+                "option3": data.get(
+                    "option3"
+                ) or "",
+                "correctOptionIndex": data.get(
+                    "correctOptionIndex",
+                    0
+                ),
+                "explanation": data.get(
+                    "explanation"
+                ) or "",
+                "hint": data.get(
+                    "hint"
+                ) or "",
             })
-        return questions
-    except Exception as e:
-        print(f"[Quiz Firestore questions error] {e}")
-        return {"error": str(e)}, 500
 
-# ------------------ QUIZ LEADERBOARD API ------------------
+
+        return questions
+
+    except Exception as e:
+
+        print(
+            "[Quiz Firestore questions error]",
+            e
+        )
+
+        return {
+            "error": str(e)
+        }, 500
+
+
+# ============================================================
+# LEADERBOARD
+# ============================================================
+
 @app.route("/quiz/api/leaderboard")
 def quiz_leaderboard():
+
     try:
+
         db = get_firestore()
+
         entries = []
-        for doc in db.collection("leaderboard").stream():
+
+
+        for doc in db.collection(
+            "leaderboard"
+        ).stream():
+
             data = doc.to_dict()
+
+
             try:
-                points = int(data.get("points", 0) or 0)
-            except (TypeError, ValueError):
+                points = int(
+                    data.get(
+                        "points",
+                        0
+                    ) or 0
+                )
+            except (
+                TypeError,
+                ValueError
+            ):
                 points = 0
+
+
             entries.append({
-                "name": data.get("name") or "User",
-                "points": points,
-                "accuracy": data.get("accuracy", 0),
-                "stars": data.get("stars", 0),
-                "badgeTitle": data.get("badgeTitle") or "",
-                "avatarEmoji": data.get("avatarEmoji") or "👤",
-                "profilePhotoUri": data.get("profilePhotoUri") or ""
+
+                "name":
+                    data.get(
+                        "name"
+                    ) or "User",
+
+                "points":
+                    points,
+
+                "accuracy":
+                    data.get(
+                        "accuracy",
+                        0
+                    ),
+
+                "stars":
+                    data.get(
+                        "stars",
+                        0
+                    ),
+
+                "badgeTitle":
+                    data.get(
+                        "badgeTitle"
+                    ) or "",
+
+                "avatarEmoji":
+                    data.get(
+                        "avatarEmoji"
+                    ) or "👤",
+
+                "profilePhotoUri":
+                    data.get(
+                        "profilePhotoUri"
+                    ) or "",
             })
-        entries.sort(key=lambda item: item["points"], reverse=True)
+
+
+        entries.sort(
+            key=lambda item:
+                item["points"],
+            reverse=True
+        )
+
+
         return entries[:50]
+
+
     except Exception as e:
-        print(f"[Quiz Firestore leaderboard error] {e}")
-        return {"error": str(e)}, 500
 
-# ------------------ Run ------------------
+        print(
+            "[Leaderboard error]",
+            e
+        )
+
+        return {
+            "error": str(e)
+        }, 500
+
+
+# ============================================================
+# RUN
+# ============================================================
+
 if __name__ == "__main__":
-    print("[Startup] CA Blockbuster server starting...")
-    print("[Startup] Firebase Web project:", FIREBASE_WEB_CONFIG.get("projectId"))
-    print("[Startup] Firebase Web authDomain:", FIREBASE_WEB_CONFIG.get("authDomain"))
-    print("[Startup] Firebase Web API key configured:", bool(FIREBASE_WEB_CONFIG.get("apiKey") and not str(FIREBASE_WEB_CONFIG.get("apiKey")).startswith("YOUR_")))
-    print("[Startup] Firebase Web appId configured:", bool(FIREBASE_WEB_CONFIG.get("appId") and not str(FIREBASE_WEB_CONFIG.get("appId")).startswith("YOUR_")))
 
-    threading.Thread(target=telegram_updater, daemon=True).start()
-    threading.Thread(target=audio_updater, daemon=True).start()
+    print(
+        "[Startup] CA Blockbuster server starting..."
+    )
 
-    app.run(host="0.0.0.0", port=8000)
+    print(
+        "[Startup] Firebase project:",
+        FIREBASE_WEB_CONFIG.get(
+            "projectId"
+        )
+    )
+
+    print(
+        "[Startup] Firebase authDomain:",
+        FIREBASE_WEB_CONFIG.get(
+            "authDomain"
+        )
+    )
+
+    print(
+        "[Startup] Firebase API key configured:",
+        bool(
+            FIREBASE_WEB_CONFIG.get(
+                "apiKey"
+            )
+        )
+    )
+
+    print(
+        "[Startup] Firebase appId configured:",
+        bool(
+            FIREBASE_WEB_CONFIG.get(
+                "appId"
+            )
+        )
+    )
+
+
+    threading.Thread(
+        target=telegram_updater,
+        daemon=True
+    ).start()
+
+
+    threading.Thread(
+        target=audio_updater,
+        daemon=True
+    ).start()
+
+
+    app.run(
+        host="0.0.0.0",
+        port=8000
+    )
