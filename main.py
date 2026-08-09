@@ -6,16 +6,19 @@ import requests
 import re
 import shutil
 from datetime import datetime
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, session
 from bs4 import BeautifulSoup
 import xml.etree.ElementTree as ET
 import json
 from gtts import gTTS
 
 import firebase_admin
-from firebase_admin import credentials, firestore
+from firebase_admin import credentials, firestore, auth
 
 app = Flask(__name__)
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", "change-this-secret-key")
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
 # ============================================================
 # FIRESTORE
@@ -59,6 +62,49 @@ TELEGRAM_CHANNELS = {
 os.makedirs(AUDIO_FOLDER, exist_ok=True)
 os.makedirs(XML_FOLDER, exist_ok=True)
 os.makedirs(ARCHIVE_FOLDER, exist_ok=True)
+
+# ============================================================
+# QUIZ AUTHENTICATION
+# ============================================================
+
+def firebase_web_api_key():
+    key = os.environ.get("FIREBASE_WEB_API_KEY")
+    if not key:
+        raise RuntimeError("FIREBASE_WEB_API_KEY is not configured")
+    return key
+
+def firebase_auth_request(endpoint, payload):
+    url = f"https://identitytoolkit.googleapis.com/v1/{endpoint}?key={firebase_web_api_key()}"
+    response = requests.post(url, json=payload, timeout=15)
+    try:
+        data = response.json()
+    except Exception:
+        data = {}
+    if not response.ok:
+        message = data.get("error", {}).get("message", "Authentication failed")
+        messages = {
+            "INVALID_LOGIN_CREDENTIALS": "Invalid email or password.",
+            "EMAIL_EXISTS": "An account with this email already exists.",
+            "INVALID_EMAIL": "Please enter a valid email address.",
+            "WEAK_PASSWORD : Password should be at least 6 characters": "Password must be at least 6 characters.",
+            "WEAK_PASSWORD": "Password must be at least 6 characters.",
+            "EMAIL_NOT_FOUND": "No account was found with this email.",
+            "USER_DISABLED": "This account has been disabled.",
+        }
+        raise RuntimeError(messages.get(message, message.replace("_", " ").title()))
+    return data
+
+def current_user():
+    uid = session.get("uid")
+    if not uid:
+        return None
+    return {"uid": uid, "email": session.get("email", ""), "name": session.get("name", "")}
+
+def require_quiz_login():
+    user = current_user()
+    if not user:
+        return None, (jsonify({"error": "Authentication required"}), 401)
+    return user, None
 
 # ============================================================
 # TELEGRAM FEED
@@ -266,6 +312,138 @@ h1{color:white;font-size:28px;margin-bottom:20px}
 """
 
 # ============================================================
+# QUIZ AUTH API
+# ============================================================
+
+@app.route("/quiz/api/auth/me")
+def quiz_auth_me():
+    user = current_user()
+    if not user:
+        return jsonify({"authenticated": False}), 401
+    return jsonify({"authenticated": True, **user})
+
+@app.route("/quiz/api/auth/login", methods=["POST"])
+def quiz_auth_login():
+    try:
+        data = request.get_json(silent=True) or {}
+        email = str(data.get("email", "")).strip().lower()
+        password = str(data.get("password", ""))
+        if not email or not password:
+            return jsonify({"error": "Email and password are required."}), 400
+        result = firebase_auth_request("accounts:signInWithPassword", {
+            "email": email, "password": password, "returnSecureToken": True
+        })
+        decoded = auth.verify_id_token(result["idToken"])
+        session.clear()
+        session.permanent = True
+        session["uid"] = decoded["uid"]
+        session["email"] = decoded.get("email", email)
+        session["name"] = decoded.get("name", "")
+        return jsonify({"authenticated": True, "uid": session["uid"], "email": session["email"]})
+    except Exception as e:
+        print("[Quiz Login Error]", e)
+        return jsonify({"error": str(e)}), 401
+
+@app.route("/quiz/api/auth/signup", methods=["POST"])
+def quiz_auth_signup():
+    try:
+        data = request.get_json(silent=True) or {}
+        name = str(data.get("name", "")).strip()
+        email = str(data.get("email", "")).strip().lower()
+        password = str(data.get("password", ""))
+        if not name or not email or not password:
+            return jsonify({"error": "Name, email and password are required."}), 400
+        if len(password) < 6:
+            return jsonify({"error": "Password must be at least 6 characters."}), 400
+        result = firebase_auth_request("accounts:signUp", {
+            "email": email, "password": password, "returnSecureToken": True
+        })
+        uid = result["localId"]
+        try:
+            auth.update_user(uid, display_name=name)
+        except Exception as e:
+            print("[Quiz Auth profile update warning]", e)
+        db = get_firestore()
+        db.collection("leaderboard").document(uid).set({
+            "uid": uid, "email": email, "name": name, "points": 0,
+            "accuracy": 0, "stars": 0, "badgeTitle": "New Aspirant",
+            "avatarEmoji": "👤", "profilePhotoUri": "", "testsCompleted": 0,
+            "totalQuestions": 0, "totalCorrect": 0, "bestStreak": 0,
+            "createdAt": firestore.SERVER_TIMESTAMP,
+        }, merge=True)
+        decoded = auth.verify_id_token(result["idToken"])
+        session.clear(); session.permanent = True
+        session["uid"] = uid; session["email"] = decoded.get("email", email); session["name"] = name
+        return jsonify({"authenticated": True, "uid": uid, "email": email, "name": name})
+    except Exception as e:
+        print("[Quiz Signup Error]", e)
+        return jsonify({"error": str(e)}), 400
+
+@app.route("/quiz/api/auth/forgot", methods=["POST"])
+def quiz_auth_forgot():
+    try:
+        data = request.get_json(silent=True) or {}
+        email = str(data.get("email", "")).strip().lower()
+        if not email:
+            return jsonify({"error": "Email is required."}), 400
+        firebase_auth_request("accounts:sendOobCode", {"requestType": "PASSWORD_RESET", "email": email})
+        return jsonify({"success": True, "message": "Password reset link sent. Check your email."})
+    except Exception as e:
+        print("[Quiz Forgot Password Error]", e)
+        return jsonify({"error": str(e)}), 400
+
+@app.route("/quiz/api/auth/logout", methods=["POST"])
+def quiz_auth_logout():
+    session.clear()
+    return jsonify({"success": True})
+
+@app.route("/quiz/api/result", methods=["POST"])
+def quiz_save_result():
+    user, error = require_quiz_login()
+    if error:
+        return error
+    try:
+        data = request.get_json(silent=True) or {}
+        test_id = str(data.get("testId", ""))
+        correct = max(0, int(data.get("correct", 0) or 0))
+        wrong = max(0, int(data.get("wrong", 0) or 0))
+        unanswered = max(0, int(data.get("unanswered", 0) or 0))
+        gained_points = max(0, int(data.get("points", 0) or 0))
+        accuracy = float(data.get("accuracy", 0) or 0)
+        best_streak = max(0, int(data.get("bestStreak", 0) or 0))
+        total = correct + wrong + unanswered
+        db = get_firestore()
+        ref = db.collection("leaderboard").document(user["uid"])
+        snap = ref.get()
+        old = snap.to_dict() if snap.exists else {}
+        old_total_q = int(old.get("totalQuestions", 0) or 0)
+        old_correct = int(old.get("totalCorrect", 0) or 0)
+        total_q = old_total_q + total
+        total_correct = old_correct + correct
+        cumulative_accuracy = (total_correct / total_q * 100) if total_q else 0
+        old_stars = int(old.get("stars", 0) or 0)
+        stars_earned = 3 if accuracy >= 90 else 2 if accuracy >= 75 else 1 if accuracy >= 50 else 0
+        new_stars = old_stars + stars_earned
+        old_points = int(old.get("points", 0) or 0)
+        new_points = old_points + gained_points
+        old_tests = int(old.get("testsCompleted", 0) or 0)
+        old_best = int(old.get("bestStreak", 0) or 0)
+        badge = "Rising Scholar 🎯" if new_points >= 250 else "Active Aspirant" if old_tests >= 5 else "New Aspirant"
+        ref.set({
+            "uid": user["uid"], "email": user["email"], "name": user.get("name") or old.get("name") or "Aspirant",
+            "points": new_points, "accuracy": round(cumulative_accuracy, 2), "stars": new_stars,
+            "badgeTitle": badge, "testsCompleted": old_tests + 1, "totalQuestions": total_q,
+            "totalCorrect": total_correct, "bestStreak": max(old_best, best_streak),
+            "lastTestId": test_id, "lastScore": correct, "lastWrong": wrong,
+            "lastUnanswered": unanswered, "lastAccuracy": round(accuracy, 2),
+            "updatedAt": firestore.SERVER_TIMESTAMP,
+        }, merge=True)
+        return jsonify({"success": True, "points": new_points, "stars": new_stars, "accuracy": round(cumulative_accuracy, 2), "rank": None})
+    except Exception as e:
+        print("[Quiz Result Save Error]", e)
+        return jsonify({"error": str(e)}), 400
+
+# ============================================================
 # QUIZ PAGE - ATTRACTIVE UI
 # ============================================================
 @app.route("/quiz")
@@ -307,6 +485,8 @@ button{border:0;border-radius:13px;padding:12px 18px;background:linear-gradient(
 .rankSectionTitle{font-size:18px;font-weight:800;margin:18px 0 12px}.topThree{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;align-items:end}.podium{background:#4b4754;border-radius:16px 16px 12px 12px;padding:10px 6px 9px;text-align:center;min-width:0}.podium.first{padding-top:14px;background:#4e4a58}.podium .medal{font-size:22px}.podium .podiumAvatar{margin:4px auto 6px}.podiumName{font-size:12px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.podiumRole{font-size:9px;color:#bcb9c6;margin-top:5px}.podiumPoints{display:inline-block;margin-top:8px;padding:6px 9px;background:#d8d6d9;color:#222;border-radius:12px;font-size:11px;font-weight:800}.podium.first .podiumPoints{background:#ffe329}
 .stateHeader{display:flex;align-items:center;justify-content:space-between;margin:30px 0 10px}.stateHeader h2{margin:0;font-size:18px}.aspirantCount{background:#9a4d16;padding:7px 11px;border-radius:13px;font-size:11px;font-weight:800}
 .rankRows{display:flex;flex-direction:column;gap:8px}.rankRow{display:flex;align-items:center;gap:10px;background:#18243b;padding:11px;border-radius:14px}.rankPos{width:28px;text-align:center;font-weight:800;color:#9fa8bd}.rankRow .avatar{width:38px;height:38px;font-size:16px}.rankRowMain{min-width:0}.rankRowName{font-size:13px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.rankRowSub{font-size:10px;color:#9fa8bd;margin-top:3px}.rankRowPoints{margin-left:auto;font-size:12px;font-weight:800;color:#9298ff;white-space:nowrap}
+/* Login */
+.loginScreen{min-height:calc(100vh - 24px);display:flex;align-items:flex-start;justify-content:center;padding:24px 12px 40px;background:#fff;color:#18304d;margin:0 -12px}.loginBox{width:100%;max-width:330px;margin-top:0}.loginBox h1,.loginBox .loginSubtitle{display:none}.formGroup{margin-bottom:22px}.formGroup label{display:block;color:#1d3654;font-weight:700;font-size:14px;margin-bottom:10px}.formGroup label .required{color:#e53935}.inputWrap{position:relative}.formInput{width:100%;height:41px;border:1px solid #c9d0d9;border-radius:0;padding:0 12px;font-size:14px;color:#18304d;outline:none;background:#fff}.formInput:focus{border-color:#278bd1;box-shadow:0 0 0 2px rgba(39,139,209,.08)}.passwordInput{padding-right:42px}.togglePassword{position:absolute;right:7px;top:50%;transform:translateY(-50%);border:0;background:transparent;box-shadow:none;color:#7d8792;padding:4px;font-size:15px;cursor:pointer}.loginButton{width:100%;height:48px;border-radius:0;background:linear-gradient(100deg,#0e86bd,#4a92df);font-size:16px;box-shadow:0 8px 16px rgba(28,130,194,.2);margin-top:1px}.loginLinks{margin-top:24px;padding-top:22px;border-top:1px solid #eee;text-align:center}.loginLinks p{margin:0 0 12px;color:#68788b;font-size:14px}.loginLinks a{color:#0072b8;text-decoration:none;font-weight:700;cursor:pointer}.loginError{display:none;background:#fff0f0;color:#c62828;border:1px solid #ffcdd2;padding:10px 12px;margin:0 0 15px;font-size:13px;border-radius:3px}.loginSuccess{display:none;background:#eef8f1;color:#267342;border:1px solid #c9e8d2;padding:10px 12px;margin:0 0 15px;font-size:13px;border-radius:3px}.loginLoading{opacity:.65;pointer-events:none}.logoutButton{background:#303449;box-shadow:none;padding:8px 12px;font-size:12px}
 @media(max-width:500px){#categories,#testList{grid-template-columns:repeat(2,1fr)}.question{font-size:18px}.container{padding:10px 12px}}
 @media(max-width:360px){#categories,#testList{grid-template-columns:1fr}.rankStat .rsLabel{font-size:8px}.rankStat .rsValue{font-size:15px}}
 </style>
@@ -314,10 +494,58 @@ button{border:0;border-radius:13px;padding:12px 18px;background:linear-gradient(
 <body>
 <div class="container">
 
-<section id="home">
+<section id="login" class="loginScreen">
+  <div class="loginBox">
+
+    <div id="loginError" class="loginError"></div>
+    <div id="loginSuccess" class="loginSuccess"></div>
+    <form id="loginForm" autocomplete="on">
+      <div class="formGroup">
+        <label for="loginEmail"><span class="required">*</span> Email</label>
+        <div class="inputWrap"><input id="loginEmail" class="formInput" type="email" autocomplete="email" placeholder="Enter your email" required></div>
+      </div>
+      <div class="formGroup">
+        <label for="loginPassword"><span class="required">*</span> Password</label>
+        <div class="inputWrap"><input id="loginPassword" class="formInput passwordInput" type="password" autocomplete="current-password" placeholder="Enter your password" required><button type="button" id="togglePassword" class="togglePassword" aria-label="Show password">◉</button></div>
+      </div>
+      <button id="loginButton" class="loginButton" type="submit">Sign In</button>
+    </form>
+    <div class="loginLinks">
+      <p>Don't have an account? <a id="signupLink">Sign Up</a></p>
+      <p><a id="forgotLink">Forgot your password?</a></p>
+    </div>
+  </div>
+</section>
+
+<section id="signup" class="loginScreen hidden">
+  <div class="loginBox">
+    <h1>Create Account</h1>
+    <p class="loginSubtitle">Create your CA Blockbuster aspirant account</p>
+    <div id="signupError" class="loginError"></div>
+    <form id="signupForm" autocomplete="on">
+      <div class="formGroup"><label for="signupName"><span class="required">*</span> Name</label><div class="inputWrap"><input id="signupName" class="formInput" type="text" autocomplete="name" placeholder="Enter your name" required></div></div>
+      <div class="formGroup"><label for="signupEmail"><span class="required">*</span> Email</label><div class="inputWrap"><input id="signupEmail" class="formInput" type="email" autocomplete="email" placeholder="Enter your email" required></div></div>
+      <div class="formGroup"><label for="signupPassword"><span class="required">*</span> Password</label><div class="inputWrap"><input id="signupPassword" class="formInput passwordInput" type="password" autocomplete="new-password" placeholder="Minimum 6 characters" minlength="6" required></div></div>
+      <button class="loginButton" type="submit">Sign Up</button>
+    </form>
+    <div class="loginLinks"><p>Already have an account? <a id="backToLoginLink">Sign In</a></p></div>
+  </div>
+</section>
+
+<section id="forgot" class="loginScreen hidden">
+  <div class="loginBox">
+    <h1>Reset Password</h1>
+    <p class="loginSubtitle">We'll send a password reset link to your email</p>
+    <div id="forgotError" class="loginError"></div><div id="forgotSuccess" class="loginSuccess"></div>
+    <form id="forgotForm"><div class="formGroup"><label for="forgotEmail"><span class="required">*</span> Email</label><div class="inputWrap"><input id="forgotEmail" class="formInput" type="email" placeholder="Enter your email" required></div></div><button class="loginButton" type="submit">Send Reset Link</button></form>
+    <div class="loginLinks"><p><a id="forgotBackLink">← Back to Sign In</a></p></div>
+  </div>
+</section>
+
+<section id="home" class="hidden">
 <div class="header">
   <div class="headerBrand"><div class="brandIcon">✦</div><div><h1>CA Blockbuster</h1><p>CA Revision</p></div></div>
-  <button class="leaderboard-icon-btn" id="leaderboardButton" aria-label="Global Rank List">⇥</button>
+  <div style="display:flex;align-items:center;gap:5px"><button class="leaderboard-icon-btn" id="leaderboardButton" aria-label="Global Rank List">⇥</button><button class="logoutButton" id="logoutButton">Logout</button></div>
 </div>
 <div class="globalRankCard" id="globalRankCard">
   <div class="rankTrophy">🏆</div><div><h2>Global Rank List</h2><p>See your standing in the community</p></div><div class="rankArrow">›</div>
@@ -613,7 +841,85 @@ document.getElementById("leaderboardBackButton").addEventListener("click",showHo
 document.getElementById("leaderboardButton").addEventListener("click",showLeaderboard);
 document.getElementById("globalRankCard").addEventListener("click",showLeaderboard);
 document.getElementById("nextButton").addEventListener("click",nextQuestion);
-loadData();
+
+async function authPost(url,payload){
+  const response=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json",Accept:"application/json"},body:JSON.stringify(payload)});
+  let data={};
+  try{data=await response.json();}catch(e){throw new Error("Server returned invalid JSON ("+response.status+")");}
+  if(!response.ok)throw new Error(data.error||"Authentication failed");
+  return data;
+}
+function showOnlyAuth(id){
+  ["login","signup","forgot","home","tests","quiz","result","leaderboard"].forEach(x=>document.getElementById(x).classList.add("hidden"));
+  document.getElementById(id).classList.remove("hidden");
+}
+function setLoginMessage(id,message,type){
+  const el=document.getElementById(id); if(!el)return;
+  el.textContent=message||""; el.style.display=message?"block":"none";
+  el.classList.toggle("error",type==="error");
+}
+function setLoginBusy(form,busy){form.classList.toggle("loginLoading",busy);form.querySelectorAll("button,input").forEach(x=>x.disabled=busy);}
+async function checkQuizAuth(){
+  try{
+    const response=await fetch("/quiz/api/auth/me",{headers:{Accept:"application/json"}});
+    if(response.ok){showOnlyAuth("home");loadData();return true;}
+  }catch(e){console.error("[Auth]",e);}
+  showOnlyAuth("login");
+  return false;
+}
+
+document.getElementById("loginForm").addEventListener("submit",async function(e){
+  e.preventDefault();
+  setLoginMessage("loginError","");setLoginMessage("loginSuccess","");
+  const form=e.currentTarget;const button=document.getElementById("loginButton");
+  setLoginBusy(form,true);button.textContent="Signing In...";
+  try{
+    await authPost("/quiz/api/auth/login",{email:document.getElementById("loginEmail").value.trim(),password:document.getElementById("loginPassword").value});
+    showOnlyAuth("home");
+    loadData();
+  }catch(err){setLoginMessage("loginError",err.message,"error");}
+  finally{setLoginBusy(form,false);button.textContent="Sign In";}
+});
+
+document.getElementById("togglePassword").addEventListener("click",function(){
+  const input=document.getElementById("loginPassword");
+  input.type=input.type==="password"?"text":"password";
+  this.textContent=input.type==="password"?"◉":"◉";
+});
+
+document.getElementById("signupLink").addEventListener("click",()=>{setLoginMessage("loginError","");showOnlyAuth("signup");});
+document.getElementById("backToLoginLink").addEventListener("click",()=>showOnlyAuth("login"));
+document.getElementById("forgotLink").addEventListener("click",()=>{setLoginMessage("forgotError","");setLoginMessage("forgotSuccess","");showOnlyAuth("forgot");});
+document.getElementById("forgotBackLink").addEventListener("click",()=>showOnlyAuth("login"));
+
+document.getElementById("signupForm").addEventListener("submit",async function(e){
+  e.preventDefault();
+  setLoginMessage("signupError","");const form=e.currentTarget;setLoginBusy(form,true);
+  try{
+    await authPost("/quiz/api/auth/signup",{name:document.getElementById("signupName").value.trim(),email:document.getElementById("signupEmail").value.trim(),password:document.getElementById("signupPassword").value});
+    showOnlyAuth("home");loadData();
+  }catch(err){setLoginMessage("signupError",err.message,"error");}
+  finally{setLoginBusy(form,false);}
+});
+
+document.getElementById("forgotForm").addEventListener("submit",async function(e){
+  e.preventDefault();setLoginMessage("forgotError","");setLoginMessage("forgotSuccess","");
+  const form=e.currentTarget;setLoginBusy(form,true);
+  try{
+    await authPost("/quiz/api/auth/forgot",{email:document.getElementById("forgotEmail").value.trim()});
+    setLoginMessage("forgotSuccess","Password reset email sent. Check your inbox.");
+  }catch(err){setLoginMessage("forgotError",err.message,"error");}
+  finally{setLoginBusy(form,false);}
+});
+
+document.getElementById("logoutButton").addEventListener("click",async function(){
+  try{await fetch("/quiz/api/auth/logout",{method:"POST"});}catch(e){console.error(e);}
+  clearInterval(timerInterval);showOnlyAuth("login");
+  document.getElementById("loginPassword").value="";
+  setLoginMessage("loginError","");
+});
+
+checkQuizAuth();
 </script>
 </body>
 </html>
@@ -625,6 +931,10 @@ loadData();
 
 @app.route("/quiz/api/tests")
 def quiz_tests():
+    user, error = require_quiz_login()
+    if error:
+        return error
+
     try:
         db = get_firestore()
         tests = []
@@ -655,6 +965,10 @@ def quiz_tests():
 
 @app.route("/quiz/api/questions/<path:test_id>")
 def quiz_questions(test_id):
+    user, error = require_quiz_login()
+    if error:
+        return error
+
     try:
         db = get_firestore()
         questions = []
@@ -681,6 +995,10 @@ def quiz_questions(test_id):
 
 @app.route("/quiz/api/leaderboard")
 def quiz_leaderboard():
+    user, error = require_quiz_login()
+    if error:
+        return error
+
     try:
         db = get_firestore()
         entries = []
