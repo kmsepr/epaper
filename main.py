@@ -393,6 +393,75 @@ button{cursor:pointer}
 .userAvatar img{width:100%;height:100%;object-fit:cover}
 .userName{font-size:12px;font-weight:700;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
+/* Leaderboard Banner Styles */
+.leaderboardBanner{
+  background:linear-gradient(135deg, #6756e8, #7a49ad);
+  color:white;
+  border-radius:20px;
+  padding:16px 20px;
+  margin-top:20px;
+  margin-bottom:20px;
+  box-shadow:var(--shadow);
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+}
+.bannerHeader{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+}
+.bannerTitle{
+  font-size:16px;
+  font-weight:800;
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+.bannerViewAll{
+  background:rgba(255,255,255,0.2);
+  border:0;
+  color:white;
+  padding:6px 12px;
+  border-radius:10px;
+  font-size:12px;
+  font-weight:700;
+  transition:.15s;
+}
+.bannerViewAll:hover{
+  background:rgba(255,255,255,0.3);
+}
+.bannerRows{
+  display:grid;
+  grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));
+  gap:10px;
+}
+.bannerItem{
+  background:rgba(255,255,255,0.12);
+  border-radius:14px;
+  padding:10px 14px;
+  display:flex;
+  align-items:center;
+  gap:10px;
+}
+.bannerRank{
+  font-size:16px;
+  font-weight:900;
+  width:24px;
+  text-align:center;
+}
+.bannerAvatar{
+  width:32px;height:32px;border-radius:50%;
+  background:rgba(255,255,255,0.2);
+  display:flex;align-items:center;justify-content:center;
+  font-weight:800;font-size:12px;overflow:hidden;
+  flex:0 0 auto;
+}
+.bannerAvatar img{width:100%;height:100%;object-fit:cover}
+.bannerInfo{min-width:0;flex:1}
+.bannerName{font-size:13px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bannerPoints{font-size:11px;opacity:0.9;margin-top:1px}
+
 .page{padding:28px 6px}
 .topLine{display:flex;align-items:center;justify-content:space-between;gap:15px;margin-bottom:20px}
 .search{
@@ -648,6 +717,17 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
         </div>
       </div>
     </header>
+
+    <!-- Top Leaderboard Preview Banner -->
+    <div class="leaderboardBanner">
+      <div class="bannerHeader">
+        <div class="bannerTitle">🏆 Top Global Leaders</div>
+        <button class="bannerViewAll" id="bannerViewAllBtn" type="button">View All →</button>
+      </div>
+      <div class="bannerRows" id="bannerRows">
+        <div style="font-size:12px;opacity:0.8;padding:4px">Loading top leaders...</div>
+      </div>
+    </div>
 
     <main id="homePage" class="page">
       <div class="topLine">
@@ -994,6 +1074,7 @@ function showApp(){
   showHome();
   loadData();
   loadVisitorCount();
+  loadBannerLeaderboard();
   syncFirestoreLeaderboard();
 }
 
@@ -1024,6 +1105,39 @@ async function loadData(){
     renderTests(allTests);
   }catch(error){
     $("quizList").innerHTML='<div class="empty">'+esc(error.message)+'</div>';
+  }
+}
+
+async function loadBannerLeaderboard(){
+  const bannerRows = $("bannerRows");
+  try{
+    const users = await apiGet("/quiz/api/leaderboard");
+    const top = Array.isArray(users) ? users.slice(0, 3) : [];
+    if(!top.length){
+      bannerRows.innerHTML = '<div style="font-size:12px;opacity:0.8;padding:4px">No rankings yet. Be the first!</div>';
+      return;
+    }
+    bannerRows.innerHTML = "";
+    top.forEach((u, i)=>{
+      const rank = i + 1;
+      const medal = rank === 1 ? "🥇" : rank === 2 ? "🥈" : "🥉";
+      const avatar = u.profilePhotoUri
+        ? '<div class="bannerAvatar"><img src="'+esc(u.profilePhotoUri)+'" alt=""></div>'
+        : '<div class="bannerAvatar">'+esc(u.avatarEmoji||"👤")+'</div>';
+
+      const item = document.createElement("div");
+      item.className = "bannerItem";
+      item.innerHTML = 
+        '<div class="bannerRank">'+medal+'</div>'+
+        avatar+
+        '<div class="bannerInfo">'+
+          '<div class="bannerName">'+esc(u.name||"Aspirant")+'</div>'+
+          '<div class="bannerPoints">'+Number(u.points||0)+' pts</div>'+
+        '</div>';
+      bannerRows.appendChild(item);
+    });
+  }catch(e){
+    bannerRows.innerHTML = '<div style="font-size:12px;opacity:0.8;padding:4px">Unable to load top leaders.</div>';
   }
 }
 
@@ -1336,6 +1450,7 @@ function finishQuiz(timeExpired=false){
 
   saveUserStats(userStats);
   syncFirestoreLeaderboard();
+  loadBannerLeaderboard();
 
   const totals = computeUserTotals();
   const starIcons = starsEarned === 3 ? "⭐⭐⭐" : starsEarned === 2 ? "⭐⭐" : starsEarned === 1 ? "⭐" : "❌";
@@ -1402,6 +1517,7 @@ $("topicsNav").addEventListener("click",showTopics);
 $("topicsBack").addEventListener("click",showHome);
 $("leaderboardNav").addEventListener("click",showLeaderboard);
 $("leaderboardBack").addEventListener("click",showHome);
+$("bannerViewAllBtn").addEventListener("click",showLeaderboard);
 $("quizBack").addEventListener("click",()=>{
   if(confirm("Exit this quiz?")){
     showHome();
@@ -1576,7 +1692,7 @@ def quiz_questions(test_id):
                 "topicId": data.get("topicId") or "",
                 "questionText": data.get("questionText") or "",
                 "option0": data.get("option0") or "",
-                "option1": data.get("option1|", ""),
+                "option1": data.get("option1") or "",
                 "option2": data.get("option2") or "",
                 "option3": data.get("option3") or "",
                 "correctOptionIndex": data.get("correctOptionIndex", 0),
