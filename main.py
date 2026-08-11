@@ -580,8 +580,8 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
   <div class="loginBox">
     <div class="loginHead">
       <div class="loginLogo">🎓</div>
-      <h1>Welcome</h1>
-      <p>Sign in to continue</p>
+      <h1>CA Blockbuster</h1>
+      <p>Welcome back</p>
     </div>
     <div class="loginBody">
       <div id="loginError" class="loginError hidden"></div>
