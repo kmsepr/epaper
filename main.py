@@ -660,7 +660,7 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
 
       <div class="headerRight">
         <div class="profileWrap">
-          <button class="userChip" id="profileButton" type="button" aria-expanded="false">
+          <button class="userChip" id="profileButton" type="button" aria-expanded="false" onclick="toggleProfileMenu(event)">
             <div class="userAvatar" id="userAvatar">S</div>
             <div class="userName" id="userName">Aspirant</div>
             <span style="font-size:11px">⌄</span>
@@ -1275,44 +1275,65 @@ $("nextButton").addEventListener("click",nextQuestion);
 
 function updateThemeMenu(){
   const dark=document.body.classList.contains("dark");
-  $("themeMenuButton").textContent=dark?"☀  Light mode":"☾  Dark mode";
+  const btn=document.getElementById("themeMenuButton");
+  if(btn) btn.textContent=dark?"☀  Light mode":"☾  Dark mode";
 }
 
-$("profileButton").addEventListener("click",(event)=>{
-  event.stopPropagation();
-  const menu=$("profileMenu");
-  const open=menu.classList.contains("hidden");
+function toggleProfileMenu(event){
+  if(event) event.stopPropagation();
+
+  const menu=document.getElementById("profileMenu");
+  const button=document.getElementById("profileButton");
+  if(!menu || !button) return;
+
+  const isHidden=menu.classList.contains("hidden");
   menu.classList.toggle("hidden");
-  $("profileButton").setAttribute("aria-expanded",open?"true":"false");
-});
+  button.setAttribute("aria-expanded",isHidden?"true":"false");
+}
+
+function closeProfileMenu(){
+  const menu=document.getElementById("profileMenu");
+  const button=document.getElementById("profileButton");
+  if(menu) menu.classList.add("hidden");
+  if(button) button.setAttribute("aria-expanded","false");
+}
 
 document.addEventListener("click",(event)=>{
   const wrap=document.querySelector(".profileWrap");
   if(wrap && !wrap.contains(event.target)){
-    $("profileMenu").classList.add("hidden");
-    $("profileButton").setAttribute("aria-expanded","false");
+    closeProfileMenu();
   }
 });
 
-$("leaderboardMenuButton").addEventListener("click",()=>{
-  $("profileMenu").classList.add("hidden");
-  $("profileButton").setAttribute("aria-expanded","false");
-  showLeaderboard();
-});
+const leaderboardMenuButton=document.getElementById("leaderboardMenuButton");
+if(leaderboardMenuButton){
+  leaderboardMenuButton.addEventListener("click",(event)=>{
+    event.stopPropagation();
+    closeProfileMenu();
+    showLeaderboard();
+  });
+}
 
-$("themeMenuButton").addEventListener("click",()=>{
-  document.body.classList.toggle("dark");
-  const dark=document.body.classList.contains("dark");
-  localStorage.setItem("ca_theme",dark?"dark":"light");
-  updateThemeMenu();
-  $("profileMenu").classList.add("hidden");
-  $("profileButton").setAttribute("aria-expanded","false");
-});
+const themeMenuButton=document.getElementById("themeMenuButton");
+if(themeMenuButton){
+  themeMenuButton.addEventListener("click",(event)=>{
+    event.stopPropagation();
+    document.body.classList.toggle("dark");
+    const dark=document.body.classList.contains("dark");
+    localStorage.setItem("ca_theme",dark?"dark":"light");
+    updateThemeMenu();
+    closeProfileMenu();
+  });
+}
 
-$("logoutMenuButton").addEventListener("click",async()=>{
-  $("profileMenu").classList.add("hidden");
-  if(firebaseReady)await firebase.auth().signOut();
-});
+const logoutMenuButton=document.getElementById("logoutMenuButton");
+if(logoutMenuButton){
+  logoutMenuButton.addEventListener("click",async(event)=>{
+    event.stopPropagation();
+    closeProfileMenu();
+    if(firebaseReady) await firebase.auth().signOut();
+  });
+}
 
 if(localStorage.getItem("ca_theme")==="dark"){
   document.body.classList.add("dark");
