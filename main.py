@@ -382,6 +382,38 @@ button{cursor:pointer}
   border:0;background:#f1eaff;color:#5b39b8;
   padding:9px 12px;border-radius:12px;font-weight:700;font-size:12px;
 }
+.profileWrap{position:relative}
+.profileButton{}
+.profileWrap .userChip{
+  border:1px solid #ded3ff;
+  cursor:pointer;
+}
+.profileArrow{font-size:16px;color:var(--muted);margin-left:2px}
+.profileMenu{
+  position:absolute;
+  right:0;
+  top:calc(100% + 8px);
+  width:175px;
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:15px;
+  padding:7px;
+  box-shadow:0 14px 35px rgba(0,0,0,.16);
+  z-index:50;
+}
+.profileMenu button{
+  width:100%;
+  border:0;
+  background:transparent;
+  color:var(--text);
+  text-align:left;
+  padding:11px 10px;
+  border-radius:10px;
+  font-size:13px;
+  font-weight:700;
+}
+.profileMenu button:hover{background:var(--bg2)}
+.profileMenu button:last-child{color:#c04455}
 
 .page{padding:28px 6px}
 .topLine{display:flex;align-items:center;justify-content:space-between;gap:15px;margin-bottom:20px}
@@ -557,6 +589,8 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
   .nav{display:none}
   .brand{min-width:0;flex:1}
   .userName{display:none}
+  .headerRight{flex:0 0 auto}
+  .profileArrow{display:none}
 }
 @media(max-width:650px){
   .container{padding:10px}
@@ -643,12 +677,18 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
       </nav>
 
       <div class="headerRight">
-        <button class="iconBtn" id="themeButton" title="Light/Dark mode">☼</button>
-        <div class="userChip">
-          <div class="userAvatar" id="userAvatar">S</div>
-          <div class="userName" id="userName">Aspirant</div>
+        <button class="iconBtn" id="leaderboardIcon" title="Leaderboard">🏆</button>
+        <div class="profileWrap">
+          <button class="userChip" id="profileButton" type="button">
+            <div class="userAvatar" id="userAvatar">S</div>
+            <div class="userName" id="userName">Aspirant</div>
+            <span class="profileArrow">⌄</span>
+          </button>
+          <div class="profileMenu hidden" id="profileMenu">
+            <button id="themeMenuButton">☾ &nbsp; Dark mode</button>
+            <button id="logoutButton">↪ &nbsp; Sign out</button>
+          </div>
         </div>
-        <button class="logoutBtn" id="logoutButton">Sign out</button>
       </div>
     </header>
 
@@ -1257,17 +1297,58 @@ $("quizBack").addEventListener("click",()=>{
 $("resultHome").addEventListener("click",showHome);
 $("nextButton").addEventListener("click",nextQuestion);
 
-$("themeButton").addEventListener("click",()=>{
+function updateThemeMenu(){
+  const dark=document.body.classList.contains("dark");
+  $("themeMenuButton").innerHTML=dark?"☀ &nbsp; Light mode":"☾ &nbsp; Dark mode";
+}
+
+$("profileButton").addEventListener("click",(e)=>{
+  e.stopPropagation();
+  $("profileMenu").classList.toggle("hidden");
+});
+
+document.addEventListener("click",()=>{
+  $("profileMenu").classList.add("hidden");
+});
+
+$("themeMenuButton").addEventListener("click",(e)=>{
+  e.stopPropagation();
   document.body.classList.toggle("dark");
   const dark=document.body.classList.contains("dark");
   localStorage.setItem("ca_theme",dark?"dark":"light");
-  $("themeButton").textContent=dark?"☾":"☼";
+  updateThemeMenu();
 });
+
+$("leaderboardIcon").addEventListener("click",showLeaderboard);
+
+function updateThemeMenu(){
+  const dark=document.body.classList.contains("dark");
+  $("themeMenuButton").innerHTML=dark?"☀ &nbsp; Light mode":"☾ &nbsp; Dark mode";
+}
+
+$("profileButton").addEventListener("click",(e)=>{
+  e.stopPropagation();
+  $("profileMenu").classList.toggle("hidden");
+});
+
+document.addEventListener("click",()=>{
+  $("profileMenu").classList.add("hidden");
+});
+
+$("themeMenuButton").addEventListener("click",(e)=>{
+  e.stopPropagation();
+  document.body.classList.toggle("dark");
+  const dark=document.body.classList.contains("dark");
+  localStorage.setItem("ca_theme",dark?"dark":"light");
+  updateThemeMenu();
+});
+
+$("leaderboardIcon").addEventListener("click",showLeaderboard);
 
 if(localStorage.getItem("ca_theme")==="dark"){
   document.body.classList.add("dark");
-  $("themeButton").textContent="☾";
 }
+updateThemeMenu();
 
 $("passwordInput").addEventListener("keydown",e=>{
   if(e.key==="Enter")signIn();
