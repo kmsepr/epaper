@@ -354,13 +354,13 @@ button{cursor:pointer}
 }
 .brand h1{margin:0;font-size:16px;line-height:1.1}
 .brand p{margin:3px 0 0;font-size:10px;color:var(--muted);letter-spacing:.5px}
-.nav{display:flex;align-items:center;gap:12px;flex:1}
+.nav{display:flex;align-items:center;gap:10px;flex:1}
 .navBtn{
   border:1px solid var(--line);background:var(--panel);color:var(--text);
   padding:8px 14px;border-radius:14px;font-size:13px;font-weight:700;
   display:flex;align-items:center;gap:6px;transition:.15s;
 }
-.navBtn:hover{background:var(--soft);color:var(--purple);border-color:#ded3ff}
+.navBtn:hover,.navBtn.active{background:var(--soft);color:var(--purple);border-color:#ded3ff}
 .headerRight{display:flex;align-items:center;gap:10px}
 .profileWrap{position:relative;z-index:100}
 .userChip{
@@ -443,12 +443,41 @@ body.dark .quizMeta{color:#c0bdce}
 .startBtn:hover{filter:brightness(.96)}
 .empty{padding:30px;text-align:center;background:var(--panel);border-radius:18px;color:var(--muted)}
 
+/* Topics Grid Layout */
+.topicsGrid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill, minmax(260px, 1fr));
+  gap:16px;
+}
+.topicCard{
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:22px;
+  padding:22px;
+  display:flex;
+  align-items:center;
+  gap:16px;
+  box-shadow:var(--shadow);
+  cursor:pointer;
+  transition:.2s;
+}
+.topicCard:hover{transform:translateY(-3px);border-color:#7b68e9}
+.topicCardIcon{
+  width:54px;height:54px;border-radius:16px;
+  background:var(--soft);color:var(--purple);
+  display:flex;align-items:center;justify-content:center;
+  font-size:26px;flex:0 0 auto;
+}
+.topicCardInfo{min-width:0;flex:1}
+.topicCardTitle{font-size:16px;font-weight:800;color:var(--text)}
+.topicCardSub{font-size:12px;color:var(--muted);margin-top:4px}
+
 .visitor{
   margin-top:18px;text-align:center;color:var(--muted);font-size:13px;
 }
 .visitor b{color:var(--text)}
 
-.quizScreen,.resultScreen,.leaderboardScreen{max-width:900px;margin:auto;padding:24px 0}
+.quizScreen,.resultScreen,.leaderboardScreen,.topicsScreen{max-width:1180px;margin:auto;padding:24px 0}
 .backBtn{
   border:0;background:var(--panel);color:var(--text);
   padding:10px 14px;border-radius:13px;border:1px solid var(--line);
@@ -604,6 +633,8 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
       </div>
 
       <nav class="nav">
+        <button class="navBtn active" id="homeNav" type="button">🏠 Quizzes</button>
+        <button class="navBtn" id="topicsNav" type="button">📂 Topics</button>
         <button class="navBtn" id="leaderboardNav" type="button">🏆 Leaderboard</button>
       </nav>
 
@@ -637,6 +668,109 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
 
       <div class="visitor" id="visitorCount">👥 Today: <b>0</b> visitors</div>
     </main>
+
+    <section id="topicsPage" class="topicsScreen hidden">
+      <div class="rankHeader">
+        <button class="backBtn" id="topicsBack">← Back</button>
+        <div>
+          <h1>Browse by Topics 📂</h1>
+          <div style="font-size:12px;color:var(--muted)">Explore current affairs by specific categories</div>
+        </div>
+      </div>
+      <div class="topicsGrid">
+        <div class="topicCard" onclick="filterByTopic('monthly')">
+          <div class="topicCardIcon">📅</div>
+          <div class="topicCardInfo">
+            <div class="topicCardTitle">Monthly Wise</div>
+            <div class="topicCardSub">Chronological practice</div>
+          </div>
+        </div>
+        <div class="topicCard" onclick="filterByTopic('sports')">
+          <div class="topicCardIcon">🏅</div>
+          <div class="topicCardInfo">
+            <div class="topicCardTitle">Sports</div>
+            <div class="topicCardSub">Tournaments & medals</div>
+          </div>
+        </div>
+        <div class="topicCard" onclick="filterByTopic('polity')">
+          <div class="topicCardIcon">🏛️</div>
+          <div class="topicCardInfo">
+            <div class="topicCardTitle">Polity</div>
+            <div class="topicCardSub">Governance & bills</div>
+          </div>
+        </div>
+        <div class="topicCard" onclick="filterByTopic('arts')">
+          <div class="topicCardIcon">🎨</div>
+          <div class="topicCardInfo">
+            <div class="topicCardTitle">Arts & Culture</div>
+            <div class="topicCardSub">Heritage & festivals</div>
+          </div>
+        </div>
+        <div class="topicCard" onclick="filterByTopic('science')">
+          <div class="topicCardIcon">🔬</div>
+          <div class="topicCardInfo">
+            <div class="topicCardTitle">Science & Technology</div>
+            <div class="topicCardSub">Inventions & space</div>
+          </div>
+        </div>
+        <div class="topicCard" onclick="filterByTopic('economy')">
+          <div class="topicCardIcon">💰</div>
+          <div class="topicCardInfo">
+            <div class="topicCardTitle">Economy</div>
+            <div class="topicCardSub">Banking & budgets</div>
+          </div>
+        </div>
+        <div class="topicCard" onclick="filterByTopic('international')">
+          <div class="topicCardIcon">🌍</div>
+          <div class="topicCardInfo">
+            <div class="topicCardTitle">International</div>
+            <div class="topicCardSub">Global summits & ties</div>
+          </div>
+        </div>
+        <div class="topicCard" onclick="filterByTopic('environment')">
+          <div class="topicCardIcon">🌱</div>
+          <div class="topicCardInfo">
+            <div class="topicCardTitle">Environment</div>
+            <div class="topicCardSub">Ecology & climate</div>
+          </div>
+        </div>
+        <div class="topicCard" onclick="filterByTopic('awards')">
+          <div class="topicCardIcon">🏆</div>
+          <div class="topicCardInfo">
+            <div class="topicCardTitle">Awards & Honours</div>
+            <div class="topicCardSub">Prizes & recognitions</div>
+          </div>
+        </div>
+        <div class="topicCard" onclick="filterByTopic('education')">
+          <div class="topicCardIcon">📚</div>
+          <div class="topicCardInfo">
+            <div class="topicCardTitle">Education</div>
+            <div class="topicCardSub">Policies & institutions</div>
+          </div>
+        </div>
+        <div class="topicCard" onclick="filterByTopic('appointments')">
+          <div class="topicCardIcon">👤</div>
+          <div class="topicCardInfo">
+            <div class="topicCardTitle">Appointments</div>
+            <div class="topicCardSub">New roles & leaders</div>
+          </div>
+        </div>
+        <div class="topicCard" onclick="filterByTopic('schemes')">
+          <div class="topicCardIcon">🏛️</div>
+          <div class="topicCardInfo">
+            <div class="topicCardTitle">Government Schemes</div>
+            <div class="topicCardSub">Welfare & initiatives</div>
+          </div>
+        </div>
+        <div class="topicCard" onclick="filterByTopic('events')">
+          <div class="topicCardIcon">📰</div>
+          <div class="topicCardInfo">
+            <div class="topicCardTitle">Important Events</div>
+            <div class="topicCardSub">Major current updates</div>
+          </div>
+        </div>
+      </div>
+    </section>
 
     <section id="quizPage" class="quizScreen hidden">
       <div class="quizTop">
@@ -952,22 +1086,46 @@ $("searchInput").addEventListener("input",()=>{
 
 function hidePages(){
   $("homePage").classList.add("hidden");
+  $("topicsPage").classList.add("hidden");
   $("quizPage").classList.add("hidden");
   $("resultPage").classList.add("hidden");
   $("leaderboardPage").classList.add("hidden");
+  
+  $("homeNav").classList.remove("active");
+  $("topicsNav").classList.remove("active");
+  $("leaderboardNav").classList.remove("active");
 }
 
 function showHome(){
   clearInterval(timerInterval);
   hidePages();
   $("homePage").classList.remove("hidden");
+  $("homeNav").classList.add("active");
+}
+
+function showTopics(){
+  clearInterval(timerInterval);
+  hidePages();
+  $("topicsPage").classList.remove("hidden");
+  $("topicsNav").classList.add("active");
 }
 
 function showLeaderboard(){
   clearInterval(timerInterval);
   hidePages();
   $("leaderboardPage").classList.remove("hidden");
+  $("leaderboardNav").classList.add("active");
   loadLeaderboard();
+}
+
+function filterByTopic(topicKey){
+  showHome();
+  const filtered = allTests.filter(t => 
+    String(t.topicId || "").toLowerCase().includes(topicKey) ||
+    String(t.title || "").toLowerCase().includes(topicKey) ||
+    String(t.subtitle || "").toLowerCase().includes(topicKey)
+  );
+  renderTests(filtered.length > 0 ? filtered : allTests);
 }
 
 async function loadLeaderboard(){
@@ -1243,6 +1401,9 @@ async function loadVisitorCount(){
 
 $("googleButton").addEventListener("click",googleLogin);
 
+$("homeNav").addEventListener("click",showHome);
+$("topicsNav").addEventListener("click",showTopics);
+$("topicsBack").addEventListener("click",showHome);
 $("leaderboardNav").addEventListener("click",showLeaderboard);
 $("leaderboardBack").addEventListener("click",showHome);
 $("quizBack").addEventListener("click",()=>{
