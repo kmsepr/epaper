@@ -290,7 +290,7 @@ def quiz_app():
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>CA Blockbuster Quiz</title>
+<title>CA Blockbuster</title>
 
 <script src="https://www.gstatic.com/firebasejs/11.10.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/11.10.0/firebase-auth-compat.js"></script>
@@ -428,10 +428,6 @@ button{cursor:pointer}
 .quizMain{min-width:0;flex:1}
 .quizTitleLine{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .quizTitle{font-size:18px;font-weight:800;color:var(--text)}
-.statusPill{
-  padding:6px 10px;border-radius:999px;
-  background:#eee2ff;color:#6234bd;font-size:11px;font-weight:800;
-}
 .quizDesc{color:var(--muted);font-size:14px;margin-top:8px}
 .quizMeta{display:flex;gap:17px;flex-wrap:wrap;margin-top:12px;color:#49445b;font-size:12px;font-weight:700}
 body.dark .quizMeta{color:#c0bdce}
@@ -629,7 +625,7 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
     <header class="header">
       <div class="brand">
         <div class="brandIcon">🎓</div>
-        <div><h1>CA Blockbuster Quiz</h1><p>CA REVISION</p></div>
+        <div><h1>CA Blockbuster</h1><p>CA REVISION</p></div>
       </div>
 
       <nav class="nav">
@@ -920,8 +916,6 @@ async function syncFirestoreLeaderboard(){
   const totals = computeUserTotals();
 
   try{
-    // Using user.uid as the document ID guarantees 1 document per user 
-    // across both app and website logins, preventing random duplicate IDs.
     await firebase.firestore().collection("leaderboard").doc(user.uid).set({
       name: user.displayName || user.email?.split("@")[0] || "Aspirant",
       email: user.email || "",
@@ -1059,7 +1053,6 @@ function renderTests(tests){
       '<div class="quizMain">'+
         '<div class="quizTitleLine">'+
           '<div class="quizTitle">'+esc(title)+'</div>'+
-          '<span class="statusPill">Not started</span>'+
         '</div>'+
         '<div class="quizDesc">'+esc(description)+'</div>'+
         '<div class="quizMeta">'+
@@ -1583,7 +1576,7 @@ def quiz_questions(test_id):
                 "topicId": data.get("topicId") or "",
                 "questionText": data.get("questionText") or "",
                 "option0": data.get("option0") or "",
-                "option1": data.get("option1") or "",
+                "option1": data.get("option1|", ""),
                 "option2": data.get("option2") or "",
                 "option3": data.get("option3") or "",
                 "correctOptionIndex": data.get("correctOptionIndex", 0),
