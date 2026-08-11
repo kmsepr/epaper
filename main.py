@@ -920,8 +920,11 @@ async function syncFirestoreLeaderboard(){
   const totals = computeUserTotals();
 
   try{
+    // Using user.uid as the document ID guarantees 1 document per user 
+    // across both app and website logins, preventing random duplicate IDs.
     await firebase.firestore().collection("leaderboard").doc(user.uid).set({
       name: user.displayName || user.email?.split("@")[0] || "Aspirant",
+      email: user.email || "",
       points: totals.totalPoints,
       stars: totals.totalStars,
       accuracy: totals.overallAccuracy,
