@@ -1378,6 +1378,18 @@ def quiz_tests():
                 question_counts[test_id] = question_counts.get(test_id, 0) + 1
         for test in tests:
             test["questionCount"] = question_counts.get(test["id"], 0)
+
+        # Show the most recently created test first.
+        # dateMillis is used by the existing test records when available.
+        tests.sort(
+            key=lambda t: (
+                int(t.get("dateMillis") or 0)
+                if str(t.get("dateMillis") or "").replace("-", "").isdigit()
+                else 0
+            ),
+            reverse=True
+        )
+
         return jsonify(tests)
     except Exception as e:
         print("[Quiz Firestore tests error]", e)
