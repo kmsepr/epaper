@@ -201,12 +201,10 @@ def archives():
     months = sorted(os.listdir(ARCHIVE_FOLDER), reverse=True) if os.path.exists(ARCHIVE_FOLDER) else []
     html = """<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
     <style>body{font-family:system-ui;padding:16px;background:#f5f7fb}.card{background:white;padding:16px;border-radius:16px;margin-bottom:16px;box-shadow:0 4px 12px rgba(0,0,0,.05)}.file{display:block;padding:10px;margin-top:8px;background:#e3f2fd;border-radius:10px;text-decoration:none;color:#1565c0;font-weight:500}</style></head><body><h2>📦 Feed Archives</h2>"""
-    if not months:
-        html += "<p>No archives found.</p>"
+    if not months: html += "<p>No archives found.</p>"
     for month in months:
         month_path = os.path.join(ARCHIVE_FOLDER, month)
-        if not os.path.isdir(month_path):
-            continue
+        if not os.path.isdir(month_path): continue
         html += f"<div class='card'><h3>{month}</h3>"
         for filename in os.listdir(month_path):
             html += f"<a class='file' href='/archive/{month}/{filename}'>{filename}</a>"
@@ -217,8 +215,7 @@ def archives():
 @app.route("/archive/<month>/<filename>")
 def archive_file(month, filename):
     archive_path = os.path.join(ARCHIVE_FOLDER, month, filename)
-    if not os.path.exists(archive_path):
-        return "Archive not found", 404
+    if not os.path.exists(archive_path): return "Archive not found", 404
     feed = feedparser.parse(archive_path)
     posts = ""
     for entry in list(feed.entries)[::-1][:100]:
@@ -287,6 +284,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-s
 .container{max-width:900px;margin:auto;padding:12px}.hidden{display:none!important}
 .header{display:flex;justify-content:space-between;align-items:center;padding:12px 0 18px;color:white}.header h1{margin:0;font-size:21px;line-height:1.2}.header p{margin:7px 0 0;color:#b9bfd0;font-size:12px}
 .headerBrand{display:flex;align-items:center;gap:10px}.brandIcon{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#4134b9;font-size:20px}
+.leaderboard-icon-btn{background:transparent;border:0;box-shadow:none;padding:7px;cursor:pointer;color:#aeb6cb;font-size:23px}.leaderboard-icon{font-size:22px}
 .globalRankCard{display:flex;align-items:center;gap:15px;background:linear-gradient(105deg,#11213c,#302681);border-radius:28px;padding:18px 20px;margin:4px 0 14px;cursor:pointer;box-shadow:0 12px 30px rgba(0,0,0,.18)}
 .rankTrophy{width:52px;height:52px;border-radius:50%;background:rgba(255,205,45,.17);display:flex;align-items:center;justify-content:center;font-size:28px;flex:0 0 auto}.globalRankCard h2{margin:0;font-size:19px}.globalRankCard p{margin:5px 0 0;color:#aeb6cb;font-size:12px}.rankArrow{margin-left:auto;font-size:28px;color:#9ca6c2}
 .sectionTitle{font-size:18px;margin:20px 0 12px}
@@ -302,11 +300,15 @@ button{border:0;border-radius:13px;padding:12px 18px;background:linear-gradient(
 .review{margin-top:14px}.reviewItem{background:#18243b;color:#fff;padding:12px;border-radius:14px;margin:9px 0;border-left:5px solid #777}.reviewItem.correct{border-left-color:#3bc477}.reviewItem.wrong{border-left-color:#ef6372}.reviewItem.unanswered{border-left-color:#eebc35}.reviewQ{font-weight:700;font-size:14px}.reviewA{font-size:13px;color:#aeb6cb;margin-top:5px}
 .status{padding:14px;background:#2b2b21;color:#e8dfad;border-radius:14px;margin:12px 0;font-size:14px}.error{background:#402329;color:#ffb5bd}
 .rankPage{padding-bottom:30px}.rankHeader{display:flex;align-items:flex-start;gap:12px;padding:5px 0 18px}.rankBack{background:transparent;border:0;box-shadow:none;padding:0;font-size:30px;line-height:1;color:#fff}.rankHeader h1{margin:0;font-size:21px}.rankHeader p{margin:6px 0 0;color:#aeb6cb;font-size:12px}
-.avatar{width:48px;height:48px;border-radius:50%;object-fit:cover;display:flex;align-items:center;justify-content:center;background:#536072;color:#fff;font-size:20px;font-weight:800;flex:0 0 auto;overflow:hidden}.avatar img{width:100%;height:100%;object-fit:cover}
-.badge{font-size:10px;background:rgba(255,255,255,.2);padding:6px 8px;border-radius:8px;white-space:nowrap}
+.myRankCard{background:linear-gradient(135deg,#7075ef,#8a8ef9);border-radius:24px;padding:18px;margin-bottom:18px}.myRankTop{display:flex;align-items:center;gap:11px}.avatar{width:48px;height:48px;border-radius:50%;object-fit:cover;display:flex;align-items:center;justify-content:center;background:#536072;color:#fff;font-size:20px;font-weight:800;flex:0 0 auto;overflow:hidden}.avatar img{width:100%;height:100%;object-fit:cover}
+.myRankName{font-size:17px;font-weight:800;display:flex;align-items:center;gap:7px;min-width:0}.badge{font-size:10px;background:rgba(255,255,255,.2);padding:6px 8px;border-radius:8px;white-space:nowrap}.myRankRole{font-size:12px;color:#e2e3ff;margin-top:4px}
+.rankNumber{margin-left:auto;background:#fff;color:#6b70e9;border-radius:15px;padding:9px 14px;text-align:center;min-width:62px}.rankNumber small{display:block;font-size:9px;font-weight:700;color:#74789a}.rankNumber strong{font-size:22px}
+.rankStats{display:grid;grid-template-columns:repeat(3,1fr);background:rgba(255,255,255,.12);border-radius:14px;margin-top:16px;padding:11px 4px}.rankStat{text-align:center;border-right:1px solid rgba(255,255,255,.18)}.rankStat:last-child{border-right:0}.rankStat .rsLabel{font-size:9px;color:#e0e1ff;font-weight:700;letter-spacing:.4px}.rankStat .rsValue{font-size:17px;font-weight:800;margin-top:7px}
+.rankSectionTitle{font-size:18px;font-weight:800;margin:18px 0 12px}.topThree{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;align-items:end}.podium{background:#4b4754;border-radius:16px 16px 12px 12px;padding:10px 6px 9px;text-align:center;min-width:0}.podium.first{padding-top:14px;background:#4e4a58}.podium .medal{font-size:22px}.podium .podiumAvatar{margin:4px auto 6px}.podiumName{font-size:12px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.podiumRole{font-size:9px;color:#bcb9c6;margin-top:5px}.podiumPoints{display:inline-block;margin-top:8px;padding:6px 9px;background:#d8d6d9;color:#222;border-radius:12px;font-size:11px;font-weight:800}.podium.first .podiumPoints{background:#ffe329}
+.stateHeader{display:flex;align-items:center;justify-content:space-between;margin:30px 0 10px}.stateHeader h2{margin:0;font-size:18px}.aspirantCount{background:#9a4d16;padding:7px 11px;border-radius:13px;font-size:11px;font-weight:800}
 .rankRows{display:flex;flex-direction:column;gap:8px}.rankRow{display:flex;align-items:center;gap:10px;background:#18243b;padding:11px;border-radius:14px}.rankPos{width:28px;text-align:center;font-weight:800;color:#9fa8bd}.rankRow .avatar{width:38px;height:38px;font-size:16px}.rankRowMain{min-width:0}.rankRowName{font-size:13px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.rankRowSub{font-size:10px;color:#9fa8bd;margin-top:3px}.rankRowPoints{margin-left:auto;font-size:12px;font-weight:800;color:#9298ff;white-space:nowrap}
 @media(max-width:500px){#categories,#testList{grid-template-columns:repeat(2,1fr)}.question{font-size:18px}.container{padding:10px 12px}}
-@media(max-width:360px){#categories,#testList{grid-template-columns:1fr}}
+@media(max-width:360px){#categories,#testList{grid-template-columns:1fr}.rankStat .rsLabel{font-size:8px}.rankStat .rsValue{font-size:15px}}
 </style>
 </head>
 <body>
@@ -315,6 +317,7 @@ button{border:0;border-radius:13px;padding:12px 18px;background:linear-gradient(
 <section id="home">
 <div class="header">
   <div class="headerBrand"><div class="brandIcon">✦</div><div><h1>CA Blockbuster</h1><p>CA Revision</p></div></div>
+  <button class="leaderboard-icon-btn" id="leaderboardButton" aria-label="Global Rank List">⇥</button>
 </div>
 <div class="globalRankCard" id="globalRankCard">
   <div class="rankTrophy">🏆</div><div><h2>Global Rank List</h2><p>See your standing in the community</p></div><div class="rankArrow">›</div>
@@ -369,16 +372,12 @@ button{border:0;border-radius:13px;padding:12px 18px;background:linear-gradient(
 
 <section id="leaderboard" class="hidden">
 <div class="rankPage">
-  <div class="rankHeader">
-    <button id="leaderboardBackButton" class="rankBack" aria-label="Back">‹</button>
-    <div>
-      <h1>Top 10 Global Rank List 🏆</h1>
-      <p>Top 10 Aspirant Rankings &amp; Standings</p>
-    </div>
-  </div>
-  <div id="rankRows" class="rankRows">
-    <div class="status">Loading...</div>
-  </div>
+  <div class="rankHeader"><button id="leaderboardBackButton" class="rankBack">‹</button><div><h1>Rank Board 🏆</h1><p>Aspirant Rankings &amp; Standings</p></div></div>
+  <div id="myRankCard"></div>
+  <div class="rankSectionTitle">Top 3 Rankers</div>
+  <div id="topThree" class="topThree"></div>
+  <div class="stateHeader"><h2>Global Rank List</h2><span id="aspirantCount" class="aspirantCount">0 Aspirants</span></div>
+  <div id="rankRows" class="rankRows"></div>
 </div>
 </section>
 </div>
@@ -588,50 +587,30 @@ function hideAll(){["home","tests","quiz","result","leaderboard"].forEach(id => 
 function showHome(){clearInterval(timerInterval);hideAll();document.getElementById("home").classList.remove("hidden");}
 function showTests(){clearInterval(timerInterval);hideAll();document.getElementById("tests").classList.remove("hidden");}
 async function showLeaderboard(){
-hideAll();
-document.getElementById("leaderboard").classList.remove("hidden");
-
-const rows = document.getElementById("rankRows");
-rows.innerHTML = '<div class="status">Loading Top 10...</div>';
-
+hideAll();document.getElementById("leaderboard").classList.remove("hidden");
+const myCard=document.getElementById("myRankCard"),top=document.getElementById("topThree"),rows=document.getElementById("rankRows");
+myCard.innerHTML='<div class="status">Loading rank board...</div>';top.innerHTML='';rows.innerHTML='<div class="status">Loading...</div>';
 try{
-  const users = await apiGet("/quiz/api/leaderboard");
-  if(!Array.isArray(users)) throw new Error("Invalid leaderboard data.");
-
-  users.sort((a,b) => Number(b.points||0) - Number(a.points||0));
-  const topUsers = users.slice(0,10);
-
-  if(!topUsers.length){
-    rows.innerHTML = '<div class="status">No leaderboard data.</div>';
-    return;
-  }
-
-  rows.innerHTML = "";
-  topUsers.forEach((u,i) => {
-    const a = u.profilePhotoUri
-      ? '<div class="avatar"><img src="'+esc(u.profilePhotoUri)+'" alt=""></div>'
-      : '<div class="avatar">'+esc(u.avatarEmoji||"👤")+'</div>';
-
-    rows.innerHTML +=
-      '<div class="rankRow">' +
-        '<div class="rankPos">#'+(i+1)+'</div>' +
-        a +
-        '<div class="rankRowMain">' +
-          '<div class="rankRowName">'+esc(u.name||"Aspirant")+'</div>' +
-          '<div class="rankRowSub">'+esc(u.badgeTitle||"Aspirant")+' • '+Math.round(Number(u.accuracy||0))+'% accuracy</div>' +
-        '</div>' +
-        '<div class="rankRowPoints">'+Number(u.points||0)+' pts</div>' +
-      '</div>';
-  });
-}catch(error){
-  rows.innerHTML = '<div class="status error">'+esc(error.message)+'</div>';
-}
+const users=await apiGet("/quiz/api/leaderboard");
+if(!Array.isArray(users))throw new Error("Invalid leaderboard data.");
+users.sort((a,b)=>Number(b.points||0)-Number(a.points||0));
+document.getElementById("aspirantCount").textContent=users.length+" Aspirants";
+if(!users.length){myCard.innerHTML='<div class="status">No leaderboard data.</div>';rows.innerHTML='';return;}
+const me=users[0];
+const av=me.profilePhotoUri?'<div class="avatar"><img src="'+esc(me.profilePhotoUri)+'" alt=""></div>':'<div class="avatar">'+esc(me.avatarEmoji||"👤")+'</div>';
+myCard.innerHTML='<div class="myRankCard"><div class="myRankTop">'+av+'<div style="min-width:0"><div class="myRankName">'+esc(me.name||"Aspirant")+(me.badgeTitle?'<span class="badge">'+esc(me.badgeTitle)+'</span>':'')+'</div><div class="myRankRole">Aspirant Member</div></div><div class="rankNumber"><small>RANK</small><strong>#1</strong></div></div><div class="rankStats"><div class="rankStat"><div class="rsLabel">TOTAL POINTS</div><div class="rsValue">🏆 '+Number(me.points||0)+'</div></div><div class="rankStat"><div class="rsLabel">STARS EARNED</div><div class="rsValue">⭐ '+Number(me.stars||0)+'</div></div><div class="rankStat"><div class="rsLabel">ACCURACY</div><div class="rsValue">↗ '+Math.round(Number(me.accuracy||0))+'%</div></div></div></div>';
+const medals=["🥇","🥈","🥉"];
+users.slice(0,3).forEach((u,i)=>{const a=u.profilePhotoUri?'<div class="avatar podiumAvatar"><img src="'+esc(u.profilePhotoUri)+'" alt=""></div>':'<div class="avatar podiumAvatar">'+esc(u.avatarEmoji||"👤")+'</div>';top.innerHTML+='<div class="podium '+(i===0?'first':'')+'"><div class="medal">'+medals[i]+'</div>'+a+'<div class="podiumName">'+esc(u.name||"Aspirant")+'</div><div class="podiumRole">Aspirant</div><div class="podiumPoints">'+Number(u.points||0)+' pts</div></div>';});
+rows.innerHTML='';
+users.forEach((u,i)=>{const a=u.profilePhotoUri?'<div class="avatar"><img src="'+esc(u.profilePhotoUri)+'" alt=""></div>':'<div class="avatar">'+esc(u.avatarEmoji||"👤")+'</div>';rows.innerHTML+='<div class="rankRow"><div class="rankPos">#'+(i+1)+'</div>'+a+'<div class="rankRowMain"><div class="rankRowName">'+esc(u.name||"Aspirant")+'</div><div class="rankRowSub">'+esc(u.badgeTitle||"Aspirant")+' • '+Math.round(Number(u.accuracy||0))+'% accuracy</div></div><div class="rankRowPoints">'+Number(u.points||0)+' pts</div></div>';});
+}catch(error){myCard.innerHTML='<div class="status error">'+esc(error.message)+'</div>';top.innerHTML='';rows.innerHTML='';}
 }
 document.getElementById("backHomeButton").addEventListener("click",showHome);
 document.getElementById("backTestsButton").addEventListener("click",showTests);
 document.getElementById("resultHomeButton").addEventListener("click",showHome);
 document.getElementById("resultTestsButton").addEventListener("click",showTests);
 document.getElementById("leaderboardBackButton").addEventListener("click",showHome);
+document.getElementById("leaderboardButton").addEventListener("click",showLeaderboard);
 document.getElementById("globalRankCard").addEventListener("click",showLeaderboard);
 document.getElementById("nextButton").addEventListener("click",nextQuestion);
 loadData();
@@ -640,7 +619,6 @@ loadData();
 </html>
 """
     return html
-
 # ============================================================
 # QUIZ FIRESTORE API
 # ============================================================
@@ -724,11 +702,8 @@ def quiz_leaderboard():
                 "testsCompleted": data.get("testsCompleted", 0),
                 "bestStreak": data.get("bestStreak", 0),
             })
-
-        # Sort by points and return only the top 10.
         entries.sort(key=lambda item: item["points"], reverse=True)
-        return jsonify(entries[:10])
-
+        return jsonify(entries[:50])
     except Exception as e:
         print("[Leaderboard error]", e)
         return jsonify({"error": str(e)}), 500
