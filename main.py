@@ -539,35 +539,13 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
 .loginHead h1{font-size:23px;margin:0 0 4px}
 .loginHead p{margin:0;font-size:14px;opacity:.9}
 .loginBody{padding:22px}
-.formLabel{font-size:13px;font-weight:800;color:#686572;display:block;margin:0 0 7px}
-.field{margin-bottom:17px}
-.inputWrap{position:relative}
-.inputWrap input{
-  width:100%;padding:13px 43px 13px 14px;
-  border:1px solid #dfe4f2;border-radius:13px;outline:none;
-  font-size:14px;
-}
-.inputWrap input:focus{border-color:#7b68e9;box-shadow:0 0 0 3px #eeeaff}
-.eye{
-  position:absolute;right:10px;top:8px;border:0;background:transparent;
-  color:#91a0b8;font-size:20px;
-}
-.loginRow{display:flex;justify-content:space-between;align-items:center;margin:3px 0 16px;font-size:13px}
-.remember{display:flex;align-items:center;gap:7px;color:#686572}
-.link{border:0;background:transparent;color:#5f6ff0;font-weight:700}
-.primaryLogin{
-  width:100%;border:0;border-radius:13px;padding:13px;
-  background:linear-gradient(135deg,#6374e9,#7748aa);color:white;font-size:16px;font-weight:800;
-}
-.or{display:flex;align-items:center;gap:10px;color:#777;margin:16px 0}
-.or:before,.or:after{content:"";height:1px;background:#ddd;flex:1}
 .google{
   width:100%;border:1px solid #ddd;border-radius:12px;
-  padding:12px;background:white;color:#222;font-weight:600;
+  padding:14px;background:white;color:#222;font-weight:600;
+  display:flex;align-items:center;justify-content:center;gap:10px;
+  font-size:15px;
 }
-.google span{font-size:18px;margin-right:8px}
-.loginFooter{text-align:center;border-top:1px solid #eee;padding-top:16px;color:#777;font-size:13px}
-.createBtn{border:0;background:transparent;color:#6879a0;font-weight:800}
+.google:hover{background:#f8f9fa}
 .loginError{background:#fff0f2;color:#a32e40;padding:10px;border-radius:10px;font-size:12px;margin-bottom:12px}
 .loading{text-align:center;color:#777;padding:30px}
 @media(max-width:800px){
@@ -602,44 +580,15 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
   <div class="loginBox">
     <div class="loginHead">
       <div class="loginLogo">🎓</div>
-      <h1>Welcome Back</h1>
-      <p>Sign in to your account</p>
+      <h1>Welcome</h1>
+      <p>Sign in to continue</p>
     </div>
     <div class="loginBody">
       <div id="loginError" class="loginError hidden"></div>
 
-      <div class="field">
-        <label class="formLabel">✉️ &nbsp; Email Address <span style="color:#e34d5b">*</span></label>
-        <div class="inputWrap">
-          <input id="emailInput" type="email" placeholder="Enter your email address" autocomplete="email">
-        </div>
-      </div>
-
-      <div class="field">
-        <label class="formLabel">🔒 &nbsp; Password <span style="color:#e34d5b">*</span></label>
-        <div class="inputWrap">
-          <input id="passwordInput" type="password" placeholder="Enter your password" autocomplete="current-password">
-          <button class="eye" id="eyeButton" type="button">◉</button>
-        </div>
-      </div>
-
-      <div class="loginRow">
-        <label class="remember"><input id="rememberMe" type="checkbox"> Remember me</label>
-        <button class="link" id="forgotButton" type="button">Forgot password?</button>
-      </div>
-
-      <button class="primaryLogin" id="signInButton">🔑 &nbsp; Sign in</button>
-
-      <div class="or"><span>OR</span></div>
-
       <button class="google" id="googleButton">
         <span>🌐</span> Continue with Google
       </button>
-
-      <div class="loginFooter">
-        Don't have an account?
-        <button class="createBtn" id="createButton">Create account here</button>
-      </div>
     </div>
   </div>
 </div>
@@ -796,59 +745,6 @@ function showError(message){
 }
 function clearError(){ $("loginError").classList.add("hidden"); }
 
-async function signIn(){
-  clearError();
-  if(!firebaseReady){showError("Firebase Authentication is not configured.");return;}
-
-  const email=$("emailInput").value.trim();
-  const password=$("passwordInput").value;
-
-  if(!email || !password){showError("Please enter your email and password.");return;}
-
-  try{
-    const persistence = $("rememberMe").checked
-      ? firebase.auth.Auth.Persistence.LOCAL
-      : firebase.auth.Auth.Persistence.SESSION;
-
-    await firebase.auth().setPersistence(persistence);
-    await firebase.auth().signInWithEmailAndPassword(email,password);
-  }catch(error){
-    showError(authError(error));
-  }
-}
-
-async function createAccount(){
-  clearError();
-  if(!firebaseReady){showError("Firebase Authentication is not configured.");return;}
-
-  const email=$("emailInput").value.trim();
-  const password=$("passwordInput").value;
-
-  if(!email){showError("Enter your email address first.");return;}
-  if(password.length < 6){showError("Password must contain at least 6 characters.");return;}
-
-  try{
-    await firebase.auth().createUserWithEmailAndPassword(email,password);
-  }catch(error){
-    showError(authError(error));
-  }
-}
-
-async function forgotPassword(){
-  clearError();
-  if(!firebaseReady){showError("Firebase Authentication is not configured.");return;}
-
-  const email=$("emailInput").value.trim();
-  if(!email){showError("Enter your email address first.");return;}
-
-  try{
-    await firebase.auth().sendPasswordResetEmail(email);
-    alert("Password reset email sent. Please check your email.");
-  }catch(error){
-    showError(authError(error));
-  }
-}
-
 async function googleLogin(){
   clearError();
   if(!firebaseReady){showError("Firebase Authentication is not configured.");return;}
@@ -864,12 +760,6 @@ async function googleLogin(){
 function authError(error){
   const code=error && error.code ? error.code : "";
   const messages={
-    "auth/invalid-email":"Please enter a valid email address.",
-    "auth/user-not-found":"No account found with this email.",
-    "auth/wrong-password":"Incorrect password.",
-    "auth/invalid-credential":"Incorrect email or password.",
-    "auth/email-already-in-use":"An account already exists with this email.",
-    "auth/weak-password":"Password must contain at least 6 characters.",
     "auth/popup-closed-by-user":"Google sign-in was cancelled.",
     "auth/popup-blocked":"Please allow pop-ups for Google sign-in.",
     "auth/too-many-requests":"Too many attempts. Please try again later."
@@ -1252,18 +1142,9 @@ async function loadVisitorCount(){
   }
 }
 
-$("signInButton").addEventListener("click",signIn);
-$("createButton").addEventListener("click",createAccount);
-$("forgotButton").addEventListener("click",forgotPassword);
 $("googleButton").addEventListener("click",googleLogin);
 
-$("eyeButton").addEventListener("click",()=>{
-  const input=$("passwordInput");
-  input.type=input.type==="password"?"text":"password";
-  $("eyeButton").textContent=input.type==="password"?"◉":"◉";
-});
-
-$("leaderboardNav").addEventListener("click",showLeaderboard);
+$("leaderboardNav")?.addEventListener("click",showLeaderboard);
 $("leaderboardBack").addEventListener("click",showHome);
 $("quizBack").addEventListener("click",()=>{
   if(confirm("Exit this quiz?")){
@@ -1294,7 +1175,7 @@ document.addEventListener("click",(event)=>{
   }
 });
 
-$("leaderboardMenuButton").addEventListener("click",()=>{
+$("leaderboardMenuButton")?.addEventListener("click",()=>{
   $("profileMenu").classList.add("hidden");
   $("profileButton").setAttribute("aria-expanded","false");
   showLeaderboard();
@@ -1318,13 +1199,6 @@ if(localStorage.getItem("ca_theme")==="dark"){
   document.body.classList.add("dark");
 }
 updateThemeMenu();
-
-$("passwordInput").addEventListener("keydown",e=>{
-  if(e.key==="Enter")signIn();
-});
-$("emailInput").addEventListener("keydown",e=>{
-  if(e.key==="Enter")$("passwordInput").focus();
-});
 </script>
 </body>
 </html>
