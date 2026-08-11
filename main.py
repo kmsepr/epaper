@@ -675,7 +675,7 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
     <div class="loginBody">
       <div id="loginError" class="loginError hidden"></div>
 
-      <button class="google" id="googleButton">
+      <button class="google" id="googleButton" type="button">
         <svg viewBox="0 0 24 24">
           <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"/>
           <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.19v3.15C3.17 21.32 7.23 24 12 24z"/>
@@ -995,7 +995,6 @@ async function syncFirestoreLeaderboard(){
 
   const totals = computeUserTotals();
 
-  # Format ID matching mobile app's pattern (e.g. sadiqaliepra_at_gmail_com)
   const emailDocId = user.email.toLowerCase()
     .replace(/@/g, "_at_")
     .replace(/\./g, "_");
