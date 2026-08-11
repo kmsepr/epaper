@@ -273,7 +273,6 @@ h1{color:white;font-size:28px;margin-bottom:20px}
 # ============================================================
 @app.route("/quiz")
 def quiz_app():
-    # Firebase Web configuration is supplied through Koyeb environment variables.
     firebase_web_config = {
         "apiKey": os.environ.get("FIREBASE_WEB_API_KEY", ""),
         "authDomain": os.environ.get("FIREBASE_WEB_AUTH_DOMAIN", ""),
@@ -295,6 +294,7 @@ def quiz_app():
 
 <script src="https://www.gstatic.com/firebasejs/11.10.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/11.10.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore-compat.js"></script>
 
 <style>
 *{box-sizing:border-box}
@@ -391,14 +391,6 @@ button{cursor:pointer}
 }
 .userAvatar img{width:100%;height:100%;object-fit:cover}
 .userName{font-size:12px;font-weight:700;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.iconBtn{
-  border:1px solid var(--line);background:var(--panel);color:var(--text);
-  width:40px;height:40px;border-radius:14px;
-}
-.logoutBtn{
-  border:0;background:#f1eaff;color:#5b39b8;
-  padding:9px 12px;border-radius:12px;font-weight:700;font-size:12px;
-}
 
 .page{padding:28px 6px}
 .topLine{display:flex;align-items:center;justify-content:space-between;gap:15px;margin-bottom:20px}
@@ -548,6 +540,7 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
 .google:hover{background:#f8f9fa}
 .loginError{background:#fff0f2;color:#a32e40;padding:10px;border-radius:10px;font-size:12px;margin-bottom:12px}
 .loading{text-align:center;color:#777;padding:30px}
+
 @media(max-width:800px){
   .nav{display:none}
   .brand{min-width:0;flex:1}
@@ -603,7 +596,6 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
       </div>
 
       <nav class="nav">
-        
         
       </nav>
 
@@ -719,9 +711,91 @@ let answered = false;
 let timerSeconds = 0;
 let elapsedSeconds = 0;
 let timerInterval = null;
-let points = 0;
-let streak = 0;
-let maxStreak = 0;
+
+// ============================================================
+# SCORING & USER STATS ENGINE
+# ============================================================
+
+function getUserStorageKey(){
+  const user = firebase.auth().currentUser;
+  return user ? "ca_stats_" + user.uid : "ca_stats_guest";
+}
+
+function loadUserStats(){
+  try{
+    const raw = localStorage.getItem(getUserStorageKey());
+    if(raw) return JSON.parse(raw);
+  }catch(e){}
+  return { attempts: [], bestStars: {} };
+}
+
+function saveUserStats(stats){
+  try{
+    localStorage.setItem(getUserStorageKey(), JSON.stringify(stats));
+  }catch(e){}
+}
+
+function computeUserTotals(){
+  const stats = loadUserStats();
+  const BASE_POINTS = 420;
+
+  let totalCorrect = 0;
+  let totalAccuracySum = 0;
+
+  stats.attempts.forEach(att => {
+    totalCorrect += Number(att.correctCount || 0);
+    totalAccuracySum += Number(att.accuracyPct || 0);
+  });
+
+  let totalStars = 0;
+  Object.values(stats.bestStars || {}).forEach(s => {
+    totalStars += Number(s || 0);
+  });
+
+  const totalPoints = BASE_POINTS + (totalCorrect * 10) + (totalStars * 40);
+
+  const overallAccuracy = stats.attempts.length > 0
+    ? totalAccuracySum / stats.attempts.length
+    : 75; // Default 75% baseline prior to tests
+
+  let badgeTitle = "🎯 Rising Scholar";
+  if(totalPoints >= 1000){
+    badgeTitle = "🏆 Master";
+  }else if(totalPoints >= 650){
+    badgeTitle = "🌟 CA Top Aspirant";
+  }
+
+  return {
+    totalPoints,
+    totalStars,
+    overallAccuracy: Math.round(overallAccuracy),
+    badgeTitle,
+    testsCompleted: stats.attempts.length
+  };
+}
+
+async function syncFirestoreLeaderboard(){
+  if(!firebaseReady) return;
+  const user = firebase.auth().currentUser;
+  if(!user) return;
+
+  const totals = computeUserTotals();
+
+  try{
+    await firebase.firestore().collection("leaderboard").doc(user.uid).set({
+      name: user.displayName || user.email?.split("@")[0] || "Aspirant",
+      points: totals.totalPoints,
+      stars: totals.totalStars,
+      accuracy: totals.overallAccuracy,
+      badgeTitle: totals.badgeTitle,
+      testsCompleted: totals.testsCompleted,
+      profilePhotoUri: user.photoURL || "",
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+  }catch(e){
+    console.error("Error syncing to Firestore:", e);
+  }
+}
 
 function esc(value){
   return String(value ?? "")
@@ -785,6 +859,7 @@ function showApp(){
   showHome();
   loadData();
   loadVisitorCount();
+  syncFirestoreLeaderboard();
 }
 
 function showLogin(){
@@ -953,9 +1028,6 @@ async function startQuiz(test){
     unansweredCount=0;
     questionResults=[];
     answered=false;
-    points=0;
-    streak=0;
-    maxStreak=0;
 
     startTimer(Number(test.durationMinutes)||0);
     displayQuestion();
@@ -999,16 +1071,10 @@ function selectAnswer(index,element){
     element.classList.add("correct");
     score++;
     correctCount++;
-    streak++;
-    maxStreak=Math.max(maxStreak,streak);
-    const bonus=Math.min(5,Math.max(0,streak-1));
-    points+=10+bonus;
   }else{
     element.classList.add("wrong");
     wrongCount++;
-    streak=0;
     if(options[correct])options[correct].classList.add("correct");
-    points=Math.max(0,points-2);
   }
 
   questionResults[currentQuestion]={
@@ -1083,21 +1149,56 @@ function finishQuiz(timeExpired=false){
     };
   }
 
-  const answeredTotal=correctCount+wrongCount;
-  const accuracy=answeredTotal?(correctCount/answeredTotal)*100:0;
-  const percent=(correctCount/total)*100;
-  const grade=percent>=90?"A+":percent>=80?"A":percent>=70?"B":percent>=60?"C":percent>=50?"D":"Needs Practice";
+  const accuracyPct = (correctCount / total) * 100;
 
-  $("scoreText").textContent=correctCount+" / "+total;
-  $("gradeText").textContent=grade;
-  $("correctStat").textContent=correctCount;
-  $("wrongStat").textContent=wrongCount;
-  $("pointsStat").textContent=points;
-  $("accuracyStat").textContent=Math.round(accuracy)+"%";
+  // Star Reward Calculation
+  let starsEarned = 0;
+  if(accuracyPct >= 90){
+    starsEarned = 3;
+  }else if(accuracyPct >= 60){
+    starsEarned = 2;
+  }else if(accuracyPct >= 40){
+    starsEarned = 1;
+  }
 
-  $("performanceText").innerHTML=
-    "<b>"+(Math.round(percent))+"% score</b> • "+
-    (timeExpired?"Time limit reached":"Completed");
+  // Record user attempt & update best stars
+  const userStats = loadUserStats();
+  const testId = selectedTest ? (selectedTest.id || "default") : "default";
+
+  userStats.attempts.push({
+    testId,
+    correctCount,
+    totalQuestions: total,
+    accuracyPct,
+    starsEarned
+  });
+
+  const previousBest = userStats.bestStars[testId] || 0;
+  if(starsEarned > previousBest){
+    userStats.bestStars[testId] = starsEarned;
+  }
+
+  saveUserStats(userStats);
+
+  // Calculate new totals
+  const totals = computeUserTotals();
+
+  // Sync to Firestore
+  syncFirestoreLeaderboard();
+
+  const starIcons = starsEarned === 3 ? "⭐⭐⭐" : starsEarned === 2 ? "⭐⭐" : starsEarned === 1 ? "⭐" : "❌";
+
+  $("scoreText").textContent = correctCount + " / " + total;
+  $("gradeText").textContent = totals.badgeTitle + " " + starIcons;
+  $("correctStat").textContent = correctCount;
+  $("wrongStat").textContent = wrongCount;
+  $("pointsStat").textContent = totals.totalPoints;
+  $("accuracyStat").textContent = Math.round(accuracyPct) + "%";
+
+  $("performanceText").innerHTML =
+    "<b>" + Math.round(accuracyPct) + "% accuracy</b> • " +
+    (timeExpired ? "Time limit reached" : "Completed") +
+    "<br><span style='color:var(--purple);font-size:13px;font-weight:800'>Global Score: " + totals.totalPoints + " Points</span>";
 
   renderReview();
   hidePages();
@@ -1217,7 +1318,6 @@ def quiz_visit():
     try:
         db = get_firestore()
 
-        # One document per calendar day.
         today = datetime.now().strftime("%Y-%m-%d")
         doc_ref = db.collection("daily_visitors").document(today)
         transaction = db.transaction()
@@ -1299,8 +1399,6 @@ def quiz_tests():
         for test in tests:
             test["questionCount"] = question_counts.get(test["id"], 0)
 
-        # Show the most recently created test first.
-        # dateMillis is used by the existing test records when available.
         tests.sort(
             key=lambda t: (
                 int(t.get("dateMillis") or 0)
@@ -1365,7 +1463,7 @@ def quiz_leaderboard():
                 "bestStreak": data.get("bestStreak", 0),
             })
 
-        # Sort by points and return only the top 10.
+        # Sort by points descending
         entries.sort(key=lambda item: item["points"], reverse=True)
         return jsonify(entries[:10])
 
