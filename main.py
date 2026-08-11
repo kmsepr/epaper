@@ -654,7 +654,7 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
 
       <nav class="nav">
         
-        <button id="leaderboardNav">🏆 Leaderboard</button>
+        
       </nav>
 
       <div class="headerRight">
