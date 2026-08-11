@@ -991,14 +991,19 @@ function computeUserTotals(){
 async function syncFirestoreLeaderboard(){
   if(!firebaseReady) return;
   const user = firebase.auth().currentUser;
-  if(!user) return;
+  if(!user || !user.email) return;
 
   const totals = computeUserTotals();
 
+  # Format ID matching mobile app's pattern (e.g. sadiqaliepra_at_gmail_com)
+  const emailDocId = user.email.toLowerCase()
+    .replace(/@/g, "_at_")
+    .replace(/\./g, "_");
+
   try{
-    await firebase.firestore().collection("leaderboard").doc(user.uid).set({
-      name: user.displayName || user.email?.split("@")[0] || "Aspirant",
-      email: user.email || "",
+    await firebase.firestore().collection("leaderboard").doc(emailDocId).set({
+      name: user.displayName || user.email.split("@")[0] || "Aspirant",
+      email: user.email,
       points: totals.totalPoints,
       stars: totals.totalStars,
       accuracy: totals.overallAccuracy,
