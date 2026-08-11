@@ -638,6 +638,7 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
       </div>
 
       <nav class="nav">
+        
         <button id="leaderboardNav">🏆 Leaderboard</button>
       </nav>
 
@@ -669,7 +670,7 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
 
     <section id="quizPage" class="quizScreen hidden">
       <div class="quizTop">
-        <button class="backBtn" id="quizBack">← Back</button>
+        <button class="backBtn" id="quizBack">✕ Exit Quiz</button>
         <span class="timer" id="timer">⏱ 00:00</span>
       </div>
       <h2 id="testTitle"></h2>
@@ -1245,10 +1246,14 @@ $("logoutButton").addEventListener("click",async()=>{
   if(firebaseReady)await firebase.auth().signOut();
 });
 
-$("homeNav").addEventListener("click",showHome);
+
 $("leaderboardNav").addEventListener("click",showLeaderboard);
 $("leaderboardBack").addEventListener("click",showHome);
-$("quizBack").addEventListener("click",showHome);
+$("quizBack").addEventListener("click",()=>{
+  if(confirm("Exit this quiz?")){
+    showHome();
+  }
+});
 $("resultHome").addEventListener("click",showHome);
 $("nextButton").addEventListener("click",nextQuestion);
 
