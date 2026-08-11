@@ -354,12 +354,13 @@ button{cursor:pointer}
 }
 .brand h1{margin:0;font-size:16px;line-height:1.1}
 .brand p{margin:3px 0 0;font-size:10px;color:var(--muted);letter-spacing:.5px}
-.nav{display:flex;align-items:center;gap:22px;flex:1}
-.nav button{
-  border:0;background:transparent;color:var(--text);
-  padding:10px 3px;font-size:14px;
+.nav{display:flex;align-items:center;gap:12px;flex:1}
+.navBtn{
+  border:1px solid var(--line);background:var(--panel);color:var(--text);
+  padding:8px 14px;border-radius:14px;font-size:13px;font-weight:700;
+  display:flex;align-items:center;gap:6px;transition:.15s;
 }
-.nav button:hover{color:var(--purple)}
+.navBtn:hover{background:var(--soft);color:var(--purple);border-color:#ded3ff}
 .headerRight{display:flex;align-items:center;gap:10px}
 .profileWrap{position:relative;z-index:100}
 .userChip{
@@ -538,6 +539,7 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
   font-size:15px;
 }
 .google:hover{background:#f8f9fa}
+.google svg{width:20px;height:20px}
 .loginError{background:#fff0f2;color:#a32e40;padding:10px;border-radius:10px;font-size:12px;margin-bottom:12px}
 .loading{text-align:center;color:#777;padding:30px}
 
@@ -580,7 +582,13 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
       <div id="loginError" class="loginError hidden"></div>
 
       <button class="google" id="googleButton">
-        <span>🌐</span> Continue with Google
+        <svg viewBox="0 0 24 24">
+          <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"/>
+          <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.19v3.15C3.17 21.32 7.23 24 12 24z"/>
+          <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.19C.43 8.1 0 9.8 0 12s.43 3.9 1.19 5.42l4.09-3.15z"/>
+          <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.23 0 3.17 2.68 1.19 6.58l4.09 3.15c.95-2.83 3.6-4.98 6.72-4.98z"/>
+        </svg>
+        Continue with Google
       </button>
     </div>
   </div>
@@ -596,7 +604,7 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
       </div>
 
       <nav class="nav">
-        
+        <button class="navBtn" id="leaderboardNav" type="button">🏆 Leaderboard</button>
       </nav>
 
       <div class="headerRight">
@@ -712,10 +720,6 @@ let timerSeconds = 0;
 let elapsedSeconds = 0;
 let timerInterval = null;
 
-// ============================================================
-# SCORING & USER STATS ENGINE
-# ============================================================
-
 function getUserStorageKey(){
   const user = firebase.auth().currentUser;
   return user ? "ca_stats_" + user.uid : "ca_stats_guest";
@@ -756,7 +760,7 @@ function computeUserTotals(){
 
   const overallAccuracy = stats.attempts.length > 0
     ? totalAccuracySum / stats.attempts.length
-    : 75; // Default 75% baseline prior to tests
+    : 75;
 
   let badgeTitle = "🎯 Rising Scholar";
   if(totalPoints >= 1000){
@@ -1151,7 +1155,6 @@ function finishQuiz(timeExpired=false){
 
   const accuracyPct = (correctCount / total) * 100;
 
-  // Star Reward Calculation
   let starsEarned = 0;
   if(accuracyPct >= 90){
     starsEarned = 3;
@@ -1161,7 +1164,6 @@ function finishQuiz(timeExpired=false){
     starsEarned = 1;
   }
 
-  // Record user attempt & update best stars
   const userStats = loadUserStats();
   const testId = selectedTest ? (selectedTest.id || "default") : "default";
 
@@ -1179,13 +1181,9 @@ function finishQuiz(timeExpired=false){
   }
 
   saveUserStats(userStats);
-
-  // Calculate new totals
-  const totals = computeUserTotals();
-
-  // Sync to Firestore
   syncFirestoreLeaderboard();
 
+  const totals = computeUserTotals();
   const starIcons = starsEarned === 3 ? "⭐⭐⭐" : starsEarned === 2 ? "⭐⭐" : starsEarned === 1 ? "⭐" : "❌";
 
   $("scoreText").textContent = correctCount + " / " + total;
@@ -1245,7 +1243,7 @@ async function loadVisitorCount(){
 
 $("googleButton").addEventListener("click",googleLogin);
 
-$("leaderboardNav")?.addEventListener("click",showLeaderboard);
+$("leaderboardNav").addEventListener("click",showLeaderboard);
 $("leaderboardBack").addEventListener("click",showHome);
 $("quizBack").addEventListener("click",()=>{
   if(confirm("Exit this quiz?")){
@@ -1274,12 +1272,6 @@ document.addEventListener("click",(event)=>{
     $("profileMenu").classList.add("hidden");
     $("profileButton").setAttribute("aria-expanded","false");
   }
-});
-
-$("leaderboardMenuButton")?.addEventListener("click",()=>{
-  $("profileMenu").classList.add("hidden");
-  $("profileButton").setAttribute("aria-expanded","false");
-  showLeaderboard();
 });
 
 $("themeMenuButton").addEventListener("click",()=>{
@@ -1463,7 +1455,6 @@ def quiz_leaderboard():
                 "bestStreak": data.get("bestStreak", 0),
             })
 
-        # Sort by points descending
         entries.sort(key=lambda item: item["points"], reverse=True)
         return jsonify(entries[:10])
 
