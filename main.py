@@ -361,7 +361,7 @@ button{cursor:pointer}
 }
 .nav button:hover{color:var(--purple)}
 .headerRight{display:flex;align-items:center;gap:10px}
-.profileWrap{position:relative}
+.profileWrap{position:relative;z-index:100}
 .userChip{
   display:flex;align-items:center;gap:8px;
   background:var(--soft);border:1px solid #ded3ff;
@@ -369,6 +369,7 @@ button{cursor:pointer}
   cursor:pointer;color:var(--text);
 }
 .userChip:hover{filter:brightness(.98)}
+.profileWrap .userChip{position:relative;z-index:101}
 .profileMenu{
   position:absolute;right:0;top:52px;width:190px;
   background:var(--panel);border:1px solid var(--line);
@@ -1293,11 +1294,19 @@ document.addEventListener("click",(event)=>{
   }
 });
 
+$("leaderboardMenuButton").addEventListener("click",()=>{
+  $("profileMenu").classList.add("hidden");
+  $("profileButton").setAttribute("aria-expanded","false");
+  showLeaderboard();
+});
+
 $("themeMenuButton").addEventListener("click",()=>{
   document.body.classList.toggle("dark");
   const dark=document.body.classList.contains("dark");
   localStorage.setItem("ca_theme",dark?"dark":"light");
   updateThemeMenu();
+  $("profileMenu").classList.add("hidden");
+  $("profileButton").setAttribute("aria-expanded","false");
 });
 
 $("logoutMenuButton").addEventListener("click",async()=>{
