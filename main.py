@@ -426,16 +426,11 @@ button{cursor:pointer}
 .quizMeta{display:flex;gap:17px;flex-wrap:wrap;margin-top:12px;color:#49445b;font-size:12px;font-weight:700}
 body.dark .quizMeta{color:#c0bdce}
 .quizActions{display:flex;align-items:center;gap:12px}
-.playBtn{
-  width:56px;height:56px;border-radius:50%;
-  border:2px solid #d9c9ff;background:#f2eaff;color:#7244d6;
-  font-size:21px;
-}
 .startBtn{
   border:0;border-radius:20px;padding:11px 17px;
   background:#eee3ff;color:#6332c3;font-weight:800;
 }
-.playBtn:hover,.startBtn:hover{filter:brightness(.96)}
+.startBtn:hover{filter:brightness(.96)}
 .empty{padding:30px;text-align:center;background:var(--panel);border-radius:18px;color:var(--muted)}
 
 .visitor{
@@ -574,8 +569,7 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
   .quizTitle{font-size:16px}
   .quizDesc{font-size:12px}
   .quizActions{flex-direction:column}
-  .playBtn{width:45px;height:45px}
-  .startBtn{padding:9px 12px}
+  .startBtn{padding:9px 14px}
   .resultGrid{grid-template-columns:repeat(2,1fr)}
 }
 @media(max-width:430px){
@@ -644,6 +638,7 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
       </div>
 
       <nav class="nav">
+        <button id="homeNav">Subjects</button>
         <button id="leaderboardNav">🏆 Leaderboard</button>
       </nav>
 
@@ -947,11 +942,9 @@ function renderTests(tests){
         '</div>'+
       '</div>'+
       '<div class="quizActions">'+
-        '<button class="playBtn" title="Start quiz">▶</button>'+
         '<button class="startBtn">Start →</button>'+
       '</div>';
 
-    card.querySelector(".playBtn").addEventListener("click",()=>startQuiz(test));
     card.querySelector(".startBtn").addEventListener("click",()=>startQuiz(test));
     $("quizList").appendChild(card);
   });
