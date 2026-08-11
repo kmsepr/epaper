@@ -361,28 +361,11 @@ button{cursor:pointer}
 }
 .nav button:hover{color:var(--purple)}
 .headerRight{display:flex;align-items:center;gap:10px}
-.profileWrap{position:relative;z-index:100}
 .userChip{
   display:flex;align-items:center;gap:8px;
   background:var(--soft);border:1px solid #ded3ff;
   border-radius:22px;padding:5px 10px 5px 5px;
-  cursor:pointer;color:var(--text);
 }
-.userChip:hover{filter:brightness(.98)}
-.profileWrap .userChip{position:relative;z-index:101}
-.profileMenu{
-  position:absolute;right:0;top:52px;width:190px;
-  background:var(--panel);border:1px solid var(--line);
-  border-radius:16px;padding:8px;box-shadow:0 15px 35px rgba(0,0,0,.15);
-  z-index:50;
-}
-.profileMenu button{
-  width:100%;border:0;background:transparent;color:var(--text);
-  padding:11px 12px;border-radius:11px;text-align:left;
-  font-size:13px;font-weight:700;
-}
-.profileMenu button:hover{background:var(--bg2)}
-.profileMenu .menuSignout{color:#d84f62}
 .userAvatar{
   width:32px;height:32px;border-radius:50%;
   background:linear-gradient(135deg,#7259e8,#1aa8d6);
@@ -578,6 +561,7 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
 @media(max-width:650px){
   .container{padding:10px}
   .header{position:relative;top:0;padding:10px 12px}
+  .logoutBtn{display:none}
   .topLine{align-items:stretch;flex-direction:column}
   .search{max-width:none}
   .quizCard{align-items:flex-start}
@@ -655,21 +639,16 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
 
       <nav class="nav">
         
-        
+        <button id="leaderboardNav">🏆 Leaderboard</button>
       </nav>
 
       <div class="headerRight">
-        <div class="profileWrap">
-          <button class="userChip" id="profileButton" type="button" aria-expanded="false" onclick="toggleProfileMenu(event)">
-            <div class="userAvatar" id="userAvatar">S</div>
-            <div class="userName" id="userName">Aspirant</div>
-            <span style="font-size:11px">⌄</span>
-          </button>
-          <div class="profileMenu hidden" id="profileMenu">
-            <button id="themeMenuButton" type="button">☼ &nbsp; Dark mode</button>
-            <button id="logoutMenuButton" class="menuSignout" type="button">↪ &nbsp; Sign out</button>
-          </div>
+        <button class="iconBtn" id="themeButton" title="Light/Dark mode">☼</button>
+        <div class="userChip">
+          <div class="userAvatar" id="userAvatar">S</div>
+          <div class="userName" id="userName">Aspirant</div>
         </div>
+        <button class="logoutBtn" id="logoutButton">Sign out</button>
       </div>
     </header>
 
@@ -1263,6 +1242,11 @@ $("eyeButton").addEventListener("click",()=>{
   $("eyeButton").textContent=input.type==="password"?"◉":"◉";
 });
 
+$("logoutButton").addEventListener("click",async()=>{
+  if(firebaseReady)await firebase.auth().signOut();
+});
+
+
 $("leaderboardNav").addEventListener("click",showLeaderboard);
 $("leaderboardBack").addEventListener("click",showHome);
 $("quizBack").addEventListener("click",()=>{
@@ -1273,72 +1257,17 @@ $("quizBack").addEventListener("click",()=>{
 $("resultHome").addEventListener("click",showHome);
 $("nextButton").addEventListener("click",nextQuestion);
 
-function updateThemeMenu(){
+$("themeButton").addEventListener("click",()=>{
+  document.body.classList.toggle("dark");
   const dark=document.body.classList.contains("dark");
-  const btn=document.getElementById("themeMenuButton");
-  if(btn) btn.textContent=dark?"☀  Light mode":"☾  Dark mode";
-}
-
-function toggleProfileMenu(event){
-  if(event) event.stopPropagation();
-
-  const menu=document.getElementById("profileMenu");
-  const button=document.getElementById("profileButton");
-  if(!menu || !button) return;
-
-  const isHidden=menu.classList.contains("hidden");
-  menu.classList.toggle("hidden");
-  button.setAttribute("aria-expanded",isHidden?"true":"false");
-}
-
-function closeProfileMenu(){
-  const menu=document.getElementById("profileMenu");
-  const button=document.getElementById("profileButton");
-  if(menu) menu.classList.add("hidden");
-  if(button) button.setAttribute("aria-expanded","false");
-}
-
-document.addEventListener("click",(event)=>{
-  const wrap=document.querySelector(".profileWrap");
-  if(wrap && !wrap.contains(event.target)){
-    closeProfileMenu();
-  }
+  localStorage.setItem("ca_theme",dark?"dark":"light");
+  $("themeButton").textContent=dark?"☾":"☼";
 });
-
-const leaderboardMenuButton=document.getElementById("leaderboardMenuButton");
-if(leaderboardMenuButton){
-  leaderboardMenuButton.addEventListener("click",(event)=>{
-    event.stopPropagation();
-    closeProfileMenu();
-    showLeaderboard();
-  });
-}
-
-const themeMenuButton=document.getElementById("themeMenuButton");
-if(themeMenuButton){
-  themeMenuButton.addEventListener("click",(event)=>{
-    event.stopPropagation();
-    document.body.classList.toggle("dark");
-    const dark=document.body.classList.contains("dark");
-    localStorage.setItem("ca_theme",dark?"dark":"light");
-    updateThemeMenu();
-    closeProfileMenu();
-  });
-}
-
-const logoutMenuButton=document.getElementById("logoutMenuButton");
-if(logoutMenuButton){
-  logoutMenuButton.addEventListener("click",async(event)=>{
-    event.stopPropagation();
-    closeProfileMenu();
-    if(firebaseReady) await firebase.auth().signOut();
-  });
-}
 
 if(localStorage.getItem("ca_theme")==="dark"){
   document.body.classList.add("dark");
+  $("themeButton").textContent="☾";
 }
-updateThemeMenu();
 
 $("passwordInput").addEventListener("keydown",e=>{
   if(e.key==="Enter")signIn();
