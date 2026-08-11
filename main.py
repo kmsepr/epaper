@@ -361,11 +361,27 @@ button{cursor:pointer}
 }
 .nav button:hover{color:var(--purple)}
 .headerRight{display:flex;align-items:center;gap:10px}
+.profileWrap{position:relative}
 .userChip{
   display:flex;align-items:center;gap:8px;
   background:var(--soft);border:1px solid #ded3ff;
   border-radius:22px;padding:5px 10px 5px 5px;
+  cursor:pointer;color:var(--text);
 }
+.userChip:hover{filter:brightness(.98)}
+.profileMenu{
+  position:absolute;right:0;top:52px;width:190px;
+  background:var(--panel);border:1px solid var(--line);
+  border-radius:16px;padding:8px;box-shadow:0 15px 35px rgba(0,0,0,.15);
+  z-index:50;
+}
+.profileMenu button{
+  width:100%;border:0;background:transparent;color:var(--text);
+  padding:11px 12px;border-radius:11px;text-align:left;
+  font-size:13px;font-weight:700;
+}
+.profileMenu button:hover{background:var(--bg2)}
+.profileMenu .menuSignout{color:#d84f62}
 .userAvatar{
   width:32px;height:32px;border-radius:50%;
   background:linear-gradient(135deg,#7259e8,#1aa8d6);
@@ -382,38 +398,6 @@ button{cursor:pointer}
   border:0;background:#f1eaff;color:#5b39b8;
   padding:9px 12px;border-radius:12px;font-weight:700;font-size:12px;
 }
-.profileWrap{position:relative}
-.profileButton{}
-.profileWrap .userChip{
-  border:1px solid #ded3ff;
-  cursor:pointer;
-}
-.profileArrow{font-size:16px;color:var(--muted);margin-left:2px}
-.profileMenu{
-  position:absolute;
-  right:0;
-  top:calc(100% + 8px);
-  width:175px;
-  background:var(--panel);
-  border:1px solid var(--line);
-  border-radius:15px;
-  padding:7px;
-  box-shadow:0 14px 35px rgba(0,0,0,.16);
-  z-index:50;
-}
-.profileMenu button{
-  width:100%;
-  border:0;
-  background:transparent;
-  color:var(--text);
-  text-align:left;
-  padding:11px 10px;
-  border-radius:10px;
-  font-size:13px;
-  font-weight:700;
-}
-.profileMenu button:hover{background:var(--bg2)}
-.profileMenu button:last-child{color:#c04455}
 
 .page{padding:28px 6px}
 .topLine{display:flex;align-items:center;justify-content:space-between;gap:15px;margin-bottom:20px}
@@ -589,13 +573,10 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
   .nav{display:none}
   .brand{min-width:0;flex:1}
   .userName{display:none}
-  .headerRight{flex:0 0 auto}
-  .profileArrow{display:none}
 }
 @media(max-width:650px){
   .container{padding:10px}
   .header{position:relative;top:0;padding:10px 12px}
-  .logoutBtn{display:none}
   .topLine{align-items:stretch;flex-direction:column}
   .search{max-width:none}
   .quizCard{align-items:flex-start}
@@ -677,16 +658,15 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
       </nav>
 
       <div class="headerRight">
-        <button class="iconBtn" id="leaderboardIcon" title="Leaderboard">🏆</button>
         <div class="profileWrap">
-          <button class="userChip" id="profileButton" type="button">
+          <button class="userChip" id="profileButton" type="button" aria-expanded="false">
             <div class="userAvatar" id="userAvatar">S</div>
             <div class="userName" id="userName">Aspirant</div>
-            <span class="profileArrow">⌄</span>
+            <span style="font-size:11px">⌄</span>
           </button>
           <div class="profileMenu hidden" id="profileMenu">
-            <button id="themeMenuButton">☾ &nbsp; Dark mode</button>
-            <button id="logoutButton">↪ &nbsp; Sign out</button>
+            <button id="themeMenuButton" type="button">☼ &nbsp; Dark mode</button>
+            <button id="logoutMenuButton" class="menuSignout" type="button">↪ &nbsp; Sign out</button>
           </div>
         </div>
       </div>
@@ -1282,11 +1262,6 @@ $("eyeButton").addEventListener("click",()=>{
   $("eyeButton").textContent=input.type==="password"?"◉":"◉";
 });
 
-$("logoutButton").addEventListener("click",async()=>{
-  if(firebaseReady)await firebase.auth().signOut();
-});
-
-
 $("leaderboardNav").addEventListener("click",showLeaderboard);
 $("leaderboardBack").addEventListener("click",showHome);
 $("quizBack").addEventListener("click",()=>{
@@ -1299,51 +1274,36 @@ $("nextButton").addEventListener("click",nextQuestion);
 
 function updateThemeMenu(){
   const dark=document.body.classList.contains("dark");
-  $("themeMenuButton").innerHTML=dark?"☀ &nbsp; Light mode":"☾ &nbsp; Dark mode";
+  $("themeMenuButton").textContent=dark?"☀  Light mode":"☾  Dark mode";
 }
 
-$("profileButton").addEventListener("click",(e)=>{
-  e.stopPropagation();
-  $("profileMenu").classList.toggle("hidden");
+$("profileButton").addEventListener("click",(event)=>{
+  event.stopPropagation();
+  const menu=$("profileMenu");
+  const open=menu.classList.contains("hidden");
+  menu.classList.toggle("hidden");
+  $("profileButton").setAttribute("aria-expanded",open?"true":"false");
 });
 
-document.addEventListener("click",()=>{
-  $("profileMenu").classList.add("hidden");
+document.addEventListener("click",(event)=>{
+  const wrap=document.querySelector(".profileWrap");
+  if(wrap && !wrap.contains(event.target)){
+    $("profileMenu").classList.add("hidden");
+    $("profileButton").setAttribute("aria-expanded","false");
+  }
 });
 
-$("themeMenuButton").addEventListener("click",(e)=>{
-  e.stopPropagation();
+$("themeMenuButton").addEventListener("click",()=>{
   document.body.classList.toggle("dark");
   const dark=document.body.classList.contains("dark");
   localStorage.setItem("ca_theme",dark?"dark":"light");
   updateThemeMenu();
 });
 
-$("leaderboardIcon").addEventListener("click",showLeaderboard);
-
-function updateThemeMenu(){
-  const dark=document.body.classList.contains("dark");
-  $("themeMenuButton").innerHTML=dark?"☀ &nbsp; Light mode":"☾ &nbsp; Dark mode";
-}
-
-$("profileButton").addEventListener("click",(e)=>{
-  e.stopPropagation();
-  $("profileMenu").classList.toggle("hidden");
-});
-
-document.addEventListener("click",()=>{
+$("logoutMenuButton").addEventListener("click",async()=>{
   $("profileMenu").classList.add("hidden");
+  if(firebaseReady)await firebase.auth().signOut();
 });
-
-$("themeMenuButton").addEventListener("click",(e)=>{
-  e.stopPropagation();
-  document.body.classList.toggle("dark");
-  const dark=document.body.classList.contains("dark");
-  localStorage.setItem("ca_theme",dark?"dark":"light");
-  updateThemeMenu();
-});
-
-$("leaderboardIcon").addEventListener("click",showLeaderboard);
 
 if(localStorage.getItem("ca_theme")==="dark"){
   document.body.classList.add("dark");
