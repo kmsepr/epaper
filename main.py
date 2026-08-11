@@ -638,7 +638,6 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
       </div>
 
       <nav class="nav">
-        <button id="homeNav">Subjects</button>
         <button id="leaderboardNav">🏆 Leaderboard</button>
       </nav>
 
