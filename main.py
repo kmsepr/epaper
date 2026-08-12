@@ -421,7 +421,7 @@ body.dark .quizMeta{color:#c0bdce}
 .shareBtn:hover{background:var(--soft);color:var(--purple);border-color:#ded3ff}
 .empty{padding:30px;text-align:center;background:var(--panel);border-radius:18px;color:var(--muted)}
 
-/* Top Grid Navigation Cards (Leaderboard & Leaderboard) */
+/* Top Quick Navigation Cards (Leaderboard & Profile) */
 .topNavGrids{
   display:grid;
   grid-template-columns:repeat(2, 1fr);
@@ -716,7 +716,7 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
     </header>
 
     <main id="homePage" class="page">
-      <!-- Top Grid Navigation Cards: Leaderboard & Leaderboard -->
+      <!-- Top Quick Navigation Cards: Leaderboard & Profile Cards -->
       <div class="topNavGrids">
         <div class="topNavCard" id="bannerLeaderboardCard">
           <div class="topNavIcon">🏆</div>
@@ -725,11 +725,11 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
             <div class="topNavSub">View global rankings</div>
           </div>
         </div>
-        <div class="topNavCard" id="bannerLeaderboardCard2">
-          <div class="topNavIcon">🎖️</div>
+        <div class="topNavCard" id="bannerProfileCard">
+          <div class="topNavIcon">👤</div>
           <div class="topNavInfo">
-            <div class="topNavTitle">Leaderboard</div>
-            <div class="topNavSub">Top aspirant standings</div>
+            <div class="topNavTitle">Profile</div>
+            <div class="topNavSub">Manage account & settings</div>
           </div>
         </div>
       </div>
@@ -1532,7 +1532,7 @@ $("googleButton").addEventListener("click",googleLogin);
 $("homeNav").addEventListener("click",showHome);
 $("profileNav").addEventListener("click",showProfile);
 $("bannerLeaderboardCard").addEventListener("click",showLeaderboard);
-$("bannerLeaderboardCard2").addEventListener("click",showLeaderboard);
+$("bannerLeaderboardCard2").addEventListener("click",showProfile);
 $("profileLeaderboardBtn").addEventListener("click",showLeaderboard);
 $("leaderboardBack").addEventListener("click",showHome);
 $("quizBack").addEventListener("click",()=>{
@@ -1703,6 +1703,7 @@ def quiz_questions(test_id):
         return jsonify(questions)
     except Exception as e:
         print("[Quiz Firestore questions error]", e)
+        print("[Quiz Firestore questions error]", e)
         return jsonify({"error": str(e)}), 500
 
 @app.route("/quiz/api/leaderboard")
@@ -1746,6 +1747,5 @@ if __name__ == "__main__":
     threading.Thread(target=telegram_updater, daemon=True).start()
     threading.Thread(target=audio_updater, daemon=True).start()
     
-    # Automatically read PORT from Koyeb environment or default to 8000
     port = int(os.environ.get("PORT", 8000))
     app.run(host="0.0.0.0", port=port)
