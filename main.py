@@ -354,6 +354,7 @@ button{cursor:pointer}
 }
 .brand h1{margin:0;font-size:16px;line-height:1.1}
 .brand p{margin:3px 0 0;font-size:10px;color:var(--muted);letter-spacing:.5px}
+.headerRight{display:flex;align-items:center;gap:12px}
 .nav{display:flex;align-items:center;gap:10px}
 .navBtn{
   border:1px solid var(--line);background:var(--panel);color:var(--text);
@@ -361,6 +362,22 @@ button{cursor:pointer}
   display:flex;align-items:center;gap:6px;transition:.15s;
 }
 .navBtn:hover,.navBtn.active{background:var(--soft);color:var(--purple);border-color:#ded3ff}
+
+/* Profile Chip Icon on Top Bar */
+.userChip{
+  display:flex;align-items:center;gap:8px;
+  background:var(--soft);border:1px solid #ded3ff;
+  border-radius:22px;padding:5px 10px 5px 5px;
+  cursor:pointer;color:var(--text);
+}
+.userChip:hover{filter:brightness(.98)}
+.userAvatar{
+  width:32px;height:32px;border-radius:50%;
+  background:linear-gradient(135deg,#7259e8,#1aa8d6);
+  color:white;display:flex;align-items:center;justify-content:center;
+  font-weight:800;overflow:hidden;font-size:12px;
+}
+.userAvatar img{width:100%;height:100%;object-fit:cover}
 
 .page{padding:28px 6px}
 .topLine{display:flex;align-items:center;justify-content:space-between;gap:15px;margin-bottom:20px}
@@ -421,11 +438,9 @@ body.dark .quizMeta{color:#c0bdce}
 .shareBtn:hover{background:var(--soft);color:var(--purple);border-color:#ded3ff}
 .empty{padding:30px;text-align:center;background:var(--panel);border-radius:18px;color:var(--muted)}
 
-/* Top Quick Navigation Cards (Leaderboard & Profile) */
+/* Top Quick Navigation Card (Leaderboard Only) */
 .topNavGrids{
-  display:grid;
-  grid-template-columns:repeat(2, 1fr);
-  gap:16px;
+  display:flex;
   margin-bottom:25px;
 }
 .topNavCard{
@@ -439,6 +454,7 @@ body.dark .quizMeta{color:#c0bdce}
   box-shadow:var(--shadow);
   cursor:pointer;
   transition:.2s;
+  width:100%;
 }
 .topNavCard:hover{transform:translateY(-2px);border-color:#7b68e9}
 .topNavIcon{
@@ -708,28 +724,27 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
         <div><h1>CA Blockbuster</h1><p>CA REVISION</p></div>
       </div>
 
-      <!-- Exactly Two Navigation Tabs: Home & Profile -->
-      <nav class="nav">
-        <button class="navBtn active" id="homeNav" type="button">🏠 Home</button>
-        <button class="navBtn" id="profileNav" type="button">👤 Profile</button>
-      </nav>
+      <div class="headerRight">
+        <!-- Two Navigation Tabs: Home & Profile -->
+        <nav class="nav">
+          <button class="navBtn active" id="homeNav" type="button">🏠 Home</button>
+          <button class="navBtn" id="profileNav" type="button">👤 Profile</button>
+        </nav>
+        <!-- Profile Icon Chip on Top Bar -->
+        <div class="userChip" id="topProfileChip" title="Go to Profile">
+          <div class="userAvatar" id="userAvatar">S</div>
+        </div>
+      </div>
     </header>
 
     <main id="homePage" class="page">
-      <!-- Top Quick Navigation Cards: Leaderboard & Profile Cards -->
+      <!-- Single Top Quick Navigation Card: Leaderboard Only -->
       <div class="topNavGrids">
         <div class="topNavCard" id="bannerLeaderboardCard">
           <div class="topNavIcon">🏆</div>
           <div class="topNavInfo">
             <div class="topNavTitle">Leaderboard</div>
             <div class="topNavSub">View global rankings</div>
-          </div>
-        </div>
-        <div class="topNavCard" id="bannerProfileCard">
-          <div class="topNavIcon">👤</div>
-          <div class="topNavInfo">
-            <div class="topNavTitle">Profile</div>
-            <div class="topNavSub">Manage account & settings</div>
           </div>
         </div>
       </div>
@@ -1095,8 +1110,10 @@ function updateUserUI(user){
   $("profileEmailDisplay").textContent = email;
 
   if(user.photoURL){
+    $("userAvatar").innerHTML='<img src="'+esc(user.photoURL)+'" alt="">';
     $("profileBigAvatar").innerHTML='<img src="'+esc(user.photoURL)+'" alt="">';
   }else{
+    $("userAvatar").textContent = name.charAt(0).toUpperCase();
     $("profileBigAvatar").textContent = name.charAt(0).toUpperCase();
   }
 }
@@ -1531,8 +1548,8 @@ $("googleButton").addEventListener("click",googleLogin);
 
 $("homeNav").addEventListener("click",showHome);
 $("profileNav").addEventListener("click",showProfile);
+$("topProfileChip").addEventListener("click",showProfile);
 $("bannerLeaderboardCard").addEventListener("click",showLeaderboard);
-$("bannerLeaderboardCard2").addEventListener("click",showProfile);
 $("profileLeaderboardBtn").addEventListener("click",showLeaderboard);
 $("leaderboardBack").addEventListener("click",showHome);
 $("quizBack").addEventListener("click",()=>{
@@ -1702,7 +1719,6 @@ def quiz_questions(test_id):
             })
         return jsonify(questions)
     except Exception as e:
-        print("[Quiz Firestore questions error]", e)
         print("[Quiz Firestore questions error]", e)
         return jsonify({"error": str(e)}), 500
 
