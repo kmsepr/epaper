@@ -734,7 +734,21 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
         </div>
       </div>
 
-      <!-- All Topics Listed as Grids -->
+      <!-- Daily CA Quizzes Section at the Top with Search Bar & Quizzes List -->
+      <div class="sectionHeading">⚡ Daily CA Quizzes</div>
+      <div class="topLine">
+        <div class="search">
+          <span>⌕</span>
+          <input id="searchInput" type="search" placeholder="Search quizzes...">
+        </div>
+        <div class="quizCount" id="quizCount">0 quizzes</div>
+      </div>
+
+      <div id="quizList" class="quizList">
+        <div class="loading">Loading quizzes...</div>
+      </div>
+
+      <!-- Categories / Topics Grid Listed -->
       <div class="sectionHeading">📂 Categories</div>
       <div class="topicsGrid">
         <div class="topicCard" onclick="filterByTopic('monthly')">
@@ -828,20 +842,6 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
             <div class="topicCardSub">Major current updates</div>
           </div>
         </div>
-      </div>
-
-      <!-- Daily CA Section at Top with Search Bar & Quizzes List -->
-      <div class="sectionHeading">⚡ Daily CA Quizzes</div>
-      <div class="topLine">
-        <div class="search">
-          <span>⌕</span>
-          <input id="searchInput" type="search" placeholder="Search quizzes...">
-        </div>
-        <div class="quizCount" id="quizCount">0 quizzes</div>
-      </div>
-
-      <div id="quizList" class="quizList">
-        <div class="loading">Loading quizzes...</div>
       </div>
 
       <div class="visitor" id="visitorCount">👥 Today: <b>0</b> visitors</div>
@@ -1732,7 +1732,7 @@ def quiz_leaderboard():
         entries.sort(key=lambda item: item["points"], reverse=True)
         return jsonify(entries[:10])
 
-    exceptException as e:
+    except Exception as e:
         print("[Leaderboard error]", e)
         return jsonify({"error": str(e)}), 500
 
