@@ -716,7 +716,7 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
     </header>
 
     <main id="homePage" class="page">
-      <!-- Top Grid Navigation Cards: Leaderboard & Profile -->
+      <!-- Top Grid Navigation Cards: Leaderboard & Leaderboard (No adjacent profile card) -->
       <div class="topNavGrids">
         <div class="topNavCard" id="bannerLeaderboardCard">
           <div class="topNavIcon">🏆</div>
@@ -725,16 +725,16 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
             <div class="topNavSub">View global rankings</div>
           </div>
         </div>
-        <div class="topNavCard" id="bannerProfileCard">
-          <div class="topNavIcon">👤</div>
+        <div class="topNavCard" id="bannerLeaderboardCard2">
+          <div class="topNavIcon">🎖️</div>
           <div class="topNavInfo">
-            <div class="topNavTitle">Profile</div>
-            <div class="topNavSub">Manage account & settings</div>
+            <div class="topNavTitle">Leaderboard</div>
+            <div class="topNavSub">Top aspirant standings</div>
           </div>
         </div>
       </div>
 
-      <!-- Daily CA Quizzes Section at the Top with Search Bar & Quizzes List -->
+      <!-- Daily CA Quizzes Section at Top with Search Bar & Quizzes List -->
       <div class="sectionHeading">⚡ Daily CA Quizzes</div>
       <div class="topLine">
         <div class="search">
@@ -1532,7 +1532,7 @@ $("googleButton").addEventListener("click",googleLogin);
 $("homeNav").addEventListener("click",showHome);
 $("profileNav").addEventListener("click",showProfile);
 $("bannerLeaderboardCard").addEventListener("click",showLeaderboard);
-$("bannerProfileCard").addEventListener("click",showProfile);
+$("bannerLeaderboardCard2").addEventListener("click",showLeaderboard);
 $("profileLeaderboardBtn").addEventListener("click",showLeaderboard);
 $("leaderboardBack").addEventListener("click",showHome);
 $("quizBack").addEventListener("click",()=>{
@@ -1685,7 +1685,7 @@ def quiz_questions(test_id):
         db = get_firestore()
         questions = []
         docs = db.collection("custom_questions").where("testId", "==", test_id).stream()
-        for doc in docs:
+        for doc:
             data = doc.to_dict()
             questions.append({
                 "id": data.get("id") or doc.id,
