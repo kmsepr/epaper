@@ -1685,14 +1685,21 @@ def quiz_tests():
         for test in tests:
             test["questionCount"] = question_counts.get(test["id"], 0)
 
-        tests.sort(
-            key=lambda t: (
-                int(t.get("dateMillis") or 0)
-                if str(t.get("dateMillis") or "").replace("-", "").isdigit()
-                else 0
-            ),
-            reverse=True
-        )
+        # FIXED CHRONOLOGICAL SORTING (Newest dates/numeric values first)
+        def safe_sort_key(t):
+            val = t.get("dateMillis")
+            try:
+                if val is not None:
+                    return int(val)
+            except (ValueError, TypeError):
+                pass
+            
+            match = re.search(r'\d+', str(t.get("title") or ""))
+            if match:
+                return int(match.group())
+            return 0
+
+        tests.sort(key=safe_sort_key, reverse=True)
 
         return jsonify(tests)
     except Exception as e:
