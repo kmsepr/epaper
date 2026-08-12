@@ -421,7 +421,7 @@ body.dark .quizMeta{color:#c0bdce}
 .shareBtn:hover{background:var(--soft);color:var(--purple);border-color:#ded3ff}
 .empty{padding:30px;text-align:center;background:var(--panel);border-radius:18px;color:var(--muted)}
 
-/* Top Grid Navigation Cards (Leaderboard & Profile) */
+/* Top Grid Navigation Cards (Leaderboard & Leaderboard) */
 .topNavGrids{
   display:grid;
   grid-template-columns:repeat(2, 1fr);
@@ -716,7 +716,7 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
     </header>
 
     <main id="homePage" class="page">
-      <!-- Top Grid Navigation Cards: Leaderboard & Leaderboard (No adjacent profile card) -->
+      <!-- Top Grid Navigation Cards: Leaderboard & Leaderboard -->
       <div class="topNavGrids">
         <div class="topNavCard" id="bannerLeaderboardCard">
           <div class="topNavIcon">🏆</div>
@@ -1685,7 +1685,7 @@ def quiz_questions(test_id):
         db = get_firestore()
         questions = []
         docs = db.collection("custom_questions").where("testId", "==", test_id).stream()
-        for doc:
+        for doc in docs:
             data = doc.to_dict()
             questions.append({
                 "id": data.get("id") or doc.id,
@@ -1737,7 +1737,7 @@ def quiz_leaderboard():
         return jsonify({"error": str(e)}), 500
 
 # ============================================================
-# RUN
+# RUN (Koyeb Port Configured)
 # ============================================================
 
 if __name__ == "__main__":
@@ -1745,4 +1745,7 @@ if __name__ == "__main__":
     print("[Startup] Firestore configured:", bool(os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON")))
     threading.Thread(target=telegram_updater, daemon=True).start()
     threading.Thread(target=audio_updater, daemon=True).start()
-    app.run(host="0.0.0.0", port=8000)
+    
+    # Automatically read PORT from Koyeb environment or default to 8000
+    port = int(os.environ.get("PORT", 8000))
+    app.run(host="0.0.0.0", port=port)
