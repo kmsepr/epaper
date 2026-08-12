@@ -497,6 +497,13 @@ button{cursor:pointer}
 .quizMain{min-width:0;flex:1}
 .quizTitleLine{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .quizTitle{font-size:18px;font-weight:800;color:var(--text)}
+.statusPill{
+  padding:5px 10px;border-radius:999px;
+  background:#eee2ff;color:#6234bd;font-size:11px;font-weight:800;
+}
+.statusPill.completed{
+  background:#e7f8ed;color:#145c31;
+}
 .quizDesc{color:var(--muted);font-size:14px;margin-top:8px}
 .quizMeta{display:flex;gap:17px;flex-wrap:wrap;margin-top:12px;color:#49445b;font-size:12px;font-weight:700}
 body.dark .quizMeta{color:#c0bdce}
@@ -1154,6 +1161,9 @@ function renderTests(tests){
     return;
   }
 
+  const userStats = loadUserStats();
+  const attemptedTestIds = new Set(userStats.attempts.map(a => a.testId));
+
   $("quizList").innerHTML="";
   tests.forEach((test,index)=>{
     const card=document.createElement("div");
@@ -1165,12 +1175,18 @@ function renderTests(tests){
     const questions=Number(test.questionCount||0);
     const duration=Number(test.durationMinutes||0);
     const difficulty=test.difficulty || "Practice";
+    
+    const isCompleted = attemptedTestIds.has(test.id);
+    const statusBadgeHtml = isCompleted 
+      ? '<span class="statusPill completed">Completed ✓</span>' 
+      : '<span class="statusPill">Not started</span>';
 
     card.innerHTML=
       '<div class="quizNumber">'+number+'</div>'+
       '<div class="quizMain">'+
         '<div class="quizTitleLine">'+
           '<div class="quizTitle">'+esc(title)+'</div>'+
+          statusBadgeHtml+
         '</div>'+
         '<div class="quizDesc">'+esc(description)+'</div>'+
         '<div class="quizMeta">'+
@@ -1215,6 +1231,7 @@ function showHome(){
   hidePages();
   $("homePage").classList.remove("hidden");
   $("homeNav").classList.add("active");
+  renderTests(filteredTests.length ? filteredTests : allTests);
 }
 
 function showTopics(){
