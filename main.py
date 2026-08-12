@@ -339,7 +339,7 @@ button{cursor:pointer}
   padding:13px 18px;
   display:flex;
   align-items:center;
-  gap:20px;
+  justify-content:space-between;
   box-shadow:var(--shadow);
   position:sticky;
   top:10px;
@@ -354,7 +354,7 @@ button{cursor:pointer}
 }
 .brand h1{margin:0;font-size:16px;line-height:1.1}
 .brand p{margin:3px 0 0;font-size:10px;color:var(--muted);letter-spacing:.5px}
-.nav{display:flex;align-items:center;gap:10px;flex:1}
+.nav{display:flex;align-items:center;gap:10px}
 .navBtn{
   border:1px solid var(--line);background:var(--panel);color:var(--text);
   padding:8px 14px;border-radius:14px;font-size:13px;font-weight:700;
@@ -421,12 +421,42 @@ body.dark .quizMeta{color:#c0bdce}
 .shareBtn:hover{background:var(--soft);color:var(--purple);border-color:#ded3ff}
 .empty{padding:30px;text-align:center;background:var(--panel);border-radius:18px;color:var(--muted)}
 
+/* Top Grid Navigation Cards (Leaderboard & Profile) */
+.topNavGrids{
+  display:grid;
+  grid-template-columns:repeat(2, 1fr);
+  gap:16px;
+  margin-bottom:25px;
+}
+.topNavCard{
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:22px;
+  padding:20px;
+  display:flex;
+  align-items:center;
+  gap:14px;
+  box-shadow:var(--shadow);
+  cursor:pointer;
+  transition:.2s;
+}
+.topNavCard:hover{transform:translateY(-2px);border-color:#7b68e9}
+.topNavIcon{
+  width:48px;height:48px;border-radius:14px;
+  background:var(--soft);color:var(--purple);
+  display:flex;align-items:center;justify-content:center;
+  font-size:22px;flex:0 0 auto;
+}
+.topNavInfo{min-width:0;flex:1}
+.topNavTitle{font-size:15px;font-weight:800;color:var(--text)}
+.topNavSub{font-size:11px;color:var(--muted);margin-top:2px}
+
 /* Topics Grid Layout on Home */
 .topicsGrid{
   display:grid;
   grid-template-columns:repeat(auto-fill, minmax(260px, 1fr));
   gap:16px;
-  margin-bottom:30px;
+  margin-bottom:25px;
 }
 .topicCard{
   background:var(--panel);
@@ -620,7 +650,6 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
 .loading{text-align:center;color:#777;padding:30px}
 
 @media(max-width:800px){
-  .nav{display:none}
   .brand{min-width:0;flex:1}
   .userName{display:none}
 }
@@ -679,7 +708,7 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
         <div><h1>CA Blockbuster</h1><p>CA REVISION</p></div>
       </div>
 
-      <!-- Exactly Two Main Navigation Tabs -->
+      <!-- Exactly Two Navigation Tabs: Home & Profile -->
       <nav class="nav">
         <button class="navBtn active" id="homeNav" type="button">🏠 Home</button>
         <button class="navBtn" id="profileNav" type="button">👤 Profile</button>
@@ -687,6 +716,25 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
     </header>
 
     <main id="homePage" class="page">
+      <!-- Top Grid Navigation Cards: Leaderboard & Profile -->
+      <div class="topNavGrids">
+        <div class="topNavCard" id="bannerLeaderboardCard">
+          <div class="topNavIcon">🏆</div>
+          <div class="topNavInfo">
+            <div class="topNavTitle">Leaderboard</div>
+            <div class="topNavSub">View global rankings</div>
+          </div>
+        </div>
+        <div class="topNavCard" id="bannerProfileCard">
+          <div class="topNavIcon">👤</div>
+          <div class="topNavInfo">
+            <div class="topNavTitle">Profile</div>
+            <div class="topNavSub">Manage account & settings</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- All Topics Listed as Grids -->
       <div class="sectionHeading">📂 Categories</div>
       <div class="topicsGrid">
         <div class="topicCard" onclick="filterByTopic('monthly')">
@@ -782,6 +830,7 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
         </div>
       </div>
 
+      <!-- Daily CA Section at Top with Search Bar & Quizzes List -->
       <div class="sectionHeading">⚡ Daily CA Quizzes</div>
       <div class="topLine">
         <div class="search">
@@ -1482,8 +1531,10 @@ $("googleButton").addEventListener("click",googleLogin);
 
 $("homeNav").addEventListener("click",showHome);
 $("profileNav").addEventListener("click",showProfile);
+$("bannerLeaderboardCard").addEventListener("click",showLeaderboard);
+$("bannerProfileCard").addEventListener("click",showProfile);
 $("profileLeaderboardBtn").addEventListener("click",showLeaderboard);
-$("leaderboardBack").addEventListener("click",showProfile);
+$("leaderboardBack").addEventListener("click",showHome);
 $("quizBack").addEventListener("click",()=>{
   if(confirm("Exit this quiz?")){
     showHome();
@@ -1681,7 +1732,7 @@ def quiz_leaderboard():
         entries.sort(key=lambda item: item["points"], reverse=True)
         return jsonify(entries[:10])
 
-    except Exception as e:
+    exceptException as e:
         print("[Leaderboard error]", e)
         return jsonify({"error": str(e)}), 500
 
