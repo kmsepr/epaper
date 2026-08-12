@@ -354,6 +354,7 @@ button{cursor:pointer}
 }
 .brand h1{margin:0;font-size:16px;line-height:1.1}
 .brand p{margin:3px 0 0;font-size:10px;color:var(--muted);letter-spacing:.5px}
+.headerRight{display:flex;align-items:center;gap:12px}
 .nav{display:flex;align-items:center;gap:10px}
 .navBtn{
   border:1px solid var(--line);background:var(--panel);color:var(--text);
@@ -361,6 +362,22 @@ button{cursor:pointer}
   display:flex;align-items:center;gap:6px;transition:.15s;
 }
 .navBtn:hover,.navBtn.active{background:var(--soft);color:var(--purple);border-color:#ded3ff}
+
+/* Small Profile Chip Icon on Top Bar */
+.userChip{
+  display:flex;align-items:center;gap:8px;
+  background:var(--soft);border:1px solid #ded3ff;
+  border-radius:22px;padding:4px 8px 4px 4px;
+  cursor:pointer;color:var(--text);
+}
+.userChip:hover{filter:brightness(.98)}
+.userAvatar{
+  width:32px;height:32px;border-radius:50%;
+  background:linear-gradient(135deg,#7259e8,#1aa8d6);
+  color:white;display:flex;align-items:center;justify-content:center;
+  font-weight:800;overflow:hidden;font-size:12px;
+}
+.userAvatar img{width:100%;height:100%;object-fit:cover}
 
 .page{padding:28px 6px}
 .topLine{display:flex;align-items:center;justify-content:space-between;gap:15px;margin-bottom:20px}
@@ -488,6 +505,64 @@ body.dark .quizMeta{color:#c0bdce}
   display:flex;
   align-items:center;
   gap:8px;
+}
+
+/* Profile Tab Design */
+.profileScreen{max-width:800px;margin:auto;padding:24px 0}
+.profileCard{
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:24px;
+  padding:30px;
+  box-shadow:var(--shadow);
+  display:flex;
+  flex-direction:column;
+  gap:24px;
+}
+.profileHeaderInfo{
+  display:flex;
+  align-items:center;
+  gap:20px;
+}
+.profileBigAvatar{
+  width:72px;height:72px;border-radius:50%;
+  background:linear-gradient(135deg,#7259e8,#1aa8d6);
+  color:white;display:flex;align-items:center;justify-content:center;
+  font-size:28px;font-weight:900;overflow:hidden;
+}
+.profileBigAvatar img{width:100%;height:100%;object-fit:cover}
+.profileMetaDetails h2{margin:0 0 4px 0;font-size:20px}
+.profileMetaDetails p{margin:0;color:var(--muted);font-size:13px}
+.profileSettingsList{
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+}
+.settingRow{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  background:var(--bg2);
+  padding:16px 20px;
+  border-radius:16px;
+  font-weight:700;
+  font-size:14px;
+}
+.settingRow button{
+  border:0;
+  border-radius:12px;
+  padding:10px 16px;
+  font-weight:800;
+  font-size:13px;
+}
+.themeToggleBtn{
+  background:var(--panel);
+  color:var(--text);
+  border:1px solid var(--line)!important;
+}
+.logoutActionBtn{
+  background:#fff0f2;
+  color:#d84f62;
 }
 
 .visitor{
@@ -649,11 +724,11 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
         <div><h1>CA Blockbuster</h1><p>CA REVISION</p></div>
       </div>
 
-      <!-- Navigation & Profile Icon -->
-      <div class="headerRight" style="display:flex; align-items:center; gap:10px;">
+      <div class="headerRight">
         <nav class="nav">
           <button class="navBtn active" id="homeNav" type="button">🏠 Home</button>
         </nav>
+        <!-- Small Profile Chip Icon on Top Bar -->
         <div class="userChip" id="topProfileChip" title="Go to Profile">
           <div class="userAvatar" id="userAvatar">S</div>
         </div>
@@ -1648,7 +1723,7 @@ def quiz_leaderboard():
         db = get_firestore()
         entries = []
         for doc in db.collection("leaderboard").stream():
-            data = doc.to_dict()
+            data = doc.to_type_dict() if hasattr(doc, 'to_type_dict') else doc.to_dict()
             try:
                 points = int(data.get("points", 0) or 0)
             except (TypeError, ValueError):
@@ -1660,7 +1735,7 @@ def quiz_leaderboard():
                 "stars": data.get("stars", 0),
                 "badgeTitle": data.get("badgeTitle") or "",
                 "avatarEmoji": data.get("avatarEmoji") or "👤",
-                "profilePhotoUri": data.get("profilePhotoUri")or "",
+                "profilePhotoUri": data.get("profilePhotoUri") or "",
                 "state": data.get("state") or data.get("stateName") or "",
                 "testsCompleted": data.get("testsCompleted", 0),
                 "bestStreak": data.get("bestStreak", 0),
