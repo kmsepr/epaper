@@ -361,106 +361,6 @@ button{cursor:pointer}
   display:flex;align-items:center;gap:6px;transition:.15s;
 }
 .navBtn:hover,.navBtn.active{background:var(--soft);color:var(--purple);border-color:#ded3ff}
-.headerRight{display:flex;align-items:center;gap:10px}
-.profileWrap{position:relative;z-index:100}
-.userChip{
-  display:flex;align-items:center;gap:8px;
-  background:var(--soft);border:1px solid #ded3ff;
-  border-radius:22px;padding:5px 10px 5px 5px;
-  cursor:pointer;color:var(--text);
-}
-.userChip:hover{filter:brightness(.98)}
-.profileWrap .userChip{position:relative;z-index:101}
-.profileMenu{
-  position:absolute;right:0;top:52px;width:190px;
-  background:var(--panel);border:1px solid var(--line);
-  border-radius:16px;padding:8px;box-shadow:0 15px 35px rgba(0,0,0,.15);
-  z-index:50;
-}
-.profileMenu button{
-  width:100%;border:0;background:transparent;color:var(--text);
-  padding:11px 12px;border-radius:11px;text-align:left;
-  font-size:13px;font-weight:700;
-}
-.profileMenu button:hover{background:var(--bg2)}
-.profileMenu .menuSignout{color:#d84f62}
-.userAvatar{
-  width:32px;height:32px;border-radius:50%;
-  background:linear-gradient(135deg,#7259e8,#1aa8d6);
-  color:white;display:flex;align-items:center;justify-content:center;
-  font-weight:800;overflow:hidden;
-}
-.userAvatar img{width:100%;height:100%;object-fit:cover}
-.userName{font-size:12px;font-weight:700;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-
-/* Leaderboard Banner Styles */
-.leaderboardBanner{
-  background:linear-gradient(135deg, #6756e8, #7a49ad);
-  color:white;
-  border-radius:20px;
-  padding:16px 20px;
-  margin-top:20px;
-  margin-bottom:20px;
-  box-shadow:var(--shadow);
-  display:flex;
-  flex-direction:column;
-  gap:12px;
-}
-.bannerHeader{
-  display:flex;
-  justify-content:space-between;
-  align-items:center;
-}
-.bannerTitle{
-  font-size:16px;
-  font-weight:800;
-  display:flex;
-  align-items:center;
-  gap:8px;
-}
-.bannerViewAll{
-  background:rgba(255,255,255,0.2);
-  border:0;
-  color:white;
-  padding:6px 12px;
-  border-radius:10px;
-  font-size:12px;
-  font-weight:700;
-  transition:.15s;
-}
-.bannerViewAll:hover{
-  background:rgba(255,255,255,0.3);
-}
-.bannerRows{
-  display:grid;
-  grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));
-  gap:10px;
-}
-.bannerItem{
-  background:rgba(255,255,255,0.12);
-  border-radius:14px;
-  padding:10px 14px;
-  display:flex;
-  align-items:center;
-  gap:10px;
-}
-.bannerRank{
-  font-size:16px;
-  font-weight:900;
-  width:24px;
-  text-align:center;
-}
-.bannerAvatar{
-  width:32px;height:32px;border-radius:50%;
-  background:rgba(255,255,255,0.2);
-  display:flex;align-items:center;justify-content:center;
-  font-weight:800;font-size:12px;overflow:hidden;
-  flex:0 0 auto;
-}
-.bannerAvatar img{width:100%;height:100%;object-fit:cover}
-.bannerInfo{min-width:0;flex:1}
-.bannerName{font-size:13px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.bannerPoints{font-size:11px;opacity:0.9;margin-top:1px}
 
 .page{padding:28px 6px}
 .topLine{display:flex;align-items:center;justify-content:space-between;gap:15px;margin-bottom:20px}
@@ -507,19 +407,26 @@ button{cursor:pointer}
 .quizDesc{color:var(--muted);font-size:14px;margin-top:8px}
 .quizMeta{display:flex;gap:17px;flex-wrap:wrap;margin-top:12px;color:#49445b;font-size:12px;font-weight:700}
 body.dark .quizMeta{color:#c0bdce}
-.quizActions{display:flex;align-items:center;gap:12px}
+.quizActions{display:flex;align-items:center;gap:10px}
 .startBtn{
   border:0;border-radius:20px;padding:11px 17px;
   background:#eee3ff;color:#6332c3;font-weight:800;
 }
 .startBtn:hover{filter:brightness(.96)}
+.shareBtn{
+  border:1px solid var(--line);border-radius:50%;width:42px;height:42px;
+  background:var(--panel);color:var(--text);display:flex;align-items:center;justify-content:center;
+  font-size:16px;transition:.15s;
+}
+.shareBtn:hover{background:var(--soft);color:var(--purple);border-color:#ded3ff}
 .empty{padding:30px;text-align:center;background:var(--panel);border-radius:18px;color:var(--muted)}
 
-/* Topics Grid Layout */
+/* Topics Grid Layout on Home */
 .topicsGrid{
   display:grid;
   grid-template-columns:repeat(auto-fill, minmax(260px, 1fr));
   gap:16px;
+  margin-bottom:30px;
 }
 .topicCard{
   background:var(--panel);
@@ -544,12 +451,80 @@ body.dark .quizMeta{color:#c0bdce}
 .topicCardTitle{font-size:16px;font-weight:800;color:var(--text)}
 .topicCardSub{font-size:12px;color:var(--muted);margin-top:4px}
 
+.sectionHeading{
+  font-size:18px;
+  font-weight:800;
+  color:var(--text);
+  margin:25px 0 15px 0;
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+
+/* Profile Tab Design */
+.profileScreen{max-width:800px;margin:auto;padding:24px 0}
+.profileCard{
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:24px;
+  padding:30px;
+  box-shadow:var(--shadow);
+  display:flex;
+  flex-direction:column;
+  gap:24px;
+}
+.profileHeaderInfo{
+  display:flex;
+  align-items:center;
+  gap:20px;
+}
+.profileBigAvatar{
+  width:72px;height:72px;border-radius:50%;
+  background:linear-gradient(135deg,#7259e8,#1aa8d6);
+  color:white;display:flex;align-items:center;justify-content:center;
+  font-size:28px;font-weight:900;overflow:hidden;
+}
+.profileBigAvatar img{width:100%;height:100%;object-fit:cover}
+.profileMetaDetails h2{margin:0 0 4px 0;font-size:20px}
+.profileMetaDetails p{margin:0;color:var(--muted);font-size:13px}
+.profileSettingsList{
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+}
+.settingRow{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  background:var(--bg2);
+  padding:16px 20px;
+  border-radius:16px;
+  font-weight:700;
+  font-size:14px;
+}
+.settingRow button{
+  border:0;
+  border-radius:12px;
+  padding:10px 16px;
+  font-weight:800;
+  font-size:13px;
+}
+.themeToggleBtn{
+  background:var(--panel);
+  color:var(--text);
+  border:1px solid var(--line)!important;
+}
+.logoutActionBtn{
+  background:#fff0f2;
+  color:#d84f62;
+}
+
 .visitor{
   margin-top:18px;text-align:center;color:var(--muted);font-size:13px;
 }
 .visitor b{color:var(--text)}
 
-.quizScreen,.resultScreen,.leaderboardScreen,.topicsScreen{max-width:1180px;margin:auto;padding:24px 0}
+.quizScreen,.resultScreen,.leaderboardScreen{max-width:1180px;margin:auto;padding:24px 0}
 .backBtn{
   border:0;background:var(--panel);color:var(--text);
   padding:10px 14px;border-radius:13px;border:1px solid var(--line);
@@ -704,62 +679,15 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
         <div><h1>CA Blockbuster</h1><p>CA REVISION</p></div>
       </div>
 
+      <!-- Exactly Two Main Navigation Tabs -->
       <nav class="nav">
-        <button class="navBtn active" id="homeNav" type="button">🏠 Quizzes</button>
-        <button class="navBtn" id="topicsNav" type="button">📂 Topics</button>
-        <button class="navBtn" id="leaderboardNav" type="button">🏆 Leaderboard</button>
+        <button class="navBtn active" id="homeNav" type="button">🏠 Home</button>
+        <button class="navBtn" id="profileNav" type="button">👤 Profile</button>
       </nav>
-
-      <div class="headerRight">
-        <div class="profileWrap">
-          <button class="userChip" id="profileButton" type="button" aria-expanded="false">
-            <div class="userAvatar" id="userAvatar">S</div>
-            <div class="userName" id="userName">Aspirant</div>
-            <span style="font-size:11px">⌄</span>
-          </button>
-          <div class="profileMenu hidden" id="profileMenu">
-            <button id="themeMenuButton" type="button">☼ &nbsp; Dark mode</button>
-            <button id="logoutMenuButton" class="menuSignout" type="button">↪ &nbsp; Sign out</button>
-          </div>
-        </div>
-      </div>
     </header>
 
-    <!-- Top Leaderboard Preview Banner -->
-    <div class="leaderboardBanner">
-      <div class="bannerHeader">
-        <div class="bannerTitle">🏆 Top Global Leaders</div>
-        <button class="bannerViewAll" id="bannerViewAllBtn" type="button">View All →</button>
-      </div>
-      <div class="bannerRows" id="bannerRows">
-        <div style="font-size:12px;opacity:0.8;padding:4px">Loading top leaders...</div>
-      </div>
-    </div>
-
     <main id="homePage" class="page">
-      <div class="topLine">
-        <div class="search">
-          <span>⌕</span>
-          <input id="searchInput" type="search" placeholder="Search quizzes...">
-        </div>
-        <div class="quizCount" id="quizCount">0 quizzes</div>
-      </div>
-
-      <div id="quizList" class="quizList">
-        <div class="loading">Loading quizzes...</div>
-      </div>
-
-      <div class="visitor" id="visitorCount">👥 Today: <b>0</b> visitors</div>
-    </main>
-
-    <section id="topicsPage" class="topicsScreen hidden">
-      <div class="rankHeader">
-        <button class="backBtn" id="topicsBack">← Back</button>
-        <div>
-          <h1>Browse by Topics 📂</h1>
-          <div style="font-size:12px;color:var(--muted)">Explore current affairs by specific categories</div>
-        </div>
-      </div>
+      <div class="sectionHeading">📂 Categories</div>
       <div class="topicsGrid">
         <div class="topicCard" onclick="filterByTopic('monthly')">
           <div class="topicCardIcon">📅</div>
@@ -850,6 +778,48 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
           <div class="topicCardInfo">
             <div class="topicCardTitle">Important Events</div>
             <div class="topicCardSub">Major current updates</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sectionHeading">⚡ Daily CA Quizzes</div>
+      <div class="topLine">
+        <div class="search">
+          <span>⌕</span>
+          <input id="searchInput" type="search" placeholder="Search quizzes...">
+        </div>
+        <div class="quizCount" id="quizCount">0 quizzes</div>
+      </div>
+
+      <div id="quizList" class="quizList">
+        <div class="loading">Loading quizzes...</div>
+      </div>
+
+      <div class="visitor" id="visitorCount">👥 Today: <b>0</b> visitors</div>
+    </main>
+
+    <!-- Profile Tab Screen -->
+    <section id="profilePage" class="profileScreen hidden">
+      <div class="profileCard">
+        <div class="profileHeaderInfo">
+          <div class="profileBigAvatar" id="profileBigAvatar">S</div>
+          <div class="profileMetaDetails">
+            <h2 id="profileNameDisplay">Aspirant</h2>
+            <p id="profileEmailDisplay">aspirant@example.com</p>
+          </div>
+        </div>
+        <div class="profileSettingsList">
+          <div class="settingRow">
+            <span>🏆 Global Leaderboard</span>
+            <button class="navBtn" id="profileLeaderboardBtn" type="button">View Rankings →</button>
+          </div>
+          <div class="settingRow">
+            <span>Appearance (Dark Mode)</span>
+            <button class="settingRowBtn themeToggleBtn" id="profileThemeToggle" type="button">☼ Toggle</button>
+          </div>
+          <div class="settingRow">
+            <span>Account Session</span>
+            <button class="settingRowBtn logoutActionBtn" id="profileLogoutBtn" type="button">Sign Out</button>
           </div>
         </div>
       </div>
@@ -1069,13 +1039,16 @@ function authError(error){
 
 function updateUserUI(user){
   if(!user)return;
-  $("userName").textContent = user.displayName || user.email?.split("@")[0] || "Aspirant";
+  const name = user.displayName || user.email?.split("@")[0] || "Aspirant";
+  const email = user.email || "";
+
+  $("profileNameDisplay").textContent = name;
+  $("profileEmailDisplay").textContent = email;
 
   if(user.photoURL){
-    $("userAvatar").innerHTML='<img src="'+esc(user.photoURL)+'" alt="">';
+    $("profileBigAvatar").innerHTML='<img src="'+esc(user.photoURL)+'" alt="">';
   }else{
-    const name=user.displayName || user.email || "A";
-    $("userAvatar").textContent=name.charAt(0).toUpperCase();
+    $("profileBigAvatar").textContent = name.charAt(0).toUpperCase();
   }
 }
 
@@ -1085,7 +1058,6 @@ function showApp(){
   showHome();
   loadData();
   loadVisitorCount();
-  loadBannerLeaderboard();
   syncFirestoreLeaderboard();
 }
 
@@ -1116,39 +1088,6 @@ async function loadData(){
     renderTests(allTests);
   }catch(error){
     $("quizList").innerHTML='<div class="empty">'+esc(error.message)+'</div>';
-  }
-}
-
-async function loadBannerLeaderboard(){
-  const bannerRows = $("bannerRows");
-  try{
-    const users = await apiGet("/quiz/api/leaderboard");
-    const top = Array.isArray(users) ? users.slice(0, 3) : [];
-    if(!top.length){
-      bannerRows.innerHTML = '<div style="font-size:12px;opacity:0.8;padding:4px">No rankings yet. Be the first!</div>';
-      return;
-    }
-    bannerRows.innerHTML = "";
-    top.forEach((u, i)=>{
-      const rank = i + 1;
-      const medal = rank === 1 ? "🥇" : rank === 2 ? "🥈" : "🥉";
-      const avatar = u.profilePhotoUri
-        ? '<div class="bannerAvatar"><img src="'+esc(u.profilePhotoUri)+'" alt=""></div>'
-        : '<div class="bannerAvatar">'+esc(u.avatarEmoji||"👤")+'</div>';
-
-      const item = document.createElement("div");
-      item.className = "bannerItem";
-      item.innerHTML = 
-        '<div class="bannerRank">'+medal+'</div>'+
-        avatar+
-        '<div class="bannerInfo">'+
-          '<div class="bannerName">'+esc(u.name||"Aspirant")+'</div>'+
-          '<div class="bannerPoints">'+Number(u.points||0)+' pts</div>'+
-        '</div>';
-      bannerRows.appendChild(item);
-    });
-  }catch(e){
-    bannerRows.innerHTML = '<div style="font-size:12px;opacity:0.8;padding:4px">Unable to load top leaders.</div>';
   }
 }
 
@@ -1196,10 +1135,21 @@ function renderTests(tests){
         '</div>'+
       '</div>'+
       '<div class="quizActions">'+
+        '<button class="shareBtn" title="Share Quiz">🔗</button>'+
         '<button class="startBtn">Start →</button>'+
       '</div>';
 
     card.querySelector(".startBtn").addEventListener("click",()=>startQuiz(test));
+    card.querySelector(".shareBtn").addEventListener("click",()=>{
+      const shareText = `Check out this quiz: ${title} - ${description} on CA Blockbuster!`;
+      if(navigator.share){
+        navigator.share({title: title, text: shareText, url: window.location.href}).catch(()=>{});
+      }else{
+        navigator.clipboard.writeText(window.location.href);
+        alert("Quiz link copied to clipboard!");
+      }
+    });
+
     $("quizList").appendChild(card);
   });
 }
@@ -1216,14 +1166,13 @@ $("searchInput").addEventListener("input",()=>{
 
 function hidePages(){
   $("homePage").classList.add("hidden");
-  $("topicsPage").classList.add("hidden");
+  $("profilePage").classList.add("hidden");
   $("quizPage").classList.add("hidden");
   $("resultPage").classList.add("hidden");
   $("leaderboardPage").classList.add("hidden");
   
   $("homeNav").classList.remove("active");
-  $("topicsNav").classList.remove("active");
-  $("leaderboardNav").classList.remove("active");
+  $("profileNav").classList.remove("active");
 }
 
 function showHome(){
@@ -1234,18 +1183,17 @@ function showHome(){
   renderTests(filteredTests.length ? filteredTests : allTests);
 }
 
-function showTopics(){
+function showProfile(){
   clearInterval(timerInterval);
   hidePages();
-  $("topicsPage").classList.remove("hidden");
-  $("topicsNav").classList.add("active");
+  $("profilePage").classList.remove("hidden");
+  $("profileNav").classList.add("active");
 }
 
 function showLeaderboard(){
   clearInterval(timerInterval);
   hidePages();
   $("leaderboardPage").classList.remove("hidden");
-  $("leaderboardNav").classList.add("active");
   loadLeaderboard();
 }
 
@@ -1471,7 +1419,6 @@ function finishQuiz(timeExpired=false){
 
   saveUserStats(userStats);
   syncFirestoreLeaderboard();
-  loadBannerLeaderboard();
 
   const totals = computeUserTotals();
   const starIcons = starsEarned === 3 ? "⭐⭐⭐" : starsEarned === 2 ? "⭐⭐" : starsEarned === 1 ? "⭐" : "❌";
@@ -1534,11 +1481,9 @@ async function loadVisitorCount(){
 $("googleButton").addEventListener("click",googleLogin);
 
 $("homeNav").addEventListener("click",showHome);
-$("topicsNav").addEventListener("click",showTopics);
-$("topicsBack").addEventListener("click",showHome);
-$("leaderboardNav").addEventListener("click",showLeaderboard);
-$("leaderboardBack").addEventListener("click",showHome);
-$("bannerViewAllBtn").addEventListener("click",showLeaderboard);
+$("profileNav").addEventListener("click",showProfile);
+$("profileLeaderboardBtn").addEventListener("click",showLeaderboard);
+$("leaderboardBack").addEventListener("click",showProfile);
 $("quizBack").addEventListener("click",()=>{
   if(confirm("Exit this quiz?")){
     showHome();
@@ -1547,45 +1492,23 @@ $("quizBack").addEventListener("click",()=>{
 $("resultHome").addEventListener("click",showHome);
 $("nextButton").addEventListener("click",nextQuestion);
 
-function updateThemeMenu(){
-  const dark=document.body.classList.contains("dark");
-  $("themeMenuButton").textContent=dark?"☀  Light mode":"☾  Dark mode";
-}
-
-$("profileButton").addEventListener("click",(event)=>{
-  event.stopPropagation();
-  const menu=$("profileMenu");
-  const open=menu.classList.contains("hidden");
-  menu.classList.toggle("hidden");
-  $("profileButton").setAttribute("aria-expanded",open?"true":"false");
-});
-
-document.addEventListener("click",(event)=>{
-  const wrap=document.querySelector(".profileWrap");
-  if(wrap && !wrap.contains(event.target)){
-    $("profileMenu").classList.add("hidden");
-    $("profileButton").setAttribute("aria-expanded","false");
-  }
-});
-
-$("themeMenuButton").addEventListener("click",()=>{
+$("profileThemeToggle").addEventListener("click",()=>{
   document.body.classList.toggle("dark");
   const dark=document.body.classList.contains("dark");
   localStorage.setItem("ca_theme",dark?"dark":"light");
-  updateThemeMenu();
-  $("profileMenu").classList.add("hidden");
-  $("profileButton").setAttribute("aria-expanded","false");
+  $("profileThemeToggle").textContent = dark ? "☀ Toggle" : "☽ Toggle";
 });
 
-$("logoutMenuButton").addEventListener("click",async()=>{
-  $("profileMenu").classList.add("hidden");
+$("profileLogoutBtn").addEventListener("click",async()=>{
   if(firebaseReady)await firebase.auth().signOut();
 });
 
 if(localStorage.getItem("ca_theme")==="dark"){
   document.body.classList.add("dark");
+  $("profileThemeToggle").textContent = "☀ Toggle";
+}else{
+  $("profileThemeToggle").textContent = "☽ Toggle";
 }
-updateThemeMenu();
 </script>
 </body>
 </html>
@@ -1685,7 +1608,6 @@ def quiz_tests():
         for test in tests:
             test["questionCount"] = question_counts.get(test["id"], 0)
 
-        # FIXED CHRONOLOGICAL SORTING (Newest dates/numeric values first)
         def safe_sort_key(t):
             val = t.get("dateMillis")
             try:
