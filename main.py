@@ -392,6 +392,31 @@ button{cursor:pointer}
 .search span{position:absolute;left:15px;top:12px;color:#999;font-size:20px}
 .quizCount{color:var(--muted);font-size:14px;white-space:nowrap}
 
+/* Instructions Card */
+.instructionsCard{
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:22px;
+  padding:20px 22px;
+  margin-bottom:25px;
+  box-shadow:var(--shadow);
+}
+.instructionsCard h3{
+  margin:0 0 10px 0;
+  font-size:16px;
+  color:var(--purple);
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+.instructionsCard ul{
+  margin:0;
+  padding-left:18px;
+  color:var(--muted);
+  font-size:13px;
+  line-height:1.6;
+}
+
 .quizList{display:flex;flex-direction:column;gap:15px}
 .quizCard{
   background:var(--panel);
@@ -752,6 +777,17 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
         </div>
       </div>
 
+      <!-- Instructions to Candidates Card -->
+      <div class="instructionsCard">
+        <h3>📌 Instruction to Candidates</h3>
+        <ul>
+          <li>All questions must be answered completely before submitting the quiz.</li>
+          <li>Quizzes marked as <b>"Preparing"</b> are currently being updated by the admin and will unlock once fully compiled.</li>
+          <li>Scores are calculated based on your best performance per test. Only tests with a <b>"Not started"</b> or <b>"Completed"</b> status contribute toward official rankings.</li>
+          <li>Manage your time carefully using the built-in countdown timer during each session.</li>
+        </ul>
+      </div>
+
       <!-- Daily CA Quizzes Section at Top with Search Bar & Quizzes List -->
       <div class="sectionHeading">⚡ Daily CA Quizzes</div>
       <div class="topLine">
@@ -1040,7 +1076,6 @@ async function syncFirestoreLeaderboard(){
   const user = firebase.auth().currentUser;
   if(!user || !user.email) return;
 
-  // Admin exclusion: sadiqaliepra@gmail.com is excluded from the scoreboard
   if(user.email.toLowerCase() === "sadiqaliepra@gmail.com") return;
 
   const totals = computeUserTotals();
@@ -1780,7 +1815,7 @@ def quiz_questions(test_id):
                 "id": data.get("id") or doc.id,
                 "testId": data.get("testId") or "",
                 "topicId": data.get("topicId") or "",
-                "questionText": data.get("questionText")or "",
+                "questionText": data.get("questionText") or "",
                 "option0": data.get("option0") or "",
                 "option1": data.get("option1") or "",
                 "option2": data.get("option2") or "",
@@ -1802,7 +1837,6 @@ def quiz_leaderboard():
         for doc in db.collection("leaderboard").stream():
             data = doc.to_dict()
             email = str(data.get("email", "")).lower()
-            # Exclude admin from the leaderboard API results completely
             if email == "sadiqaliepra@gmail.com":
                 continue
             try:
