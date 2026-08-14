@@ -1190,7 +1190,7 @@ function renderTests(tests){
     const titleLower = title.toLowerCase();
     const subtitleLower = String(test.subtitle || "").toLowerCase();
     
-    // Check if test is labeled as PYQ or Mock Test (should always open regardless of question count)
+    // Check if test is labeled as PYQ or Mock Test (should always open immediately regardless of question count)
     const isPyqOrMock = titleLower.includes("pyq") || subtitleLower.includes("pyq") || 
                        titleLower.includes("mock") || subtitleLower.includes("mock") || 
                        topicId.includes("pyq") || topicId.includes("mock");
@@ -1198,7 +1198,7 @@ function renderTests(tests){
     const isMonthly = topicId.includes("monthly") || titleLower.includes("monthly");
     const requiredThreshold = isMonthly ? 20 : 10;
     
-    // If it's PYQ or Mock, it's never restricted ("always open")
+    // If it's a PYQ or Mock test, it is ALWAYS open for practice. Otherwise, check threshold.
     const isPreparing = !isPyqOrMock && (questions < requiredThreshold);
     const isCompleted = attemptedTestIds.has(test.id);
     
@@ -1602,7 +1602,7 @@ async function loadVisitorCount(){
     const key="ca_blockbuster_visited_"+new Date().toISOString().slice(0,10);
 
     if(!localStorage.getItem(key)){
-      const response=await fetch("/quiz/api/visit",{
+    const response=await fetch("/quiz/api/visit",{
         method:"POST",
         headers:{"Accept":"application/json"}
       });
@@ -1781,7 +1781,7 @@ def quiz_questions(test_id):
                 "topicId": data.get("topicId") or "",
                 "questionText": data.get("questionText") or "",
                 "option0": data.get("option0") or "",
-                "option1": data.get("option1=","") if "option1=" in data else data.get("option1", ""),
+                "option1": data.get("option1") or "",
                 "option2": data.get("option2") or "",
                 "option3": data.get("option3") or "",
                 "correctOptionIndex": data.get("correctOptionIndex", 0),
@@ -1820,7 +1820,7 @@ def quiz_leaderboard():
         entries.sort(key=lambda item: item["points"], reverse=True)
         return jsonify(entries[:10])
 
-    exceptException as e:
+    except Exception as e:
         print("[Leaderboard error]", e)
         return jsonify({"error": str(e)}), 500
 
@@ -1829,7 +1829,7 @@ def quiz_leaderboard():
 # ============================================================
 
 if __name__ == "__main__":
-    print("[Startup] CA Blockbuster server starting요...")
+    print("[Startup] CA Blockbuster server starting...")
     print("[Startup] Firestore configured:", bool(os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON")))
     threading.Thread(target=telegram_updater, daemon=True).start()
     threading.Thread(target=audio_updater, daemon=True).start()
