@@ -269,10 +269,12 @@ h1{color:white;font-size:28px;margin-bottom:20px}
 """
 
 # ============================================================
-# QUIZ PAGE - ATTRACTIVE UI
+# QUIZ ROUTES & APP
 # ============================================================
+
 @app.route("/quiz")
-def quiz_app():
+@app.route("/quiz/<path:test_id>")
+def quiz_app(test_id=None):
     firebase_web_config = {
         "apiKey": os.environ.get("FIREBASE_WEB_API_KEY", ""),
         "authDomain": os.environ.get("FIREBASE_WEB_AUTH_DOMAIN", ""),
@@ -1141,8 +1143,22 @@ async function loadData(){
     allTests=await apiGet("/quiz/api/tests");
     if(!Array.isArray(allTests))throw new Error("Invalid test data.");
     renderTests(allTests);
+    checkDirectQuizRoute();
   }catch(error){
     $("quizList").innerHTML='<div class="empty">'+esc(error.message)+'</div>';
+  }
+}
+
+function checkDirectQuizRoute(){
+  const path = window.location.pathname;
+  if(path.startsWith("/quiz/") && path.length > 6){
+    const testIdFromUrl = decodeURIComponent(path.replace("/quiz/", ""));
+    if(testIdFromUrl && allTests.length > 0){
+      const match = allTests.find(t => t.id === testIdFromUrl);
+      if(match){
+        startQuiz(match);
+      }
+    }
   }
 }
 
@@ -1170,6 +1186,7 @@ function renderTests(tests){
     const duration=Number(test.durationMinutes||0);
     const difficulty=test.difficulty || "Practice";
     
+    const quizUrl = window.location.origin + "/quiz/" + encodeURIComponent(test.id);
     const isCompleted = attemptedTestIds.has(test.id);
     const statusBadgeHtml = isCompleted 
       ? '<span class="statusPill completed">Completed ✓</span>' 
@@ -1179,7 +1196,7 @@ function renderTests(tests){
       '<div class="quizNumber">'+number+'</div>'+
       '<div class="quizMain">'+
         '<div class="quizTitleLine">'+
-          '<div class="quizTitle">'+esc(title)+'</div>'+
+          '<div class="quizTitle"><a href="/quiz/'+encodeURIComponent(test.id)+'" style="color:inherit;text-decoration:none;">'+esc(title)+'</a></div>'+
           statusBadgeHtml+
         '</div>'+
         '<div class="quizDesc">'+esc(description)+'</div>'+
@@ -1198,10 +1215,10 @@ function renderTests(tests){
     card.querySelector(".shareBtn").addEventListener("click",()=>{
       const shareText = `Check out this quiz: ${title} - ${description} on CA Blockbuster!`;
       if(navigator.share){
-        navigator.share({title: title, text: shareText, url: window.location.href}).catch(()=>{});
+        navigator.share({title: title, text: shareText, url: quizUrl}).catch(()=>{});
       }else{
-        navigator.clipboard.writeText(window.location.href);
-        alert("Quiz link copied to clipboard!");
+        navigator.clipboard.writeText(quizUrl);
+        alert("Unique quiz link copied to clipboard!");
       }
     });
 
@@ -1304,6 +1321,7 @@ async function loadLeaderboard(){
 
 async function startQuiz(test){
   selectedTest=test;
+  window.history.pushState({}, "", "/quiz/" + encodeURIComponent(test.id));
   hidePages();
   $("quizPage").classList.remove("hidden");
   $("testTitle").textContent=test.title||test.id;
@@ -1457,12 +1475,10 @@ function finishQuiz(timeExpired=false){
   const userStats = loadUserStats();
   const testId = selectedTest ? (selectedTest.id || "default") : "default";
 
-  // Enforce first attempt scoring check
   const existingAttempt = userStats.attempts.find(a => a.testId === testId);
   const isFirstAttempt = !existingAttempt;
 
   if(isFirstAttempt){
-    // Record only the initial attempt timestamp and score
     userStats.attempts.push({
       testId,
       correctCount,
@@ -1545,10 +1561,14 @@ $("profileLeaderboardBtn").addEventListener("click",showLeaderboard);
 $("leaderboardBack").addEventListener("click",showHome);
 $("quizBack").addEventListener("click",()=>{
   if(confirm("Exit this quiz?")){
+    window.history.pushState({}, "", "/quiz");
     showHome();
   }
 });
-$("resultHome").addEventListener("click",showHome);
+$("resultHome").addEventListener("click",()=>{
+  window.history.pushState({}, "", "/quiz");
+  showHome();
+});
 $("nextButton").addEventListener("click",nextQuestion);
 
 $("profileThemeToggle").addEventListener("click",()=>{
