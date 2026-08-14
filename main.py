@@ -269,12 +269,10 @@ h1{color:white;font-size:28px;margin-bottom:20px}
 """
 
 # ============================================================
-# QUIZ ROUTES & APP
+# QUIZ PAGE - ATTRACTIVE UI
 # ============================================================
-
 @app.route("/quiz")
-@app.route("/quiz/<path:test_id>")
-def quiz_app(test_id=None):
+def quiz_app():
     firebase_web_config = {
         "apiKey": os.environ.get("FIREBASE_WEB_API_KEY", ""),
         "authDomain": os.environ.get("FIREBASE_WEB_AUTH_DOMAIN", ""),
@@ -365,6 +363,7 @@ button{cursor:pointer}
 }
 .navBtn:hover,.navBtn.active{background:var(--soft);color:var(--purple);border-color:#ded3ff}
 
+/* Small Profile Chip Icon on Top Bar */
 .userChip{
   display:flex;align-items:center;gap:8px;
   background:var(--soft);border:1px solid #ded3ff;
@@ -422,6 +421,9 @@ button{cursor:pointer}
 .statusPill.completed{
   background:#e7f8ed;color:#145c31;
 }
+.statusPill.comingsoon{
+  background:#fff3cd;color:#856404;
+}
 .quizDesc{color:var(--muted);font-size:14px;margin-top:8px}
 .quizMeta{display:flex;gap:17px;flex-wrap:wrap;margin-top:12px;color:#49445b;font-size:12px;font-weight:700}
 body.dark .quizMeta{color:#c0bdce}
@@ -431,6 +433,9 @@ body.dark .quizMeta{color:#c0bdce}
   background:#eee3ff;color:#6332c3;font-weight:800;
 }
 .startBtn:hover{filter:brightness(.96)}
+.startBtn.disabled{
+  background:#e2dfed;color:#9e9ab8;cursor:not-allowed;
+}
 .shareBtn{
   border:1px solid var(--line);border-radius:50%;width:42px;height:42px;
   background:var(--panel);color:var(--text);display:flex;align-items:center;justify-content:center;
@@ -439,6 +444,7 @@ body.dark .quizMeta{color:#c0bdce}
 .shareBtn:hover{background:var(--soft);color:var(--purple);border-color:#ded3ff}
 .empty{padding:30px;text-align:center;background:var(--panel);border-radius:18px;color:var(--muted)}
 
+/* Top Quick Navigation Card (Leaderboard Only) */
 .topNavGrids{
   display:flex;
   margin-bottom:25px;
@@ -467,6 +473,7 @@ body.dark .quizMeta{color:#c0bdce}
 .topNavTitle{font-size:15px;font-weight:800;color:var(--text)}
 .topNavSub{font-size:11px;color:var(--muted);margin-top:2px}
 
+/* Topics Grid Layout on Home */
 .topicsGrid{
   display:grid;
   grid-template-columns:repeat(auto-fill, minmax(260px, 1fr));
@@ -506,6 +513,7 @@ body.dark .quizMeta{color:#c0bdce}
   gap:8px;
 }
 
+/* Profile Tab Design */
 .profileScreen{max-width:800px;margin:auto;padding:24px 0}
 .profileCard{
   background:var(--panel);
@@ -733,6 +741,7 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
     </header>
 
     <main id="homePage" class="page">
+      <!-- Leaderboard Quick Navigation Card -->
       <div class="topNavGrids">
         <div class="topNavCard" id="bannerLeaderboardCard">
           <div class="topNavIcon">🏆</div>
@@ -743,6 +752,7 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
         </div>
       </div>
 
+      <!-- Daily CA Quizzes Section at Top with Search Bar & Quizzes List -->
       <div class="sectionHeading">⚡ Daily CA Quizzes</div>
       <div class="topLine">
         <div class="search">
@@ -756,6 +766,7 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
         <div class="loading">Loading quizzes...</div>
       </div>
 
+      <!-- Categories / Topics Grid Listed -->
       <div class="sectionHeading">📂 Categories</div>
       <div class="topicsGrid">
         <div class="topicCard" onclick="filterByTopic('monthly')">
@@ -854,6 +865,7 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
       <div class="visitor" id="visitorCount">👥 Today: <b>0</b> visitors</div>
     </main>
 
+    <!-- Profile Tab Screen -->
     <section id="profilePage" class="profileScreen hidden">
       <div class="profileCard">
         <div class="profileHeaderInfo">
@@ -955,7 +967,6 @@ let currentQuestion = 0;
 let score = 0;
 let correctCount = 0;
 let wrongCount = 0;
-let unansweredCount = 0;
 let questionResults = [];
 let answered = false;
 let timerSeconds = 0;
@@ -972,7 +983,7 @@ function loadUserStats(){
     const raw = localStorage.getItem(getUserStorageKey());
     if(raw) return JSON.parse(raw);
   }catch(e){}
-  return { attempts: [], bestStars: {} };
+  return { attempts: [], bestStars: {}, bestScores: {} };
 }
 
 function saveUserStats(stats){
@@ -987,11 +998,15 @@ function computeUserTotals(){
 
   let totalCorrect = 0;
   let totalAccuracySum = 0;
+  let countAttempts = 0;
 
-  stats.attempts.forEach(att => {
-    totalCorrect += Number(att.correctCount || 0);
-    totalAccuracySum += Number(att.accuracyPct || 0);
-  });
+  if(stats.bestScores){
+    Object.values(stats.bestScores).forEach(best => {
+      totalCorrect += Number(best.correctCount || 0);
+      totalAccuracySum += Number(best.accuracyPct || 0);
+      countAttempts++;
+    });
+  }
 
   let totalStars = 0;
   Object.values(stats.bestStars || {}).forEach(s => {
@@ -1000,8 +1015,8 @@ function computeUserTotals(){
 
   const totalPoints = BASE_POINTS + (totalCorrect * 10) + (totalStars * 40);
 
-  const overallAccuracy = stats.attempts.length > 0
-    ? totalAccuracySum / stats.attempts.length
+  const overallAccuracy = countAttempts > 0
+    ? totalAccuracySum / countAttempts
     : 75;
 
   let badgeTitle = "🎯 Rising Scholar";
@@ -1016,7 +1031,7 @@ function computeUserTotals(){
     totalStars,
     overallAccuracy: Math.round(overallAccuracy),
     badgeTitle,
-    testsCompleted: stats.attempts.length
+    testsCompleted: countAttempts
   };
 }
 
@@ -1143,22 +1158,8 @@ async function loadData(){
     allTests=await apiGet("/quiz/api/tests");
     if(!Array.isArray(allTests))throw new Error("Invalid test data.");
     renderTests(allTests);
-    checkDirectQuizRoute();
   }catch(error){
     $("quizList").innerHTML='<div class="empty">'+esc(error.message)+'</div>';
-  }
-}
-
-function checkDirectQuizRoute(){
-  const path = window.location.pathname;
-  if(path.startsWith("/quiz/") && path.length > 6){
-    const testIdFromUrl = decodeURIComponent(path.replace("/quiz/", ""));
-    if(testIdFromUrl && allTests.length > 0){
-      const match = allTests.find(t => t.id === testIdFromUrl);
-      if(match){
-        startQuiz(match);
-      }
-    }
   }
 }
 
@@ -1172,7 +1173,7 @@ function renderTests(tests){
   }
 
   const userStats = loadUserStats();
-  const attemptedTestIds = new Set(userStats.attempts.map(a => a.testId));
+  const attemptedTestIds = new Set(Object.keys(userStats.bestScores || {}));
 
   $("quizList").innerHTML="";
   tests.forEach((test,index)=>{
@@ -1185,40 +1186,57 @@ function renderTests(tests){
     const questions=Number(test.questionCount||0);
     const duration=Number(test.durationMinutes||0);
     const difficulty=test.difficulty || "Practice";
+    const topicId=String(test.topicId || "").toLowerCase();
     
-    const quizUrl = window.location.origin + "/quiz/" + encodeURIComponent(test.id);
+    // Determine required question threshold: Monthly = 20, Daily = 10 (fallback to 10 if not specified)
+    const isMonthly = topicId.includes("monthly") || title.toLowerCase().includes("monthly");
+    const requiredThreshold = isMonthly ? 20 : 10;
+    
+    const isPreparing = questions < requiredThreshold;
     const isCompleted = attemptedTestIds.has(test.id);
-    const statusBadgeHtml = isCompleted 
-      ? '<span class="statusPill completed">Completed ✓</span>' 
-      : '<span class="statusPill">Not started</span>';
+    
+    let statusBadgeHtml = '<span class="statusPill">Not started</span>';
+    if(isPreparing){
+      statusBadgeHtml = `<span class="statusPill comingsoon">Preparing (${questions}/${requiredThreshold} qns)</span>`;
+    }else if(isCompleted){
+      statusBadgeHtml = '<span class="statusPill completed">Completed ✓</span>';
+    }
 
     card.innerHTML=
       '<div class="quizNumber">'+number+'</div>'+
       '<div class="quizMain">'+
         '<div class="quizTitleLine">'+
-          '<div class="quizTitle"><a href="/quiz/'+encodeURIComponent(test.id)+'" style="color:inherit;text-decoration:none;">'+esc(title)+'</a></div>'+
+          '<div class="quizTitle">'+esc(title)+'</div>'+
           statusBadgeHtml+
         '</div>'+
         '<div class="quizDesc">'+esc(description)+'</div>'+
         '<div class="quizMeta">'+
-          '<span>❓ '+questions+' questions</span>'+
+          '<span>❓ '+questions+' / '+requiredThreshold+' questions</span>'+
           '<span>👥 '+esc(difficulty)+'</span>'+
           (duration ? '<span>⏱ '+duration+' min</span>' : '')+
         '</div>'+
       '</div>'+
       '<div class="quizActions">'+
         '<button class="shareBtn" title="Share Quiz">🔗</button>'+
-        '<button class="startBtn">Start →</button>'+
+        '<button class="startBtn '+(isPreparing ? 'disabled' : '')+'">'+(isPreparing ? 'Soon' : 'Start →')+'</button>'+
       '</div>';
 
-    card.querySelector(".startBtn").addEventListener("click",()=>startQuiz(test));
+    const startBtn = card.querySelector(".startBtn");
+    if(isPreparing){
+      startBtn.addEventListener("click",()=>{
+        alert(`This quiz is currently being compiled (${questions} of ${requiredThreshold} questions added). Please check back when complete!`);
+      });
+    }else{
+      startBtn.addEventListener("click",()=>startQuiz(test));
+    }
+
     card.querySelector(".shareBtn").addEventListener("click",()=>{
       const shareText = `Check out this quiz: ${title} - ${description} on CA Blockbuster!`;
       if(navigator.share){
-        navigator.share({title: title, text: shareText, url: quizUrl}).catch(()=>{});
+        navigator.share({title: title, text: shareText, url: window.location.href}).catch(()=>{});
       }else{
-        navigator.clipboard.writeText(quizUrl);
-        alert("Unique quiz link copied to clipboard!");
+        navigator.clipboard.writeText(window.location.href);
+        alert("Quiz link copied to clipboard!");
       }
     });
 
@@ -1321,7 +1339,6 @@ async function loadLeaderboard(){
 
 async function startQuiz(test){
   selectedTest=test;
-  window.history.pushState({}, "", "/quiz/" + encodeURIComponent(test.id));
   hidePages();
   $("quizPage").classList.remove("hidden");
   $("testTitle").textContent=test.title||test.id;
@@ -1337,8 +1354,7 @@ async function startQuiz(test){
     score=0;
     correctCount=0;
     wrongCount=0;
-    unansweredCount=0;
-    questionResults=[];
+    questionResults=new Array(currentQuestions.length).fill(null);
     answered=false;
 
     startTimer(Number(test.durationMinutes)||0);
@@ -1353,10 +1369,19 @@ function displayQuestion(){
   const q=currentQuestions[currentQuestion];
   if(!q){finishQuiz();return;}
 
-  answered=false;
+  answered = questionResults[currentQuestion] !== undefined && questionResults[currentQuestion] !== null;
+  
   $("questionNumber").textContent="Question "+(currentQuestion+1)+" / "+currentQuestions.length;
   $("questionText").textContent=q.questionText||"";
-  $("explanationCard").classList.add("hidden");
+  
+  if(answered && questionResults[currentQuestion]){
+    $("explanation").textContent=q.explanation || "";
+    if(q.explanation) $("explanationCard").classList.remove("hidden");
+    else $("explanationCard").classList.add("hidden");
+  } else {
+    $("explanationCard").classList.add("hidden");
+  }
+
   $("nextButton").textContent=currentQuestion===currentQuestions.length-1?"Finish ✓":"Next →";
 
   const options=$("options");
@@ -1364,6 +1389,13 @@ function displayQuestion(){
   [q.option0||"",q.option1||"",q.option2||"",q.option3||""].forEach((option,index)=>{
     const div=document.createElement("div");
     div.className="option";
+    
+    if(answered && questionResults[currentQuestion]){
+      const res = questionResults[currentQuestion];
+      if(index === res.correct) div.classList.add("correct");
+      else if(index === res.selected && !res.isCorrect) div.classList.add("wrong");
+    }
+
     div.textContent=option;
     div.addEventListener("click",()=>selectAnswer(index,div));
     options.appendChild(div);
@@ -1381,7 +1413,6 @@ function selectAnswer(index,element){
 
   if(isCorrect){
     element.classList.add("correct");
-    score++;
     correctCount++;
   }else{
     element.classList.add("wrong");
@@ -1406,8 +1437,24 @@ function selectAnswer(index,element){
 }
 
 function nextQuestion(){
-  if(!answered)return;
-  if(currentQuestion>=currentQuestions.length-1){finishQuiz();return;}
+  const q=currentQuestions[currentQuestion];
+  if(!answered && (!questionResults[currentQuestion])) {
+    alert("Please select an answer before proceeding.");
+    return;
+  }
+
+  if(currentQuestion>=currentQuestions.length-1){
+    const totalQ = currentQuestions.length;
+    const answeredQ = questionResults.filter(r => r !== null && r !== undefined).length;
+    
+    if(answeredQ < totalQ){
+      alert("You must answer all " + totalQ + " questions before finishing the test! You have answered " + answeredQ + " so far.");
+      return;
+    }
+    
+    finishQuiz();
+    return;
+  }
   currentQuestion++;
   displayQuestion();
 }
@@ -1446,19 +1493,27 @@ function finishQuiz(timeExpired=false){
   const total=currentQuestions.length;
   if(!total)return;
 
-  if(currentQuestion<total&&!answered){
-    unansweredCount++;
-    const q=currentQuestions[currentQuestion];
-    questionResults[currentQuestion]={
-      question:q.questionText||"",
-      selected:null,
-      correct:Number(q.correctOptionIndex),
-      isCorrect:false,
-      unanswered:true,
-      explanation:q.explanation||"",
-      selectedText:"Not answered",
-      correctText:[q.option0,q.option1,q.option2,q.option3][Number(q.correctOptionIndex)]||""
-    };
+  const answeredQ = questionResults.filter(r => r !== null && r !== undefined).length;
+  if(answeredQ < total && !timeExpired) {
+    alert("Cannot submit incomplete test. Please complete all questions.");
+    return;
+  }
+
+  for(let i=0; i<total; i++){
+    if(!questionResults[i]){
+      const q = currentQuestions[i];
+      questionResults[i] = {
+        question: q.questionText || "",
+        selected: null,
+        correct: Number(q.correctOptionIndex),
+        isCorrect: false,
+        unanswered: true,
+        explanation: q.explanation || "",
+        selectedText: "Not answered",
+        correctText: [q.option0, q.option1, q.option2, q.option3][Number(q.correctOptionIndex)] || ""
+      };
+      wrongCount++;
+    }
   }
 
   const accuracyPct = (correctCount / total) * 100;
@@ -1475,18 +1530,21 @@ function finishQuiz(timeExpired=false){
   const userStats = loadUserStats();
   const testId = selectedTest ? (selectedTest.id || "default") : "default";
 
-  const existingAttempt = userStats.attempts.find(a => a.testId === testId);
-  const isFirstAttempt = !existingAttempt;
+  const existingBest = userStats.bestScores[testId];
+  const currentAttemptScore = correctCount;
 
-  if(isFirstAttempt){
-    userStats.attempts.push({
-      testId,
+  if(!existingBest || currentAttemptScore >= (existingBest.correctCount || 0)){
+    userStats.bestScores[testId] = {
       correctCount,
       totalQuestions: total,
       accuracyPct,
       starsEarned,
       timestamp: Date.now()
-    });
+    };
+  }
+
+  const previousBestStars = userStats.bestStars[testId] || 0;
+  if(starsEarned > previousBestStars){
     userStats.bestStars[testId] = starsEarned;
   }
 
@@ -1506,7 +1564,6 @@ function finishQuiz(timeExpired=false){
   $("performanceText").innerHTML =
     "<b>" + Math.round(accuracyPct) + "% accuracy</b> • " +
     (timeExpired ? "Time limit reached" : "Completed") +
-    (!isFirstAttempt ? "<br><span style='color:#e45769;font-size:12px;'>Note: Re-attempts are for practice; your initial attempt score is locked.</span>" : "") +
     "<br><span style='color:var(--purple);font-size:13px;font-weight:800'>Global Score: " + totals.totalPoints + " Points</span>";
 
   renderReview();
@@ -1560,15 +1617,11 @@ $("bannerLeaderboardCard").addEventListener("click",showLeaderboard);
 $("profileLeaderboardBtn").addEventListener("click",showLeaderboard);
 $("leaderboardBack").addEventListener("click",showHome);
 $("quizBack").addEventListener("click",()=>{
-  if(confirm("Exit this quiz?")){
-    window.history.pushState({}, "", "/quiz");
+  if(confirm("Exit this quiz? Your progress will be lost.")){
     showHome();
   }
 });
-$("resultHome").addEventListener("click",()=>{
-  window.history.pushState({}, "", "/quiz");
-  showHome();
-});
+$("resultHome").addEventListener("click",showHome);
 $("nextButton").addEventListener("click",nextQuestion);
 
 $("profileThemeToggle").addEventListener("click",()=>{
@@ -1739,7 +1792,7 @@ def quiz_leaderboard():
         db = get_firestore()
         entries = []
         for doc in db.collection("leaderboard").stream():
-            data = doc.to_type_dict() if hasattr(doc, 'to_type_dict') else doc.to_dict()
+            data = doc.to_dict()
             try:
                 points = int(data.get("points", 0) or 0)
             except (TypeError, ValueError):
