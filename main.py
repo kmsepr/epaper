@@ -1000,8 +1000,9 @@ function computeUserTotals(){
   let totalAccuracySum = 0;
   let countAttempts = 0;
 
+  // Only add scores/points for tests that have been completed (i.e. have a 'Completed' status / bestScore)
   if(stats.bestScores){
-    Object.values(stats.bestScores).forEach(best => {
+    Object.entries(stats.bestScores).forEach(([testId, best]) => {
       totalCorrect += Number(best.correctCount || 0);
       totalAccuracySum += Number(best.accuracyPct || 0);
       countAttempts++;
@@ -1190,7 +1191,7 @@ function renderTests(tests){
     const titleLower = title.toLowerCase();
     const subtitleLower = String(test.subtitle || "").toLowerCase();
     
-    // Check if test is labeled as PYQ or Mock Test (should always open immediately regardless of question count)
+    // PYQ or Mock tests are always open
     const isPyqOrMock = titleLower.includes("pyq") || subtitleLower.includes("pyq") || 
                        titleLower.includes("mock") || subtitleLower.includes("mock") || 
                        topicId.includes("pyq") || topicId.includes("mock");
@@ -1198,7 +1199,6 @@ function renderTests(tests){
     const isMonthly = topicId.includes("monthly") || titleLower.includes("monthly");
     const requiredThreshold = isMonthly ? 20 : 10;
     
-    // If it's a PYQ or Mock test, it is ALWAYS open for practice. Otherwise, check threshold.
     const isPreparing = !isPyqOrMock && (questions < requiredThreshold);
     const isCompleted = attemptedTestIds.has(test.id);
     
@@ -1602,7 +1602,7 @@ async function loadVisitorCount(){
     const key="ca_blockbuster_visited_"+new Date().toISOString().slice(0,10);
 
     if(!localStorage.getItem(key)){
-    const response=await fetch("/quiz/api/visit",{
+      const response=await fetch("/quiz/api/visit",{
         method:"POST",
         headers:{"Accept":"application/json"}
       });
