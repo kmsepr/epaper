@@ -787,9 +787,9 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
         <div class="modalBody">
           <ul>
             <li>All questions must be answered completely before submitting the quiz.</li>
+            <li>Quizzes are timed at <b>30 seconds per question</b> (e.g., 5 minutes for 10 questions, 10 minutes for 20 questions).</li>
             <li>Quizzes marked as <b>"Preparing"</b> are currently being updated by the admin and will unlock once fully compiled.</li>
-            <li>Scores are calculated <b>only from tests with a "Not started" status</b>. Tests marked as <b>"Completed"</b> will not add additional points if re-started or re-attempted.</li>
-            <li>Manage your time carefully using the built-in countdown timer during each session.</li>
+            <li>Scores and points are added <b>only from fresh attempts on uncompleted tests ("Not started")</b>. Once a test is marked as <b>"Completed"</b>, re-attempting it will practice the questions without adding extra points or changing your recorded score.</li>
           </ul>
         </div>
       </div>
@@ -1055,12 +1055,6 @@ function computeUserTotals(){
   let totalAccuracySum = 0;
   let countAttempts = 0;
 
-  // Only add scores/points for tests that were NOT previously completed ("Not started" status at time of scoring / fresh attempt)
-  // i.e., once marked completed, subsequent starts do not add extra score/points.
-  // We check if bestScores has entries, but we ensure we only count each test once (which bestScores already does per testId).
-  // Furthermore, if we want to restrict score accumulation strictly to fresh tests, 
-  // bestScores tracks the single best performance per testId. If a test was already completed, 
-  // we do not increment totalCorrect again on new attempts.
   if(stats.bestScores){
     Object.values(stats.bestScores).forEach(best => {
       totalCorrect += Number(best.correctCount || 0);
@@ -1247,7 +1241,10 @@ function renderTests(tests){
     const title=test.title || test.id || "Quiz";
     const description=test.subtitle || "Self-paced MCQ practice with instant results after you submit.";
     const questions=Number(test.questionCount||0);
-    const duration=Number(test.durationMinutes||0);
+    
+    // Automatically calculate 30 seconds per question (e.g. 10 questions = 5 minutes, 20 questions = 10 minutes)
+    const duration = Math.max(1, Math.ceil((questions * 30) / 60));
+
     const difficulty=test.difficulty || "Practice";
     const topicId=String(test.topicId || "").toLowerCase();
     const titleLower = title.toLowerCase();
@@ -1281,7 +1278,7 @@ function renderTests(tests){
         '<div class="quizMeta">'+
           '<span>❓ '+questions+(isPyqOrMock ? ' questions' : ' / '+requiredThreshold+' questions')+'</span>'+
           '<span>👥 '+esc(difficulty)+'</span>'+
-          (duration ? '<span>⏱ '+duration+' min</span>' : '')+
+          '<span>⏱ '+duration+' min</span>'+
         '</div>'+
       '</div>'+
       '<div class="quizActions">'+
@@ -1425,7 +1422,9 @@ async function startQuiz(test){
     questionResults=new Array(currentQuestions.length).fill(null);
     answered=false;
 
-    startTimer(Number(test.durationMinutes)||0);
+    // Calculate 30 seconds per question dynamically for the timer limit
+    const dynamicMinutes = (currentQuestions.length * 30) / 60;
+    startTimer(dynamicMinutes);
     displayQuestion();
   }catch(error){
     $("questionText").textContent="";
@@ -1598,8 +1597,6 @@ function finishQuiz(timeExpired=false){
   const userStats = loadUserStats();
   const testId = selectedTest ? (selectedTest.id || "default") : "default";
 
-  // STRICT RULE: Only add scores if the test was NOT previously completed (i.e. only add scores for 'not started' tests).
-  // If a bestScore already exists for this testId, it's already completed, so we do NOT update/add points again.
   const alreadyCompleted = userStats.bestScores && userStats.bestScores[testId];
 
   if(!alreadyCompleted){
