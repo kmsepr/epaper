@@ -433,6 +433,9 @@ body.dark .quizMeta{color:#c0bdce}
   background:#eee3ff;color:#6332c3;font-weight:800;
 }
 .startBtn:hover{filter:brightness(.96)}
+.startBtn.disabled{
+  background:#e2dfed;color:#9e9ab8;cursor:not-allowed;
+}
 .shareBtn{
   border:1px solid var(--line);border-radius:50%;width:42px;height:42px;
   background:var(--panel);color:var(--text);display:flex;align-items:center;justify-content:center;
@@ -1185,12 +1188,18 @@ function renderTests(tests){
     const difficulty=test.difficulty || "Practice";
     const topicId=String(test.topicId || "").toLowerCase();
     const titleLower = title.toLowerCase();
+    const subtitleLower = String(test.subtitle || "").toLowerCase();
     
-    // Determine target threshold: Monthly = 20, Daily or PYQ = 10 (or check title/topic)
+    // Check if test is labeled as PYQ or Mock Test (should always open regardless of question count)
+    const isPyqOrMock = titleLower.includes("pyq") || subtitleLower.includes("pyq") || 
+                       titleLower.includes("mock") || subtitleLower.includes("mock") || 
+                       topicId.includes("pyq") || topicId.includes("mock");
+
     const isMonthly = topicId.includes("monthly") || titleLower.includes("monthly");
     const requiredThreshold = isMonthly ? 20 : 10;
     
-    const isPreparing = questions < requiredThreshold;
+    // If it's PYQ or Mock, it's never restricted ("always open")
+    const isPreparing = !isPyqOrMock && (questions < requiredThreshold);
     const isCompleted = attemptedTestIds.has(test.id);
     
     let statusBadgeHtml = '<span class="statusPill">Not started</span>';
@@ -1209,7 +1218,7 @@ function renderTests(tests){
         '</div>'+
         '<div class="quizDesc">'+esc(description)+'</div>'+
         '<div class="quizMeta">'+
-          '<span>❓ '+questions+' / '+requiredThreshold+' questions</span>'+
+          '<span>❓ '+questions+(isPyqOrMock ? ' questions' : ' / '+requiredThreshold+' questions')+'</span>'+
           '<span>👥 '+esc(difficulty)+'</span>'+
           (duration ? '<span>⏱ '+duration+' min</span>' : '')+
         '</div>'+
@@ -1772,7 +1781,7 @@ def quiz_questions(test_id):
                 "topicId": data.get("topicId") or "",
                 "questionText": data.get("questionText") or "",
                 "option0": data.get("option0") or "",
-                "option1": data.get("option1") or "",
+                "option1": data.get("option1=","") if "option1=" in data else data.get("option1", ""),
                 "option2": data.get("option2") or "",
                 "option3": data.get("option3") or "",
                 "correctOptionIndex": data.get("correctOptionIndex", 0),
@@ -1811,7 +1820,7 @@ def quiz_leaderboard():
         entries.sort(key=lambda item: item["points"], reverse=True)
         return jsonify(entries[:10])
 
-    except Exception as e:
+    exceptException as e:
         print("[Leaderboard error]", e)
         return jsonify({"error": str(e)}), 500
 
@@ -1820,7 +1829,7 @@ def quiz_leaderboard():
 # ============================================================
 
 if __name__ == "__main__":
-    print("[Startup] CA Blockbuster server starting...")
+    print("[Startup] CA Blockbuster server starting요...")
     print("[Startup] Firestore configured:", bool(os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON")))
     threading.Thread(target=telegram_updater, daemon=True).start()
     threading.Thread(target=audio_updater, daemon=True).start()
