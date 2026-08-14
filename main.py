@@ -433,9 +433,6 @@ body.dark .quizMeta{color:#c0bdce}
   background:#eee3ff;color:#6332c3;font-weight:800;
 }
 .startBtn:hover{filter:brightness(.96)}
-.startBtn.disabled{
-  background:#e2dfed;color:#9e9ab8;cursor:not-allowed;
-}
 .shareBtn{
   border:1px solid var(--line);border-radius:50%;width:42px;height:42px;
   background:var(--panel);color:var(--text);display:flex;align-items:center;justify-content:center;
@@ -1187,9 +1184,10 @@ function renderTests(tests){
     const duration=Number(test.durationMinutes||0);
     const difficulty=test.difficulty || "Practice";
     const topicId=String(test.topicId || "").toLowerCase();
+    const titleLower = title.toLowerCase();
     
-    // Determine required question threshold: Monthly = 20, Daily = 10 (fallback to 10 if not specified)
-    const isMonthly = topicId.includes("monthly") || title.toLowerCase().includes("monthly");
+    // Determine target threshold: Monthly = 20, Daily or PYQ = 10 (or check title/topic)
+    const isMonthly = topicId.includes("monthly") || titleLower.includes("monthly");
     const requiredThreshold = isMonthly ? 20 : 10;
     
     const isPreparing = questions < requiredThreshold;
