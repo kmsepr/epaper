@@ -363,6 +363,15 @@ button{cursor:pointer}
 }
 .navBtn:hover,.navBtn.active{background:var(--soft);color:var(--purple);border-color:#ded3ff}
 
+/* Info / Instructions Top Bar Icon Button */
+.infoIconBtn{
+  border:1px solid var(--line);background:var(--panel);color:var(--purple);
+  width:38px;height:38px;border-radius:50%;font-size:16px;font-weight:800;
+  display:flex;align-items:center;justify-content:center;cursor:pointer;
+  transition:.15s;box-shadow:var(--shadow);
+}
+.infoIconBtn:hover{background:var(--soft);border-color:#ded3ff}
+
 /* Small Profile Chip Icon on Top Bar */
 .userChip{
   display:flex;align-items:center;gap:8px;
@@ -392,30 +401,32 @@ button{cursor:pointer}
 .search span{position:absolute;left:15px;top:12px;color:#999;font-size:20px}
 .quizCount{color:var(--muted);font-size:14px;white-space:nowrap}
 
-/* Instructions Card */
-.instructionsCard{
-  background:var(--panel);
-  border:1px solid var(--line);
-  border-radius:22px;
-  padding:20px 22px;
-  margin-bottom:25px;
-  box-shadow:var(--shadow);
+/* Instructions Modal Overlay */
+.modalOverlay{
+  position:fixed;top:0;left:0;width:100%;height:100%;
+  background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;
+  z-index:100;padding:20px;backdrop-filter:blur(4px);
 }
-.instructionsCard h3{
-  margin:0 0 10px 0;
-  font-size:16px;
-  color:var(--purple);
-  display:flex;
-  align-items:center;
-  gap:8px;
+.modalBox{
+  background:var(--panel);border:1px solid var(--line);
+  border-radius:24px;padding:24px;max-width:500px;width:100%;
+  box-shadow:0 20px 40px rgba(0,0,0,0.2);animation:modalPopup .2s ease-out;
 }
-.instructionsCard ul{
-  margin:0;
-  padding-left:18px;
-  color:var(--muted);
-  font-size:13px;
-  line-height:1.6;
+@keyframes modalPopup{
+  from{transform:scale(.95);opacity:0}
+  to{transform:scale(1);opacity:1}
 }
+.modalHeader{
+  display:flex;align-items:center;justify-content:between;margin-bottom:14px;
+}
+.modalHeader h3{margin:0;font-size:18px;color:var(--purple);display:flex;align-items:center;gap:8px}
+.modalCloseBtn{
+  background:var(--bg2);border:0;border-radius:50%;width:32px;height:32px;
+  font-weight:800;cursor:pointer;color:var(--text);display:flex;align-items:center;justify-content:center;
+}
+.modalBody{color:var(--muted);font-size:14px;line-height:1.6}
+.modalBody ul{margin:0;padding-left:20px}
+.modalBody li{margin-bottom:8px}
 
 .quizList{display:flex;flex-direction:column;gap:15px}
 .quizCard{
@@ -759,11 +770,30 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
         <nav class="nav">
           <button class="navBtn active" id="homeNav" type="button">🏠 Home</button>
         </nav>
+        <button class="infoIconBtn" id="infoModalBtn" title="Instructions to Candidates">ℹ</button>
         <div class="userChip" id="topProfileChip" title="Go to Profile">
           <div class="userAvatar" id="userAvatar">S</div>
         </div>
       </div>
     </header>
+
+    <!-- Instructions Modal Popup -->
+    <div id="instructionsModal" class="modalOverlay hidden">
+      <div class="modalBox">
+        <div class="modalHeader">
+          <h3>📌 Instruction to Candidates</h3>
+          <button class="modalCloseBtn" id="modalCloseBtn">✕</button>
+        </div>
+        <div class="modalBody">
+          <ul>
+            <li>All questions must be answered completely before submitting the quiz.</li>
+            <li>Quizzes marked as <b>"Preparing"</b> are currently being updated by the admin and will unlock once fully compiled.</li>
+            <li>Scores are calculated <b>only from tests with a "Not started" status</b>. Tests marked as <b>"Completed"</b> will not add additional points if re-started or re-attempted.</li>
+            <li>Manage your time carefully using the built-in countdown timer during each session.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
 
     <main id="homePage" class="page">
       <!-- Leaderboard Quick Navigation Card -->
@@ -775,17 +805,6 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
             <div class="topNavSub">View global rankings</div>
           </div>
         </div>
-      </div>
-
-      <!-- Instructions to Candidates Card -->
-      <div class="instructionsCard">
-        <h3>📌 Instruction to Candidates</h3>
-        <ul>
-          <li>All questions must be answered completely before submitting the quiz.</li>
-          <li>Quizzes marked as <b>"Preparing"</b> are currently being updated by the admin and will unlock once fully compiled.</li>
-          <li>Scores are calculated based on your best performance per test. Only tests with a <b>"Not started"</b> or <b>"Completed"</b> status contribute toward official rankings.</li>
-          <li>Manage your time carefully using the built-in countdown timer during each session.</li>
-        </ul>
       </div>
 
       <!-- Daily CA Quizzes Section at Top with Search Bar & Quizzes List -->
@@ -1036,6 +1055,12 @@ function computeUserTotals(){
   let totalAccuracySum = 0;
   let countAttempts = 0;
 
+  // Only add scores/points for tests that were NOT previously completed ("Not started" status at time of scoring / fresh attempt)
+  // i.e., once marked completed, subsequent starts do not add extra score/points.
+  // We check if bestScores has entries, but we ensure we only count each test once (which bestScores already does per testId).
+  // Furthermore, if we want to restrict score accumulation strictly to fresh tests, 
+  // bestScores tracks the single best performance per testId. If a test was already completed, 
+  // we do not increment totalCorrect again on new attempts.
   if(stats.bestScores){
     Object.values(stats.bestScores).forEach(best => {
       totalCorrect += Number(best.correctCount || 0);
@@ -1552,7 +1577,7 @@ function finishQuiz(timeExpired=false){
         isCorrect: false,
         unanswered: true,
         explanation: q.explanation || "",
-        selectedText: "Not answered",
+        selectedText: "Not started",
         correctText: [q.option0, q.option1, q.option2, q.option3][Number(q.correctOptionIndex)] || ""
       };
       wrongCount++;
@@ -1573,10 +1598,14 @@ function finishQuiz(timeExpired=false){
   const userStats = loadUserStats();
   const testId = selectedTest ? (selectedTest.id || "default") : "default";
 
-  const existingBest = userStats.bestScores[testId];
-  const currentAttemptScore = correctCount;
+  // STRICT RULE: Only add scores if the test was NOT previously completed (i.e. only add scores for 'not started' tests).
+  // If a bestScore already exists for this testId, it's already completed, so we do NOT update/add points again.
+  const alreadyCompleted = userStats.bestScores && userStats.bestScores[testId];
 
-  if(!existingBest || currentAttemptScore >= (existingBest.correctCount || 0)){
+  if(!alreadyCompleted){
+    if(!userStats.bestScores) userStats.bestScores = {};
+    if(!userStats.bestStars) userStats.bestStars = {};
+
     userStats.bestScores[testId] = {
       correctCount,
       totalQuestions: total,
@@ -1584,14 +1613,10 @@ function finishQuiz(timeExpired=false){
       starsEarned,
       timestamp: Date.now()
     };
-  }
-
-  const previousBestStars = userStats.bestStars[testId] || 0;
-  if(starsEarned > previousBestStars){
     userStats.bestStars[testId] = starsEarned;
+    saveUserStats(userStats);
   }
 
-  saveUserStats(userStats);
   syncFirestoreLeaderboard();
 
   const totals = computeUserTotals();
@@ -1606,7 +1631,7 @@ function finishQuiz(timeExpired=false){
 
   $("performanceText").innerHTML =
     "<b>" + Math.round(accuracyPct) + "% accuracy</b> • " +
-    (timeExpired ? "Time limit reached" : "Completed") +
+    (alreadyCompleted ? "Re-attempt (Score locked to initial completion)" : "Completed for the first time") +
     "<br><span style='color:var(--purple);font-size:13px;font-weight:800'>Global Score: " + totals.totalPoints + " Points</span>";
 
   renderReview();
@@ -1651,6 +1676,19 @@ async function loadVisitorCount(){
     console.error("[Visitor Counter]",error);
   }
 }
+
+// Modal Toggle Handlers for Instructions Icon
+$("infoModalBtn").addEventListener("click",()=>{
+  $("instructionsModal").classList.remove("hidden");
+});
+$("modalCloseBtn").addEventListener("click",()=>{
+  $("instructionsModal").classList.add("hidden");
+});
+$("instructionsModal").addEventListener("click",(e)=>{
+  if(e.target === $("instructionsModal")){
+    $("instructionsModal").classList.add("hidden");
+  }
+});
 
 $("googleButton").addEventListener("click",googleLogin);
 
