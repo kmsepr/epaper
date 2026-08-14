@@ -1000,9 +1000,8 @@ function computeUserTotals(){
   let totalAccuracySum = 0;
   let countAttempts = 0;
 
-  // Only add scores/points for tests that have been completed (i.e. have a 'Completed' status / bestScore)
   if(stats.bestScores){
-    Object.entries(stats.bestScores).forEach(([testId, best]) => {
+    Object.values(stats.bestScores).forEach(best => {
       totalCorrect += Number(best.correctCount || 0);
       totalAccuracySum += Number(best.accuracyPct || 0);
       countAttempts++;
@@ -1040,6 +1039,9 @@ async function syncFirestoreLeaderboard(){
   if(!firebaseReady) return;
   const user = firebase.auth().currentUser;
   if(!user || !user.email) return;
+
+  // Admin exclusion: sadiqaliepra@gmail.com is excluded from the scoreboard
+  if(user.email.toLowerCase() === "sadiqaliepra@gmail.com") return;
 
   const totals = computeUserTotals();
 
@@ -1191,7 +1193,6 @@ function renderTests(tests){
     const titleLower = title.toLowerCase();
     const subtitleLower = String(test.subtitle || "").toLowerCase();
     
-    // PYQ or Mock tests are always open
     const isPyqOrMock = titleLower.includes("pyq") || subtitleLower.includes("pyq") || 
                        titleLower.includes("mock") || subtitleLower.includes("mock") || 
                        topicId.includes("pyq") || topicId.includes("mock");
@@ -1779,7 +1780,7 @@ def quiz_questions(test_id):
                 "id": data.get("id") or doc.id,
                 "testId": data.get("testId") or "",
                 "topicId": data.get("topicId") or "",
-                "questionText": data.get("questionText") or "",
+                "questionText": data.get("questionText")or "",
                 "option0": data.get("option0") or "",
                 "option1": data.get("option1") or "",
                 "option2": data.get("option2") or "",
@@ -1800,6 +1801,10 @@ def quiz_leaderboard():
         entries = []
         for doc in db.collection("leaderboard").stream():
             data = doc.to_dict()
+            email = str(data.get("email", "")).lower()
+            # Exclude admin from the leaderboard API results completely
+            if email == "sadiqaliepra@gmail.com":
+                continue
             try:
                 points = int(data.get("points", 0) or 0)
             except (TypeError, ValueError):
