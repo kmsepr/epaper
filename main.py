@@ -363,7 +363,6 @@ button{cursor:pointer}
 }
 .navBtn:hover,.navBtn.active{background:var(--soft);color:var(--purple);border-color:#ded3ff}
 
-/* Small Profile Chip Icon on Top Bar */
 .userChip{
   display:flex;align-items:center;gap:8px;
   background:var(--soft);border:1px solid #ded3ff;
@@ -438,7 +437,6 @@ body.dark .quizMeta{color:#c0bdce}
 .shareBtn:hover{background:var(--soft);color:var(--purple);border-color:#ded3ff}
 .empty{padding:30px;text-align:center;background:var(--panel);border-radius:18px;color:var(--muted)}
 
-/* Top Quick Navigation Card (Leaderboard Only) */
 .topNavGrids{
   display:flex;
   margin-bottom:25px;
@@ -467,7 +465,6 @@ body.dark .quizMeta{color:#c0bdce}
 .topNavTitle{font-size:15px;font-weight:800;color:var(--text)}
 .topNavSub{font-size:11px;color:var(--muted);margin-top:2px}
 
-/* Topics Grid Layout on Home */
 .topicsGrid{
   display:grid;
   grid-template-columns:repeat(auto-fill, minmax(260px, 1fr));
@@ -507,7 +504,6 @@ body.dark .quizMeta{color:#c0bdce}
   gap:8px;
 }
 
-/* Profile Tab Design */
 .profileScreen{max-width:800px;margin:auto;padding:24px 0}
 .profileCard{
   background:var(--panel);
@@ -728,7 +724,6 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
         <nav class="nav">
           <button class="navBtn active" id="homeNav" type="button">🏠 Home</button>
         </nav>
-        <!-- Small Profile Chip Icon on Top Bar -->
         <div class="userChip" id="topProfileChip" title="Go to Profile">
           <div class="userAvatar" id="userAvatar">S</div>
         </div>
@@ -736,7 +731,6 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
     </header>
 
     <main id="homePage" class="page">
-      <!-- Leaderboard Quick Navigation Card -->
       <div class="topNavGrids">
         <div class="topNavCard" id="bannerLeaderboardCard">
           <div class="topNavIcon">🏆</div>
@@ -747,7 +741,6 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
         </div>
       </div>
 
-      <!-- Daily CA Quizzes Section at Top with Search Bar & Quizzes List -->
       <div class="sectionHeading">⚡ Daily CA Quizzes</div>
       <div class="topLine">
         <div class="search">
@@ -761,7 +754,6 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
         <div class="loading">Loading quizzes...</div>
       </div>
 
-      <!-- Categories / Topics Grid Listed -->
       <div class="sectionHeading">📂 Categories</div>
       <div class="topicsGrid">
         <div class="topicCard" onclick="filterByTopic('monthly')">
@@ -860,7 +852,6 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
       <div class="visitor" id="visitorCount">👥 Today: <b>0</b> visitors</div>
     </main>
 
-    <!-- Profile Tab Screen -->
     <section id="profilePage" class="profileScreen hidden">
       <div class="profileCard">
         <div class="profileHeaderInfo">
@@ -1466,16 +1457,20 @@ function finishQuiz(timeExpired=false){
   const userStats = loadUserStats();
   const testId = selectedTest ? (selectedTest.id || "default") : "default";
 
-  userStats.attempts.push({
-    testId,
-    correctCount,
-    totalQuestions: total,
-    accuracyPct,
-    starsEarned
-  });
+  // Enforce first attempt scoring check
+  const existingAttempt = userStats.attempts.find(a => a.testId === testId);
+  const isFirstAttempt = !existingAttempt;
 
-  const previousBest = userStats.bestStars[testId] || 0;
-  if(starsEarned > previousBest){
+  if(isFirstAttempt){
+    // Record only the initial attempt timestamp and score
+    userStats.attempts.push({
+      testId,
+      correctCount,
+      totalQuestions: total,
+      accuracyPct,
+      starsEarned,
+      timestamp: Date.now()
+    });
     userStats.bestStars[testId] = starsEarned;
   }
 
@@ -1495,6 +1490,7 @@ function finishQuiz(timeExpired=false){
   $("performanceText").innerHTML =
     "<b>" + Math.round(accuracyPct) + "% accuracy</b> • " +
     (timeExpired ? "Time limit reached" : "Completed") +
+    (!isFirstAttempt ? "<br><span style='color:#e45769;font-size:12px;'>Note: Re-attempts are for practice; your initial attempt score is locked.</span>" : "") +
     "<br><span style='color:var(--purple);font-size:13px;font-weight:800'>Global Score: " + totals.totalPoints + " Points</span>";
 
   renderReview();
