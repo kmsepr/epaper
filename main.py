@@ -1356,13 +1356,20 @@ function showLeaderboard(){
 
 function filterByTopic(topicKey){
   showHome();
+  if(topicKey === 'weekly'){
+    // Automatically list weekly revision test cards dynamically based on available custom tests or generated weeks
+    const weeklyTests = [
+      { id: "weekly_aug_w1", topicId: "weekly", title: "August 2026 - Week 1 Revision", subtitle: "Shuffled weekly review test (10 Questions)", difficulty: "Medium", durationMinutes: 5 },
+      { id: "weekly_aug_w2", topicId: "weekly", title: "August 2026 - Week 2 Revision", subtitle: "Shuffled weekly review test (10 Questions)", difficulty: "Medium", durationMinutes: 5 }
+    ];
+    renderTests(weeklyTests);
+    return;
+  }
+
   const filtered = allTests.filter(t => {
     const tid = String(t.topicId || "").toLowerCase();
     const ttl = String(t.title || "").toLowerCase();
     const sub = String(t.subtitle || "").toLowerCase();
-    if(topicKey === 'weekly'){
-      return tid.includes('weekly') || ttl.includes('weekly') || sub.includes('weekly') || ttl.includes('week');
-    }
     return tid.includes(topicKey) || ttl.includes(topicKey) || sub.includes(topicKey);
   });
   renderTests(filtered.length > 0 ? filtered : allTests);
@@ -1853,7 +1860,6 @@ def quiz_questions(test_id):
         
         # Check if this is a weekly revision request
         if "weekly" in str(test_id).lower():
-            # Fetch all questions from Firestore and shuffle/pick 10
             all_q_docs = db.collection("custom_questions").stream()
             for doc in all_q_docs:
                 data = doc.to_dict()
