@@ -510,35 +510,37 @@ body.dark .quizMeta{color:#c0bdce}
 .topNavTitle{font-size:15px;font-weight:800;color:var(--text)}
 .topNavSub{font-size:11px;color:var(--muted);margin-top:2px}
 
-/* Topics Grid Layout on Home */
-.topicsGrid{
-  display:grid;
-  grid-template-columns:repeat(auto-fill, minmax(220px, 1fr));
-  gap:14px;
+/* Tabs Navigation Style */
+.tabsContainer{
+  display:flex;
+  gap:8px;
   margin-bottom:25px;
-}
-.topicCard{
   background:var(--panel);
   border:1px solid var(--line);
+  padding:6px;
   border-radius:20px;
-  padding:16px 18px;
-  display:flex;
-  align-items:center;
-  gap:14px;
   box-shadow:var(--shadow);
-  cursor:pointer;
-  transition:.2s;
+  overflow-x:auto;
 }
-.topicCard:hover{transform:translateY(-3px);border-color:#7b68e9}
-.topicCardIcon{
-  width:44px;height:44px;border-radius:14px;
-  background:var(--soft);color:var(--purple);
-  display:flex;align-items:center;justify-content:center;
-  font-size:22px;flex:0 0 auto;
+.tabBtn{
+  flex:1;
+  padding:12px 16px;
+  border:0;
+  background:transparent;
+  color:var(--muted);
+  font-weight:800;
+  font-size:14px;
+  border-radius:14px;
+  transition:.15s;
+  white-space:nowrap;
+  text-align:center;
 }
-.topicCardInfo{min-width:0;flex:1}
-.topicCardTitle{font-size:15px;font-weight:800;color:var(--text)}
-.topicCardSub{font-size:11px;color:var(--muted);margin-top:2px}
+.tabBtn:hover{color:var(--purple);background:var(--bg2)}
+.tabBtn.active{
+  background:linear-gradient(135deg,#6754e7,#15a8d4);
+  color:white;
+  box-shadow:0 4px 15px rgba(103,84,232,0.3);
+}
 
 .sectionHeading{
   font-size:18px;
@@ -808,33 +810,14 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
         </div>
       </div>
 
-      <!-- Topics Banner Section -->
-      <div class="sectionHeading">📂 Topics</div>
-      <div class="topicsGrid">
-        <div class="topicCard" onclick="filterByTopic('daily')">
-          <div class="topicCardIcon">⚡</div>
-          <div class="topicCardInfo">
-            <div class="topicCardTitle">Daily</div>
-            <div class="topicCardSub">Daily CA quizzes</div>
-          </div>
-        </div>
-        <div class="topicCard" onclick="filterByTopic('weekly')">
-          <div class="topicCardIcon">📆</div>
-          <div class="topicCardInfo">
-            <div class="topicCardTitle">Weekly</div>
-            <div class="topicCardSub">Shuffled weekly reviews</div>
-          </div>
-        </div>
-        <div class="topicCard" onclick="filterByTopic('monthly')">
-          <div class="topicCardIcon">📅</div>
-          <div class="topicCardInfo">
-            <div class="topicCardTitle">Monthly</div>
-            <div class="topicCardSub">Monthly wise tests</div>
-          </div>
-        </div>
+      <!-- Tabs Navigation Bar -->
+      <div class="tabsContainer">
+        <button class="tabBtn active" onclick="switchTab('daily')">⚡ Daily</button>
+        <button class="tabBtn" onclick="switchTab('weekly')">📆 Weekly</button>
+        <button class="tabBtn" onclick="switchTab('monthly')">📅 Monthly</button>
       </div>
 
-      <!-- Daily CA Quizzes Section at Top with Search Bar & Quizzes List -->
+      <!-- Quizzes List Header -->
       <div class="sectionHeading" id="quizListHeading">⚡ Daily CA Quizzes</div>
       <div class="topLine">
         <div class="search">
@@ -958,6 +941,7 @@ let answered = false;
 let timerSeconds = 0;
 let elapsedSeconds = 0;
 let timerInterval = null;
+let currentTab = 'daily';
 
 function getUserStorageKey(){
   const user = firebase.auth().currentUser;
@@ -1145,7 +1129,7 @@ async function loadData(){
   try{
     allTests=await apiGet("/quiz/api/tests");
     if(!Array.isArray(allTests))throw new Error("Invalid test data.");
-    renderTests(allTests);
+    switchTab(currentTab);
   }catch(error){
     $("quizList").innerHTML='<div class="empty">'+esc(error.message)+'</div>';
   }
@@ -1156,7 +1140,7 @@ function renderTests(tests){
   $("quizCount").textContent=tests.length+" quizzes";
 
   if(!tests.length){
-    $("quizList").innerHTML='<div class="empty">No quizzes found.</div>';
+    $("quizList").innerHTML='<div class="empty">No quizzes found for this tab.</div>';
     return;
   }
 
@@ -1239,12 +1223,20 @@ function renderTests(tests){
 
 $("searchInput").addEventListener("input",()=>{
   const q=$("searchInput").value.trim().toLowerCase();
-  const filtered=allTests.filter(t=>
+  const filtered=filteredTests.filter(t=>
     String(t.title||"").toLowerCase().includes(q) ||
     String(t.subtitle||"").toLowerCase().includes(q) ||
     String(t.topicId||"").toLowerCase().includes(q)
   );
-  renderTests(filtered);
+  $("quizCount").textContent=filtered.length+" quizzes";
+  if(!filtered.length){
+    $("quizList").innerHTML='<div class="empty">No matching quizzes found.</div>';
+  }else{
+    // Re-render filtered subset temporarily or keep current view
+    let tempContainer = "";
+    // Simplified inline re-render or call renderTests on subset
+    renderTests(filtered);
+  }
 });
 
 function hidePages(){
@@ -1262,7 +1254,7 @@ function showHome(){
   hidePages();
   $("homePage").classList.remove("hidden");
   $("homeNav").classList.add("active");
-  renderTests(filteredTests.length ? filteredTests : allTests);
+  switchTab(currentTab);
 }
 
 function showProfile(){
@@ -1278,30 +1270,36 @@ function showLeaderboard(){
   loadLeaderboard();
 }
 
-function filterByTopic(topicKey){
-  showHome();
-  $("quizListHeading").textContent = "⚡ " + topicKey.charAt(0).toUpperCase() + topicKey.slice(1) + " Quizzes";
+function switchTab(tabKey){
+  currentTab = tabKey;
   
-  if(topicKey === 'weekly'){
+  // Update tab buttons UI active state
+  const buttons = document.querySelectorAll('.tabsContainer .tabBtn');
+  buttons.forEach(btn => btn.classList.remove('active'));
+  
+  if(tabKey === 'daily'){
+    buttons[0].classList.add('active');
+    $("quizListHeading").textContent = "⚡ Daily CA Quizzes";
+    renderTests(allTests.filter(t => !String(t.topicId||"").toLowerCase().includes('weekly') && !String(t.topicId||"").toLowerCase().includes('monthly')));
+  } else if(tabKey === 'weekly'){
+    buttons[1].classList.add('active');
+    $("quizListHeading").textContent = "📆 Weekly Revision Quizzes";
     const weeklyTests = [
       { id: "weekly_aug_w1", topicId: "weekly", title: "August 2026 - Week 1 Revision", subtitle: "Shuffled weekly review test (10 Questions)", difficulty: "Medium", durationMinutes: 5, questionCount: 10 },
       { id: "weekly_aug_w2", topicId: "weekly", title: "August 2026 - Week 2 Revision", subtitle: "Shuffled weekly review test (10 Questions)", difficulty: "Medium", durationMinutes: 5, questionCount: 10 }
     ];
     renderTests(weeklyTests);
-    return;
+  } else if(tabKey === 'monthly'){
+    buttons[2].classList.add('active');
+    $("quizListHeading").textContent = "📅 Monthly Wise Quizzes";
+    const monthlyTests = allTests.filter(t => {
+      const tid = String(t.topicId || "").toLowerCase();
+      const ttl = String(t.title || "").toLowerCase();
+      const sub = String(t.subtitle || "").toLowerCase();
+      return tid.includes('monthly') || ttl.includes('monthly') || sub.includes('monthly');
+    });
+    renderTests(monthlyTests);
   }
-  if(topicKey === 'daily'){
-    renderTests(allTests);
-    return;
-  }
-
-  const filtered = allTests.filter(t => {
-    const tid = String(t.topicId || "").toLowerCase();
-    const ttl = String(t.title || "").toLowerCase();
-    const sub = String(t.subtitle || "").toLowerCase();
-    return tid.includes(topicKey) || ttl.includes(topicKey) || sub.includes(topicKey);
-  });
-  renderTests(filtered.length > 0 ? filtered : allTests);
 }
 
 async function loadLeaderboard(){
