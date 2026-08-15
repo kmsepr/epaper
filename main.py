@@ -417,7 +417,7 @@ button{cursor:pointer}
   to{transform:scale(1);opacity:1}
 }
 .modalHeader{
-  display:flex;align-items:center;justify-content:between;margin-bottom:14px;
+  display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;
 }
 .modalHeader h3{margin:0;font-size:18px;color:var(--purple);display:flex;align-items:center;gap:8px}
 .modalCloseBtn{
@@ -824,6 +824,13 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
       <!-- Categories / Topics Grid Listed -->
       <div class="sectionHeading">📂 Categories</div>
       <div class="topicsGrid">
+        <div class="topicCard" onclick="filterByTopic('weekly')">
+          <div class="topicCardIcon">📆</div>
+          <div class="topicCardInfo">
+            <div class="topicCardTitle">Weekly Revision</div>
+            <div class="topicCardSub">Weekly consolidated tests</div>
+          </div>
+        </div>
         <div class="topicCard" onclick="filterByTopic('monthly')">
           <div class="topicCardIcon">📅</div>
           <div class="topicCardInfo">
@@ -1241,10 +1248,7 @@ function renderTests(tests){
     const title=test.title || test.id || "Quiz";
     const description=test.subtitle || "Self-paced MCQ practice with instant results after you submit.";
     const questions=Number(test.questionCount||0);
-    
-    // Automatically calculate 30 seconds per question (e.g. 10 questions = 5 minutes, 20 questions = 10 minutes)
     const duration = Math.max(1, Math.ceil((questions * 30) / 60));
-
     const difficulty=test.difficulty || "Practice";
     const topicId=String(test.topicId || "").toLowerCase();
     const titleLower = title.toLowerCase();
@@ -1422,7 +1426,6 @@ async function startQuiz(test){
     questionResults=new Array(currentQuestions.length).fill(null);
     answered=false;
 
-    // Calculate 30 seconds per question dynamically for the timer limit
     const dynamicMinutes = (currentQuestions.length * 30) / 60;
     startTimer(dynamicMinutes);
     displayQuestion();
