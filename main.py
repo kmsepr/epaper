@@ -787,9 +787,9 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
         <div class="modalBody">
           <ul>
             <li>All questions must be answered completely before submitting the quiz.</li>
-            <li>Quizzes are timed at <b>30 seconds per question</b> (e.g., 5 minutes for 10 questions, 10 minutes for 20 questions).</li>
+            <li>Quizzes are timed at <b>30 seconds per question</b> (e.g., 5 minutes for 10 questions).</li>
             <li>Quizzes marked as <b>"Preparing"</b> are currently being updated by the admin and will unlock once fully compiled.</li>
-            <li>Scores and points are added <b>only from fresh attempts on uncompleted tests ("Not started")</b>. Once a test is marked as <b>"Completed"</b>, re-attempting it will practice the questions without adding extra points or changing your recorded score.</li>
+            <li>Scores and points are added <b>only from fresh attempts on uncompleted tests ("Not started")</b>. Once marked as <b>"Completed"</b>, re-attempting practices questions without adding extra points.</li>
           </ul>
         </div>
       </div>
@@ -828,7 +828,7 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
           <div class="topicCardIcon">📆</div>
           <div class="topicCardInfo">
             <div class="topicCardTitle">Weekly Revision</div>
-            <div class="topicCardSub">Weekly consolidated tests</div>
+            <div class="topicCardSub">Shuffled 10-question weekly tests</div>
           </div>
         </div>
         <div class="topicCard" onclick="filterByTopic('monthly')">
@@ -1356,11 +1356,15 @@ function showLeaderboard(){
 
 function filterByTopic(topicKey){
   showHome();
-  const filtered = allTests.filter(t => 
-    String(t.topicId || "").toLowerCase().includes(topicKey) ||
-    String(t.title || "").toLowerCase().includes(topicKey) ||
-    String(t.subtitle || "").toLowerCase().includes(topicKey)
-  );
+  const filtered = allTests.filter(t => {
+    const tid = String(t.topicId || "").toLowerCase();
+    const ttl = String(t.title || "").toLowerCase();
+    const sub = String(t.subtitle || "").toLowerCase();
+    if(topicKey === 'weekly'){
+      return tid.includes('weekly') || ttl.includes('weekly') || sub.includes('weekly') || ttl.includes('week');
+    }
+    return tid.includes(topicKey) || ttl.includes(topicKey) || sub.includes(topicKey);
+  });
   renderTests(filtered.length > 0 ? filtered : allTests);
 }
 
@@ -1846,22 +1850,46 @@ def quiz_questions(test_id):
     try:
         db = get_firestore()
         questions = []
-        docs = db.collection("custom_questions").where("testId", "==", test_id).stream()
-        for doc in docs:
-            data = doc.to_dict()
-            questions.append({
-                "id": data.get("id") or doc.id,
-                "testId": data.get("testId") or "",
-                "topicId": data.get("topicId") or "",
-                "questionText": data.get("questionText") or "",
-                "option0": data.get("option0") or "",
-                "option1": data.get("option1") or "",
-                "option2": data.get("option2") or "",
-                "option3": data.get("option3") or "",
-                "correctOptionIndex": data.get("correctOptionIndex", 0),
-                "explanation": data.get("explanation") or "",
-                "hint": data.get("hint") or "",
-            })
+        
+        # Check if this is a weekly revision request
+        if "weekly" in str(test_id).lower():
+            # Fetch all questions from Firestore and shuffle/pick 10
+            all_q_docs = db.collection("custom_questions").stream()
+            for doc in all_q_docs:
+                data = doc.to_dict()
+                questions.append({
+                    "id": data.get("id") or doc.id,
+                    "testId": data.get("testId") or "",
+                    "topicId": data.get("topicId") or "",
+                    "questionText": data.get("questionText") or "",
+                    "option0": data.get("option0") or "",
+                    "option1": data.get("option1") or "",
+                    "option2": data.get("option2") or "",
+                    "option3": data.get("option3") or "",
+                    "correctOptionIndex": data.get("correctOptionIndex", 0),
+                    "explanation": data.get("explanation") or "",
+                    "hint": data.get("hint") or "",
+                })
+            import random
+            random.shuffle(questions)
+            questions = questions[:10]
+        else:
+            docs = db.collection("custom_questions").where("testId", "==", test_id).stream()
+            for doc in docs:
+                data = doc.to_dict()
+                questions.append({
+                    "id": data.get("id") or doc.id,
+                    "testId": data.get("testId") or "",
+                    "topicId": data.get("topicId") or "",
+                    "questionText": data.get("questionText") or "",
+                    "option0": data.get("option0") or "",
+                    "option1": data.get("option1") or "",
+                    "option2": data.get("option2") or "",
+                    "option3": data.get("option3") or "",
+                    "correctOptionIndex": data.get("correctOptionIndex", 0),
+                    "explanation": data.get("explanation") or "",
+                    "hint": data.get("hint") or "",
+                })
         return jsonify(questions)
     except Exception as e:
         print("[Quiz Firestore questions error]", e)
