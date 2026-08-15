@@ -5,6 +5,7 @@ import threading
 import requests
 import re
 import shutil
+import random
 from datetime import datetime
 from flask import Flask, request, jsonify
 from bs4 import BeautifulSoup
@@ -1357,12 +1358,17 @@ function showLeaderboard(){
 function filterByTopic(topicKey){
   showHome();
   if(topicKey === 'weekly'){
-    // Automatically list weekly revision test cards dynamically based on available custom tests or generated weeks
-    const weeklyTests = [
-      { id: "weekly_aug_w1", topicId: "weekly", title: "August 2026 - Week 1 Revision", subtitle: "Shuffled weekly review test (10 Questions)", difficulty: "Medium", durationMinutes: 5 },
-      { id: "weekly_aug_w2", topicId: "weekly", title: "August 2026 - Week 2 Revision", subtitle: "Shuffled weekly review test (10 Questions)", difficulty: "Medium", durationMinutes: 5 }
-    ];
-    renderTests(weeklyTests);
+    // Automatically list weekly revision tests retrieved from Firestore or generated dynamically
+    const weeklyTests = allTests.filter(t => {
+      const tid = String(t.topicId || "").toLowerCase();
+      const ttl = String(t.title || "").toLowerCase();
+      const sub = String(t.subtitle || "").toLowerCase();
+      return tid.includes('weekly') || ttl.includes('weekly') || sub.includes('weekly') || ttl.includes('week');
+    });
+    renderTests(weeklyTests.length > 0 ? weeklyTests : [
+      { id: "weekly_aug_w1", topicId: "weekly", title: "August 2026 - Week 1 Revision", subtitle: "Shuffled weekly review test (10 Questions)", difficulty: "Medium", durationMinutes: 5, questionCount: 10 },
+      { id: "weekly_aug_w2", topicId: "weekly", title: "August 2026 - Week 2 Revision", subtitle: "Shuffled weekly review test (10 Questions)", difficulty: "Medium", durationMinutes: 5, questionCount: 10 }
+    ]);
     return;
   }
 
@@ -1513,7 +1519,7 @@ function selectAnswer(index,element){
 
   if(q.explanation){
     $("explanation").textContent=q.explanation;
-    $("explanationCard").classList.remove("hidden");
+    $("explanationCard").classList.add("hidden") ? null : $("explanationCard").classList.remove("hidden");
   }
 }
 
@@ -1832,6 +1838,22 @@ def quiz_tests():
         for test in tests:
             test["questionCount"] = question_counts.get(test["id"], 0)
 
+        # Ensure weekly revision test cards are always present in the test list
+        weekly_test_ids = ["weekly_aug_w1", "weekly_aug_w2"]
+        for w_id in weekly_test_ids:
+            if not any(t["id"] == w_id for t in tests):
+                w_title = "August 2026 - Week 1 Revision" if "w1" in w_id else "August 2026 - Week 2 Revision"
+                tests.append({
+                    "id": w_id,
+                    "topicId": "weekly",
+                    "title": w_title,
+                    "subtitle": "Shuffled weekly review test (10 Questions)",
+                    "durationMinutes": 5,
+                    "difficulty": "Medium",
+                    "dateMillis": int(time.time() * 1000),
+                    "questionCount": 10
+                })
+
         def safe_sort_key(t):
             val = t.get("dateMillis")
             try:
@@ -1858,7 +1880,6 @@ def quiz_questions(test_id):
         db = get_firestore()
         questions = []
         
-        # Check if this is a weekly revision request
         if "weekly" in str(test_id).lower():
             all_q_docs = db.collection("custom_questions").stream()
             for doc in all_q_docs:
