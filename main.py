@@ -359,8 +359,8 @@ button{cursor:pointer}
 .nav{display:flex;align-items:center;gap:10px}
 .navBtn{
   border:1px solid var(--line);background:var(--panel);color:var(--text);
-  padding:8px 14px;border-radius:14px;font-size:13px;font-weight:700;
-  display:flex;align-items:center;gap:6px;transition:.15s;
+  padding:8px 12px;border-radius:14px;font-size:13px;font-weight:700;
+  display:flex;align-items:center;justify-content:center;transition:.15s;
 }
 .navBtn:hover,.navBtn.active{background:var(--soft);color:var(--purple);border-color:#ded3ff}
 
@@ -484,7 +484,7 @@ body.dark .quizMeta{color:#c0bdce}
 /* Top Quick Navigation Card (Leaderboard Only) */
 .topNavGrids{
   display:flex;
-  margin-bottom:25px;
+  margin-bottom:20px;
 }
 .topNavCard{
   background:var(--panel);
@@ -513,32 +513,32 @@ body.dark .quizMeta{color:#c0bdce}
 /* Topics Grid Layout on Home */
 .topicsGrid{
   display:grid;
-  grid-template-columns:repeat(auto-fill, minmax(260px, 1fr));
-  gap:16px;
+  grid-template-columns:repeat(auto-fill, minmax(220px, 1fr));
+  gap:14px;
   margin-bottom:25px;
 }
 .topicCard{
   background:var(--panel);
   border:1px solid var(--line);
-  border-radius:22px;
-  padding:22px;
+  border-radius:20px;
+  padding:16px 18px;
   display:flex;
   align-items:center;
-  gap:16px;
+  gap:14px;
   box-shadow:var(--shadow);
   cursor:pointer;
   transition:.2s;
 }
 .topicCard:hover{transform:translateY(-3px);border-color:#7b68e9}
 .topicCardIcon{
-  width:54px;height:54px;border-radius:16px;
+  width:44px;height:44px;border-radius:14px;
   background:var(--soft);color:var(--purple);
   display:flex;align-items:center;justify-content:center;
-  font-size:26px;flex:0 0 auto;
+  font-size:22px;flex:0 0 auto;
 }
 .topicCardInfo{min-width:0;flex:1}
-.topicCardTitle{font-size:16px;font-weight:800;color:var(--text)}
-.topicCardSub{font-size:12px;color:var(--muted);margin-top:4px}
+.topicCardTitle{font-size:15px;font-weight:800;color:var(--text)}
+.topicCardSub{font-size:11px;color:var(--muted);margin-top:2px}
 
 .sectionHeading{
   font-size:18px;
@@ -769,7 +769,7 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
 
       <div class="headerRight">
         <nav class="nav">
-          <button class="navBtn active" id="homeNav" type="button">🏠 Home</button>
+          <button class="navBtn active" id="homeNav" type="button" title="Home">🏠</button>
         </nav>
         <button class="infoIconBtn" id="infoModalBtn" title="Instructions to Candidates">ℹ</button>
         <div class="userChip" id="topProfileChip" title="Go to Profile">
@@ -808,8 +808,34 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
         </div>
       </div>
 
+      <!-- Topics Banner Section -->
+      <div class="sectionHeading">📂 Topics</div>
+      <div class="topicsGrid">
+        <div class="topicCard" onclick="filterByTopic('daily')">
+          <div class="topicCardIcon">⚡</div>
+          <div class="topicCardInfo">
+            <div class="topicCardTitle">Daily</div>
+            <div class="topicCardSub">Daily CA quizzes</div>
+          </div>
+        </div>
+        <div class="topicCard" onclick="filterByTopic('weekly')">
+          <div class="topicCardIcon">📆</div>
+          <div class="topicCardInfo">
+            <div class="topicCardTitle">Weekly</div>
+            <div class="topicCardSub">Shuffled weekly reviews</div>
+          </div>
+        </div>
+        <div class="topicCard" onclick="filterByTopic('monthly')">
+          <div class="topicCardIcon">📅</div>
+          <div class="topicCardInfo">
+            <div class="topicCardTitle">Monthly</div>
+            <div class="topicCardSub">Monthly wise tests</div>
+          </div>
+        </div>
+      </div>
+
       <!-- Daily CA Quizzes Section at Top with Search Bar & Quizzes List -->
-      <div class="sectionHeading">⚡ Daily CA Quizzes</div>
+      <div class="sectionHeading" id="quizListHeading">⚡ Daily CA Quizzes</div>
       <div class="topLine">
         <div class="search">
           <span>⌕</span>
@@ -820,109 +846,6 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
 
       <div id="quizList" class="quizList">
         <div class="loading">Loading quizzes...</div>
-      </div>
-
-      <!-- Categories / Topics Grid Listed -->
-      <div class="sectionHeading">📂 Categories</div>
-      <div class="topicsGrid">
-        <div class="topicCard" onclick="filterByTopic('weekly')">
-          <div class="topicCardIcon">📆</div>
-          <div class="topicCardInfo">
-            <div class="topicCardTitle">Weekly Revision</div>
-            <div class="topicCardSub">Shuffled 10-question weekly tests</div>
-          </div>
-        </div>
-        <div class="topicCard" onclick="filterByTopic('monthly')">
-          <div class="topicCardIcon">📅</div>
-          <div class="topicCardInfo">
-            <div class="topicCardTitle">Monthly Wise</div>
-            <div class="topicCardSub">Chronological practice</div>
-          </div>
-        </div>
-        <div class="topicCard" onclick="filterByTopic('sports')">
-          <div class="topicCardIcon">🏅</div>
-          <div class="topicCardInfo">
-            <div class="topicCardTitle">Sports</div>
-            <div class="topicCardSub">Tournaments & medals</div>
-          </div>
-        </div>
-        <div class="topicCard" onclick="filterByTopic('polity')">
-          <div class="topicCardIcon">🏛️</div>
-          <div class="topicCardInfo">
-            <div class="topicCardTitle">Polity</div>
-            <div class="topicCardSub">Governance & bills</div>
-          </div>
-        </div>
-        <div class="topicCard" onclick="filterByTopic('arts')">
-          <div class="topicCardIcon">🎨</div>
-          <div class="topicCardInfo">
-            <div class="topicCardTitle">Arts & Culture</div>
-            <div class="topicCardSub">Heritage & festivals</div>
-          </div>
-        </div>
-        <div class="topicCard" onclick="filterByTopic('science')">
-          <div class="topicCardIcon">🔬</div>
-          <div class="topicCardInfo">
-            <div class="topicCardTitle">Science & Technology</div>
-            <div class="topicCardSub">Inventions & space</div>
-          </div>
-        </div>
-        <div class="topicCard" onclick="filterByTopic('economy')">
-          <div class="topicCardIcon">💰</div>
-          <div class="topicCardInfo">
-            <div class="topicCardTitle">Economy</div>
-            <div class="topicCardSub">Banking & budgets</div>
-          </div>
-        </div>
-        <div class="topicCard" onclick="filterByTopic('international')">
-          <div class="topicCardIcon">🌍</div>
-          <div class="topicCardInfo">
-            <div class="topicCardTitle">International</div>
-            <div class="topicCardSub">Global summits & ties</div>
-          </div>
-        </div>
-        <div class="topicCard" onclick="filterByTopic('environment')">
-          <div class="topicCardIcon">🌱</div>
-          <div class="topicCardInfo">
-            <div class="topicCardTitle">Environment</div>
-            <div class="topicCardSub">Ecology & climate</div>
-          </div>
-        </div>
-        <div class="topicCard" onclick="filterByTopic('awards')">
-          <div class="topicCardIcon">🏆</div>
-          <div class="topicCardInfo">
-            <div class="topicCardTitle">Awards & Honours</div>
-            <div class="topicCardSub">Prizes & recognitions</div>
-          </div>
-        </div>
-        <div class="topicCard" onclick="filterByTopic('education')">
-          <div class="topicCardIcon">📚</div>
-          <div class="topicCardInfo">
-            <div class="topicCardTitle">Education</div>
-            <div class="topicCardSub">Policies & institutions</div>
-          </div>
-        </div>
-        <div class="topicCard" onclick="filterByTopic('appointments')">
-          <div class="topicCardIcon">👤</div>
-          <div class="topicCardInfo">
-            <div class="topicCardTitle">Appointments</div>
-            <div class="topicCardSub">New roles & leaders</div>
-          </div>
-        </div>
-        <div class="topicCard" onclick="filterByTopic('schemes')">
-          <div class="topicCardIcon">🏛️</div>
-          <div class="topicCardInfo">
-            <div class="topicCardTitle">Government Schemes</div>
-            <div class="topicCardSub">Welfare & initiatives</div>
-          </div>
-        </div>
-        <div class="topicCard" onclick="filterByTopic('events')">
-          <div class="topicCardIcon">📰</div>
-          <div class="topicCardInfo">
-            <div class="topicCardTitle">Important Events</div>
-            <div class="topicCardSub">Major current updates</div>
-          </div>
-        </div>
       </div>
 
       <div class="visitor" id="visitorCount">👥 Today: <b>0</b> visitors</div>
@@ -1357,18 +1280,18 @@ function showLeaderboard(){
 
 function filterByTopic(topicKey){
   showHome();
+  $("quizListHeading").textContent = "⚡ " + topicKey.charAt(0).toUpperCase() + topicKey.slice(1) + " Quizzes";
+  
   if(topicKey === 'weekly'){
-    // Automatically list weekly revision tests retrieved from Firestore or generated dynamically
-    const weeklyTests = allTests.filter(t => {
-      const tid = String(t.topicId || "").toLowerCase();
-      const ttl = String(t.title || "").toLowerCase();
-      const sub = String(t.subtitle || "").toLowerCase();
-      return tid.includes('weekly') || ttl.includes('weekly') || sub.includes('weekly') || ttl.includes('week');
-    });
-    renderTests(weeklyTests.length > 0 ? weeklyTests : [
+    const weeklyTests = [
       { id: "weekly_aug_w1", topicId: "weekly", title: "August 2026 - Week 1 Revision", subtitle: "Shuffled weekly review test (10 Questions)", difficulty: "Medium", durationMinutes: 5, questionCount: 10 },
       { id: "weekly_aug_w2", topicId: "weekly", title: "August 2026 - Week 2 Revision", subtitle: "Shuffled weekly review test (10 Questions)", difficulty: "Medium", durationMinutes: 5, questionCount: 10 }
-    ]);
+    ];
+    renderTests(weeklyTests);
+    return;
+  }
+  if(topicKey === 'daily'){
+    renderTests(allTests);
     return;
   }
 
@@ -1519,7 +1442,7 @@ function selectAnswer(index,element){
 
   if(q.explanation){
     $("explanation").textContent=q.explanation;
-    $("explanationCard").classList.add("hidden") ? null : $("explanationCard").classList.remove("hidden");
+    $("explanationCard").classList.remove("hidden");
   }
 }
 
@@ -1838,22 +1761,6 @@ def quiz_tests():
         for test in tests:
             test["questionCount"] = question_counts.get(test["id"], 0)
 
-        # Ensure weekly revision test cards are always present in the test list
-        weekly_test_ids = ["weekly_aug_w1", "weekly_aug_w2"]
-        for w_id in weekly_test_ids:
-            if not any(t["id"] == w_id for t in tests):
-                w_title = "August 2026 - Week 1 Revision" if "w1" in w_id else "August 2026 - Week 2 Revision"
-                tests.append({
-                    "id": w_id,
-                    "topicId": "weekly",
-                    "title": w_title,
-                    "subtitle": "Shuffled weekly review test (10 Questions)",
-                    "durationMinutes": 5,
-                    "difficulty": "Medium",
-                    "dateMillis": int(time.time() * 1000),
-                    "questionCount": 10
-                })
-
         def safe_sort_key(t):
             val = t.get("dateMillis")
             try:
@@ -1897,7 +1804,6 @@ def quiz_questions(test_id):
                     "explanation": data.get("explanation") or "",
                     "hint": data.get("hint") or "",
                 })
-            import random
             random.shuffle(questions)
             questions = questions[:10]
         else:
