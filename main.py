@@ -733,7 +733,6 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
             <li>All questions must be answered completely before submitting the quiz.</li>
             <li>Quizzes are timed at <b>30 seconds per question</b> (e.g., 5 minutes for 10 questions).</li>
             <li>Quizzes marked as <b>"Preparing"</b> are currently being updated by the admin and will unlock once fully compiled.</li>
-            <li>Scores and points are added <b>only from fresh attempts on uncompleted tests ("Not started")</b>. Once marked as <b>"Completed"</b>, re-attempting practices questions without adding extra points.</li>
           </ul>
         </div>
       </div>
