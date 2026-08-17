@@ -393,6 +393,17 @@ button{cursor:pointer}
 .search span{position:absolute;left:15px;top:12px;color:#999;font-size:20px}
 .quizCount{color:var(--muted);font-size:14px;white-space:nowrap}
 
+/* Tab Filter Bar */
+.filterTabs{
+  display:flex;gap:10px;margin-bottom:20px;overflow-x:auto;padding-bottom:4px;
+}
+.filterTab{
+  border:1px solid var(--line);background:var(--panel);color:var(--text);
+  padding:8px 16px;border-radius:12px;font-size:13px;font-weight:700;
+  white-space:nowrap;transition:.15s;
+}
+.filterTab:hover,.filterTab.active{background:var(--soft);color:var(--purple);border-color:#ded3ff}
+
 .quizList{display:flex;flex-direction:column;gap:15px}
 .quizCard{
   background:var(--panel);
@@ -685,6 +696,14 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
         <div class="quizCount" id="quizCount">0 quizzes</div>
       </div>
 
+      <!-- Restored Filter Tabs (Daily, Weekly, Monthly) -->
+      <div class="filterTabs">
+        <button class="filterTab active" onclick="filterByTab('all', this)">All</button>
+        <button class="filterTab" onclick="filterByTab('daily', this)">Daily CA</button>
+        <button class="filterTab" onclick="filterByTab('weekly', this)">Weekly CA</button>
+        <button class="filterTab" onclick="filterByTab('monthly', this)">Monthly CA</button>
+      </div>
+
       <div id="quizList" class="quizList">
         <div class="loading">Loading quizzes...</div>
       </div>
@@ -896,27 +915,6 @@ function saveUserStats(stats){
   }catch(e){}
 }
 
-function computeUserTotals(){
-  const stats = loadUserStats();
-
-  let totalCorrect = 0;
-  let totalAccuracySum = 0;
-
-  stats.attempts.forEach(att => {
-    totalCorrect += Number(att.correctCount || 0);
-    totalAccuracySum += Number(att.accuracyPct || 0);
-  });
-
-  const overallAccuracy = stats.attempts.length > 0
-    ? totalAccuracySum / stats.attempts.length
-    : 75;
-
-  return {
-    overallAccuracy: Math.round(overallAccuracy),
-    testsCompleted: stats.attempts.length
-  };
-}
-
 function esc(value){
   return String(value ?? "")
     .replace(/&/g,"&amp;").replace(/</g,"&lt;")
@@ -1092,6 +1090,22 @@ function renderTests(tests){
 
     $("quizList").appendChild(card);
   });
+}
+
+function filterByTab(tabKey, btnElement){
+  document.querySelectorAll('.filterTab').forEach(b => b.classList.remove('active'));
+  if(btnElement) btnElement.classList.add('active');
+
+  if(tabKey === 'all'){
+    renderTests(allTests);
+  } else {
+    const filtered = allTests.filter(t => 
+      String(t.topicId || "").toLowerCase().includes(tabKey) ||
+      String(t.title || "").toLowerCase().includes(tabKey) ||
+      String(t.subtitle || "").toLowerCase().includes(tabKey)
+    );
+    renderTests(filtered.length > 0 ? filtered : allTests);
+  }
 }
 
 $("searchInput").addEventListener("input",()=>{
