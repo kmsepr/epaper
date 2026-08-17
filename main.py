@@ -5,6 +5,7 @@ import threading
 import requests
 import re
 import shutil
+import random
 from datetime import datetime
 from flask import Flask, request, jsonify
 from bs4 import BeautifulSoup
@@ -269,12 +270,10 @@ h1{color:white;font-size:28px;margin-bottom:20px}
 """
 
 # ============================================================
-# QUIZ ROUTES & APP
+# QUIZ PAGE - ATTRACTIVE UI
 # ============================================================
-
 @app.route("/quiz")
-@app.route("/quiz/<path:test_id>")
-def quiz_app(test_id=None):
+def quiz_app():
     firebase_web_config = {
         "apiKey": os.environ.get("FIREBASE_WEB_API_KEY", ""),
         "authDomain": os.environ.get("FIREBASE_WEB_AUTH_DOMAIN", ""),
@@ -360,11 +359,21 @@ button{cursor:pointer}
 .nav{display:flex;align-items:center;gap:10px}
 .navBtn{
   border:1px solid var(--line);background:var(--panel);color:var(--text);
-  padding:8px 14px;border-radius:14px;font-size:13px;font-weight:700;
-  display:flex;align-items:center;gap:6px;transition:.15s;
+  padding:8px 12px;border-radius:14px;font-size:13px;font-weight:700;
+  display:flex;align-items:center;justify-content:center;transition:.15s;
 }
 .navBtn:hover,.navBtn.active{background:var(--soft);color:var(--purple);border-color:#ded3ff}
 
+/* Info / Instructions Top Bar Icon Button */
+.infoIconBtn{
+  border:1px solid var(--line);background:var(--panel);color:var(--purple);
+  width:38px;height:38px;border-radius:50%;font-size:16px;font-weight:800;
+  display:flex;align-items:center;justify-content:center;cursor:pointer;
+  transition:.15s;box-shadow:var(--shadow);
+}
+.infoIconBtn:hover{background:var(--soft);border-color:#ded3ff}
+
+/* Small Profile Chip Icon on Top Bar */
 .userChip{
   display:flex;align-items:center;gap:8px;
   background:var(--soft);border:1px solid #ded3ff;
@@ -393,16 +402,32 @@ button{cursor:pointer}
 .search span{position:absolute;left:15px;top:12px;color:#999;font-size:20px}
 .quizCount{color:var(--muted);font-size:14px;white-space:nowrap}
 
-/* Tab Filter Bar */
-.filterTabs{
-  display:flex;gap:10px;margin-bottom:20px;overflow-x:auto;padding-bottom:4px;
+/* Instructions Modal Overlay */
+.modalOverlay{
+  position:fixed;top:0;left:0;width:100%;height:100%;
+  background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;
+  z-index:100;padding:20px;backdrop-filter:blur(4px);
 }
-.filterTab{
-  border:1px solid var(--line);background:var(--panel);color:var(--text);
-  padding:8px 16px;border-radius:12px;font-size:13px;font-weight:700;
-  white-space:nowrap;transition:.15s;
+.modalBox{
+  background:var(--panel);border:1px solid var(--line);
+  border-radius:24px;padding:24px;max-width:500px;width:100%;
+  box-shadow:0 20px 40px rgba(0,0,0,0.2);animation:modalPopup .2s ease-out;
 }
-.filterTab:hover,.filterTab.active{background:var(--soft);color:var(--purple);border-color:#ded3ff}
+@keyframes modalPopup{
+  from{transform:scale(.95);opacity:0}
+  to{transform:scale(1);opacity:1}
+}
+.modalHeader{
+  display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;
+}
+.modalHeader h3{margin:0;font-size:18px;color:var(--purple);display:flex;align-items:center;gap:8px}
+.modalCloseBtn{
+  background:var(--bg2);border:0;border-radius:50%;width:32px;height:32px;
+  font-weight:800;cursor:pointer;color:var(--text);display:flex;align-items:center;justify-content:center;
+}
+.modalBody{color:var(--muted);font-size:14px;line-height:1.6}
+.modalBody ul{margin:0;padding-left:20px}
+.modalBody li{margin-bottom:8px}
 
 .quizList{display:flex;flex-direction:column;gap:15px}
 .quizCard{
@@ -433,6 +458,9 @@ button{cursor:pointer}
 .statusPill.completed{
   background:#e7f8ed;color:#145c31;
 }
+.statusPill.comingsoon{
+  background:#fff3cd;color:#856404;
+}
 .quizDesc{color:var(--muted);font-size:14px;margin-top:8px}
 .quizMeta{display:flex;gap:17px;flex-wrap:wrap;margin-top:12px;color:#49445b;font-size:12px;font-weight:700}
 body.dark .quizMeta{color:#c0bdce}
@@ -442,6 +470,9 @@ body.dark .quizMeta{color:#c0bdce}
   background:#eee3ff;color:#6332c3;font-weight:800;
 }
 .startBtn:hover{filter:brightness(.96)}
+.startBtn.disabled{
+  background:#e2dfed;color:#9e9ab8;cursor:not-allowed;
+}
 .shareBtn{
   border:1px solid var(--line);border-radius:50%;width:42px;height:42px;
   background:var(--panel);color:var(--text);display:flex;align-items:center;justify-content:center;
@@ -450,34 +481,37 @@ body.dark .quizMeta{color:#c0bdce}
 .shareBtn:hover{background:var(--soft);color:var(--purple);border-color:#ded3ff}
 .empty{padding:30px;text-align:center;background:var(--panel);border-radius:18px;color:var(--muted)}
 
-.topicsGrid{
-  display:grid;
-  grid-template-columns:repeat(auto-fill, minmax(260px, 1fr));
-  gap:16px;
+/* Tabs Navigation Style */
+.tabsContainer{
+  display:flex;
+  gap:8px;
   margin-bottom:25px;
-}
-.topicCard{
   background:var(--panel);
   border:1px solid var(--line);
-  border-radius:22px;
-  padding:22px;
-  display:flex;
-  align-items:center;
-  gap:16px;
+  padding:6px;
+  border-radius:20px;
   box-shadow:var(--shadow);
-  cursor:pointer;
-  transition:.2s;
+  overflow-x:auto;
 }
-.topicCard:hover{transform:translateY(-3px);border-color:#7b68e9}
-.topicCardIcon{
-  width:54px;height:54px;border-radius:16px;
-  background:var(--soft);color:var(--purple);
-  display:flex;align-items:center;justify-content:center;
-  font-size:26px;flex:0 0 auto;
+.tabBtn{
+  flex:1;
+  padding:12px 16px;
+  border:0;
+  background:transparent;
+  color:var(--muted);
+  font-weight:800;
+  font-size:14px;
+  border-radius:14px;
+  transition:.15s;
+  white-space:nowrap;
+  text-align:center;
 }
-.topicCardInfo{min-width:0;flex:1}
-.topicCardTitle{font-size:16px;font-weight:800;color:var(--text)}
-.topicCardSub{font-size:12px;color:var(--muted);margin-top:4px}
+.tabBtn:hover{color:var(--purple);background:var(--bg2)}
+.tabBtn.active{
+  background:linear-gradient(135deg,#6754e7,#15a8d4);
+  color:white;
+  box-shadow:0 4px 15px rgba(103,84,232,0.3);
+}
 
 .sectionHeading{
   font-size:18px;
@@ -489,6 +523,7 @@ body.dark .quizMeta{color:#c0bdce}
   gap:8px;
 }
 
+/* Profile Tab Design */
 .profileScreen{max-width:800px;margin:auto;padding:24px 0}
 .profileCard{
   background:var(--panel);
@@ -578,7 +613,7 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
 
 .resultHero{text-align:center}
 .score{font-size:52px;font-weight:900;color:var(--purple)}
-.resultGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:18px 0}
+.resultGrid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:18px 0}
 .resultStat{background:var(--bg2);border-radius:14px;padding:14px;text-align:center}
 .resultStat .v{font-size:22px;font-weight:900}
 .resultStat .l{font-size:10px;color:var(--muted);margin-top:3px}
@@ -633,7 +668,7 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
   .quizDesc{font-size:12px}
   .quizActions{flex-direction:column}
   .startBtn{padding:9px 14px}
-  .resultGrid{grid-template-columns:repeat(3,1fr)}
+  .resultGrid{grid-template-columns:repeat(2,1fr)}
 }
 @media(max-width:430px){
   .quizCard{display:grid;grid-template-columns:58px 1fr}
@@ -673,21 +708,47 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
     <header class="header">
       <div class="brand">
         <div class="brandIcon">🎓</div>
-        <div><h1>CA Blockbuster</h1><p>CA REVISION</p></div>
       </div>
 
       <div class="headerRight">
         <nav class="nav">
-          <button class="navBtn active" id="homeNav" type="button">🏠 Home</button>
+          <button class="navBtn active" id="homeNav" type="button" title="Home">🏠</button>
         </nav>
+        <button class="infoIconBtn" id="infoModalBtn" title="Instructions to Candidates">ℹ</button>
         <div class="userChip" id="topProfileChip" title="Go to Profile">
           <div class="userAvatar" id="userAvatar">S</div>
         </div>
       </div>
     </header>
 
+    <!-- Instructions Modal Popup -->
+    <div id="instructionsModal" class="modalOverlay hidden">
+      <div class="modalBox">
+        <div class="modalHeader">
+          <h3>📌 Instruction to Candidates</h3>
+          <button class="modalCloseBtn" id="modalCloseBtn">✕</button>
+        </div>
+        <div class="modalBody">
+          <ul>
+            <li>All questions must be answered completely before submitting the quiz.</li>
+            <li>Quizzes are timed at <b>30 seconds per question</b> (e.g., 5 minutes for 10 questions).</li>
+            <li>Quizzes marked as <b>"Preparing"</b> are currently being updated by the admin and will unlock once fully compiled.</li>
+            <li>Scores and points are added <b>only from fresh attempts on uncompleted tests ("Not started")</b>. Once marked as <b>"Completed"</b>, re-attempting practices questions without adding extra points.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
     <main id="homePage" class="page">
-      <div class="sectionHeading">⚡ Daily CA Quizzes</div>
+      <!-- Tabs Navigation Bar -->
+      <div class="tabsContainer">
+        <button class="tabBtn active" onclick="switchTab('daily')">⚡ Daily</button>
+        <button class="tabBtn" onclick="switchTab('weekly')">📆 Weekly</button>
+        <button class="tabBtn" onclick="switchTab('monthly')">📅 Monthly</button>
+      </div>
+
+      <!-- Quizzes List Header -->
+      <div class="sectionHeading" id="quizListHeading">⚡ Daily CA Quizzes</div>
       <div class="topLine">
         <div class="search">
           <span>⌕</span>
@@ -696,116 +757,14 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
         <div class="quizCount" id="quizCount">0 quizzes</div>
       </div>
 
-      <!-- Restored Filter Tabs (Daily, Weekly, Monthly) -->
-      <div class="filterTabs">
-        <button class="filterTab active" onclick="filterByTab('all', this)">All</button>
-        <button class="filterTab" onclick="filterByTab('daily', this)">Daily CA</button>
-        <button class="filterTab" onclick="filterByTab('weekly', this)">Weekly CA</button>
-        <button class="filterTab" onclick="filterByTab('monthly', this)">Monthly CA</button>
-      </div>
-
       <div id="quizList" class="quizList">
         <div class="loading">Loading quizzes...</div>
-      </div>
-
-      <div class="sectionHeading">📂 Categories</div>
-      <div class="topicsGrid">
-        <div class="topicCard" onclick="filterByTopic('monthly')">
-          <div class="topicCardIcon">📅</div>
-          <div class="topicCardInfo">
-            <div class="topicCardTitle">Monthly Wise</div>
-            <div class="topicCardSub">Chronological practice</div>
-          </div>
-        </div>
-        <div class="topicCard" onclick="filterByTopic('sports')">
-          <div class="topicCardIcon">🏅</div>
-          <div class="topicCardInfo">
-            <div class="topicCardTitle">Sports</div>
-            <div class="topicCardSub">Tournaments & medals</div>
-          </div>
-        </div>
-        <div class="topicCard" onclick="filterByTopic('polity')">
-          <div class="topicCardIcon">🏛️</div>
-          <div class="topicCardInfo">
-            <div class="topicCardTitle">Polity</div>
-            <div class="topicCardSub">Governance & bills</div>
-          </div>
-        </div>
-        <div class="topicCard" onclick="filterByTopic('arts')">
-          <div class="topicCardIcon">🎨</div>
-          <div class="topicCardInfo">
-            <div class="topicCardTitle">Arts & Culture</div>
-            <div class="topicCardSub">Heritage & festivals</div>
-          </div>
-        </div>
-        <div class="topicCard" onclick="filterByTopic('science')">
-          <div class="topicCardIcon">🔬</div>
-          <div class="topicCardInfo">
-            <div class="topicCardTitle">Science & Technology</div>
-            <div class="topicCardSub">Inventions & space</div>
-          </div>
-        </div>
-        <div class="topicCard" onclick="filterByTopic('economy')">
-          <div class="topicCardIcon">💰</div>
-          <div class="topicCardInfo">
-            <div class="topicCardTitle">Economy</div>
-            <div class="topicCardSub">Banking & budgets</div>
-          </div>
-        </div>
-        <div class="topicCard" onclick="filterByTopic('international')">
-          <div class="topicCardIcon">🌍</div>
-          <div class="topicCardInfo">
-            <div class="topicCardTitle">International</div>
-            <div class="topicCardSub">Global summits & ties</div>
-          </div>
-        </div>
-        <div class="topicCard" onclick="filterByTopic('environment')">
-          <div class="topicCardIcon">🌱</div>
-          <div class="topicCardInfo">
-            <div class="topicCardTitle">Environment</div>
-            <div class="topicCardSub">Ecology & climate</div>
-          </div>
-        </div>
-        <div class="topicCard" onclick="filterByTopic('awards')">
-          <div class="topicCardIcon">🏆</div>
-          <div class="topicCardInfo">
-            <div class="topicCardTitle">Awards & Honours</div>
-            <div class="topicCardSub">Prizes & recognitions</div>
-          </div>
-        </div>
-        <div class="topicCard" onclick="filterByTopic('education')">
-          <div class="topicCardIcon">📚</div>
-          <div class="topicCardInfo">
-            <div class="topicCardTitle">Education</div>
-            <div class="topicCardSub">Policies & institutions</div>
-          </div>
-        </div>
-        <div class="topicCard" onclick="filterByTopic('appointments')">
-          <div class="topicCardIcon">👤</div>
-          <div class="topicCardInfo">
-            <div class="topicCardTitle">Appointments</div>
-            <div class="topicCardSub">New roles & leaders</div>
-          </div>
-        </div>
-        <div class="topicCard" onclick="filterByTopic('schemes')">
-          <div class="topicCardIcon">🏛️</div>
-          <div class="topicCardInfo">
-            <div class="topicCardTitle">Government Schemes</div>
-            <div class="topicCardSub">Welfare & initiatives</div>
-          </div>
-        </div>
-        <div class="topicCard" onclick="filterByTopic('events')">
-          <div class="topicCardIcon">📰</div>
-          <div class="topicCardInfo">
-            <div class="topicCardTitle">Important Events</div>
-            <div class="topicCardSub">Major current updates</div>
-          </div>
-        </div>
       </div>
 
       <div class="visitor" id="visitorCount">👥 Today: <b>0</b> visitors</div>
     </main>
 
+    <!-- Profile Tab Screen -->
     <section id="profilePage" class="profileScreen hidden">
       <div class="profileCard">
         <div class="profileHeaderInfo">
@@ -854,6 +813,7 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
         <div class="resultGrid">
           <div class="resultStat"><div id="correctStat" class="v">0</div><div class="l">Correct</div></div>
           <div class="resultStat"><div id="wrongStat" class="v">0</div><div class="l">Wrong</div></div>
+          <div class="resultStat"><div id="pointsStat" class="v">0</div><div class="l">Points</div></div>
           <div class="resultStat"><div id="accuracyStat" class="v">0%</div><div class="l">Accuracy</div></div>
         </div>
         <div id="performanceText" style="text-align:center;color:var(--muted)"></div>
@@ -889,12 +849,12 @@ let currentQuestion = 0;
 let score = 0;
 let correctCount = 0;
 let wrongCount = 0;
-let unansweredCount = 0;
 let questionResults = [];
 let answered = false;
 let timerSeconds = 0;
 let elapsedSeconds = 0;
 let timerInterval = null;
+let currentTab = 'daily';
 
 function getUserStorageKey(){
   const user = firebase.auth().currentUser;
@@ -906,13 +866,56 @@ function loadUserStats(){
     const raw = localStorage.getItem(getUserStorageKey());
     if(raw) return JSON.parse(raw);
   }catch(e){}
-  return { attempts: [], bestStars: {} };
+  return { attempts: [], bestStars: {}, bestScores: {} };
 }
 
 function saveUserStats(stats){
   try{
     localStorage.setItem(getUserStorageKey(), JSON.stringify(stats));
   }catch(e){}
+}
+
+function computeUserTotals(){
+  const stats = loadUserStats();
+  const BASE_POINTS = 420;
+
+  let totalCorrect = 0;
+  let totalAccuracySum = 0;
+  let countAttempts = 0;
+
+  if(stats.bestScores){
+    Object.values(stats.bestScores).forEach(best => {
+      totalCorrect += Number(best.correctCount || 0);
+      totalAccuracySum += Number(best.accuracyPct || 0);
+      countAttempts++;
+    });
+  }
+
+  let totalStars = 0;
+  Object.values(stats.bestStars || {}).forEach(s => {
+    totalStars += Number(s || 0);
+  });
+
+  const totalPoints = BASE_POINTS + (totalCorrect * 10) + (totalStars * 40);
+
+  const overallAccuracy = countAttempts > 0
+    ? totalAccuracySum / countAttempts
+    : 75;
+
+  let badgeTitle = "🎯 Rising Scholar";
+  if(totalPoints >= 1000){
+    badgeTitle = "🏆 Master";
+  }else if(totalPoints >= 650){
+    badgeTitle = "🌟 CA Top Aspirant";
+  }
+
+  return {
+    totalPoints,
+    totalStars,
+    overallAccuracy: Math.round(overallAccuracy),
+    badgeTitle,
+    testsCompleted: countAttempts
+  };
 }
 
 function esc(value){
@@ -1008,23 +1011,9 @@ async function loadData(){
   try{
     allTests=await apiGet("/quiz/api/tests");
     if(!Array.isArray(allTests))throw new Error("Invalid test data.");
-    renderTests(allTests);
-    checkDirectQuizRoute();
+    switchTab(currentTab);
   }catch(error){
     $("quizList").innerHTML='<div class="empty">'+esc(error.message)+'</div>';
-  }
-}
-
-function checkDirectQuizRoute(){
-  const path = window.location.pathname;
-  if(path.startsWith("/quiz/") && path.length > 6){
-    const testIdFromUrl = decodeURIComponent(path.replace("/quiz/", ""));
-    if(testIdFromUrl && allTests.length > 0){
-      const match = allTests.find(t => t.id === testIdFromUrl);
-      if(match){
-        startQuiz(match);
-      }
-    }
   }
 }
 
@@ -1033,12 +1022,12 @@ function renderTests(tests){
   $("quizCount").textContent=tests.length+" quizzes";
 
   if(!tests.length){
-    $("quizList").innerHTML='<div class="empty">No quizzes found.</div>';
+    $("quizList").innerHTML='<div class="empty">No quizzes found for this tab.</div>';
     return;
   }
 
   const userStats = loadUserStats();
-  const attemptedTestIds = new Set(userStats.attempts.map(a => a.testId));
+  const attemptedTestIds = new Set(Object.keys(userStats.bestScores || {}));
 
   $("quizList").innerHTML="";
   tests.forEach((test,index)=>{
@@ -1049,42 +1038,64 @@ function renderTests(tests){
     const title=test.title || test.id || "Quiz";
     const description=test.subtitle || "Self-paced MCQ practice with instant results after you submit.";
     const questions=Number(test.questionCount||0);
-    const duration=Number(test.durationMinutes||0);
+    const duration = Math.max(1, Math.ceil((questions * 30) / 60));
     const difficulty=test.difficulty || "Practice";
+    const topicId=String(test.topicId || "").toLowerCase();
+    const titleLower = title.toLowerCase();
+    const subtitleLower = String(test.subtitle || "").toLowerCase();
     
-    const quizUrl = window.location.origin + "/quiz/" + encodeURIComponent(test.id);
+    const isPyqOrMock = titleLower.includes("pyq") || subtitleLower.includes("pyq") || 
+                       titleLower.includes("mock") || subtitleLower.includes("mock") || 
+                       topicId.includes("pyq") || topicId.includes("mock");
+
+    const isMonthly = topicId.includes("monthly") || titleLower.includes("monthly");
+    const requiredThreshold = isMonthly ? 20 : 10;
+    
+    const isPreparing = !isPyqOrMock && (questions < requiredThreshold);
     const isCompleted = attemptedTestIds.has(test.id);
-    const statusBadgeHtml = isCompleted 
-      ? '<span class="statusPill completed">Completed ✓</span>' 
-      : '<span class="statusPill">Not started</span>';
+    
+    let statusBadgeHtml = '<span class="statusPill">Not started</span>';
+    if(isPreparing){
+      statusBadgeHtml = `<span class="statusPill comingsoon">Preparing (${questions}/${requiredThreshold} qns)</span>`;
+    }else if(isCompleted){
+      statusBadgeHtml = '<span class="statusPill completed">Completed ✓</span>';
+    }
 
     card.innerHTML=
       '<div class="quizNumber">'+number+'</div>'+
       '<div class="quizMain">'+
         '<div class="quizTitleLine">'+
-          '<div class="quizTitle"><a href="/quiz/'+encodeURIComponent(test.id)+'" style="color:inherit;text-decoration:none;">'+esc(title)+'</a></div>'+
+          '<div class="quizTitle">'+esc(title)+'</div>'+
           statusBadgeHtml+
         '</div>'+
         '<div class="quizDesc">'+esc(description)+'</div>'+
         '<div class="quizMeta">'+
-          '<span>❓ '+questions+' questions</span>'+
+          '<span>❓ '+questions+(isPyqOrMock ? ' questions' : ' / '+requiredThreshold+' questions')+'</span>'+
           '<span>👥 '+esc(difficulty)+'</span>'+
-          (duration ? '<span>⏱ '+duration+' min</span>' : '')+
+          '<span>⏱ '+duration+' min</span>'+
         '</div>'+
       '</div>'+
       '<div class="quizActions">'+
         '<button class="shareBtn" title="Share Quiz">🔗</button>'+
-        '<button class="startBtn">Start →</button>'+
+        '<button class="startBtn '+(isPreparing ? 'disabled' : '')+'">'+(isPreparing ? 'Soon' : 'Start →')+'</button>'+
       '</div>';
 
-    card.querySelector(".startBtn").addEventListener("click",()=>startQuiz(test));
+    const startBtn = card.querySelector(".startBtn");
+    if(isPreparing){
+      startBtn.addEventListener("click",()=>{
+        alert(`This quiz is currently being compiled (${questions} of ${requiredThreshold} questions added). Please check back when complete!`);
+      });
+    }else{
+      startBtn.addEventListener("click",()=>startQuiz(test));
+    }
+
     card.querySelector(".shareBtn").addEventListener("click",()=>{
       const shareText = `Check out this quiz: ${title} - ${description} on CA Blockbuster!`;
       if(navigator.share){
-        navigator.share({title: title, text: shareText, url: quizUrl}).catch(()=>{});
+        navigator.share({title: title, text: shareText, url: window.location.href}).catch(()=>{});
       }else{
-        navigator.clipboard.writeText(quizUrl);
-        alert("Unique quiz link copied to clipboard!");
+        navigator.clipboard.writeText(window.location.href);
+        alert("Quiz link copied to clipboard!");
       }
     });
 
@@ -1092,30 +1103,19 @@ function renderTests(tests){
   });
 }
 
-function filterByTab(tabKey, btnElement){
-  document.querySelectorAll('.filterTab').forEach(b => b.classList.remove('active'));
-  if(btnElement) btnElement.classList.add('active');
-
-  if(tabKey === 'all'){
-    renderTests(allTests);
-  } else {
-    const filtered = allTests.filter(t => 
-      String(t.topicId || "").toLowerCase().includes(tabKey) ||
-      String(t.title || "").toLowerCase().includes(tabKey) ||
-      String(t.subtitle || "").toLowerCase().includes(tabKey)
-    );
-    renderTests(filtered.length > 0 ? filtered : allTests);
-  }
-}
-
 $("searchInput").addEventListener("input",()=>{
   const q=$("searchInput").value.trim().toLowerCase();
-  const filtered=allTests.filter(t=>
+  const filtered=filteredTests.filter(t=>
     String(t.title||"").toLowerCase().includes(q) ||
     String(t.subtitle||"").toLowerCase().includes(q) ||
     String(t.topicId||"").toLowerCase().includes(q)
   );
-  renderTests(filtered);
+  $("quizCount").textContent=filtered.length+" quizzes";
+  if(!filtered.length){
+    $("quizList").innerHTML='<div class="empty">No matching quizzes found.</div>';
+  }else{
+    renderTests(filtered);
+  }
 });
 
 function hidePages(){
@@ -1132,7 +1132,7 @@ function showHome(){
   hidePages();
   $("homePage").classList.remove("hidden");
   $("homeNav").classList.add("active");
-  renderTests(filteredTests.length ? filteredTests : allTests);
+  switchTab(currentTab);
 }
 
 function showProfile(){
@@ -1141,19 +1141,39 @@ function showProfile(){
   $("profilePage").classList.remove("hidden");
 }
 
-function filterByTopic(topicKey){
-  showHome();
-  const filtered = allTests.filter(t => 
-    String(t.topicId || "").toLowerCase().includes(topicKey) ||
-    String(t.title || "").toLowerCase().includes(topicKey) ||
-    String(t.subtitle || "").toLowerCase().includes(topicKey)
-  );
-  renderTests(filtered.length > 0 ? filtered : allTests);
+function switchTab(tabKey){
+  currentTab = tabKey;
+  
+  const buttons = document.querySelectorAll('.tabsContainer .tabBtn');
+  buttons.forEach(btn => btn.classList.remove('active'));
+  
+  if(tabKey === 'daily'){
+    buttons[0].classList.add('active');
+    $("quizListHeading").textContent = "⚡ Daily CA Quizzes";
+    renderTests(allTests.filter(t => !String(t.topicId||"").toLowerCase().includes('weekly') && !String(t.topicId||"").toLowerCase().includes('monthly')));
+  } else if(tabKey === 'weekly'){
+    buttons[1].classList.add('active');
+    $("quizListHeading").textContent = "📆 Weekly Revision Quizzes";
+    const weeklyTests = [
+      { id: "weekly_aug_w1", topicId: "weekly", title: "August 2026 - Week 1 Revision", subtitle: "Shuffled weekly review test (10 Questions)", difficulty: "Medium", durationMinutes: 5, questionCount: 10 },
+      { id: "weekly_aug_w2", topicId: "weekly", title: "August 2026 - Week 2 Revision", subtitle: "Shuffled weekly review test (10 Questions)", difficulty: "Medium", durationMinutes: 5, questionCount: 10 }
+    ];
+    renderTests(weeklyTests);
+  } else if(tabKey === 'monthly'){
+    buttons[2].classList.add('active');
+    $("quizListHeading").textContent = "📅 Monthly Wise Quizzes";
+    const monthlyTests = allTests.filter(t => {
+      const tid = String(t.topicId || "").toLowerCase();
+      const ttl = String(t.title || "").toLowerCase();
+      const sub = String(t.subtitle || "").toLowerCase();
+      return tid.includes('monthly') || ttl.includes('monthly') || sub.includes('monthly');
+    });
+    renderTests(monthlyTests);
+  }
 }
 
 async function startQuiz(test){
   selectedTest=test;
-  window.history.pushState({}, "", "/quiz/" + encodeURIComponent(test.id));
   hidePages();
   $("quizPage").classList.remove("hidden");
   $("testTitle").textContent=test.title||test.id;
@@ -1169,11 +1189,11 @@ async function startQuiz(test){
     score=0;
     correctCount=0;
     wrongCount=0;
-    unansweredCount=0;
-    questionResults=[];
+    questionResults=new Array(currentQuestions.length).fill(null);
     answered=false;
 
-    startTimer(Number(test.durationMinutes)||0);
+    const dynamicMinutes = (currentQuestions.length * 30) / 60;
+    startTimer(dynamicMinutes);
     displayQuestion();
   }catch(error){
     $("questionText").textContent="";
@@ -1185,10 +1205,19 @@ function displayQuestion(){
   const q=currentQuestions[currentQuestion];
   if(!q){finishQuiz();return;}
 
-  answered=false;
+  answered = questionResults[currentQuestion] !== undefined && questionResults[currentQuestion] !== null;
+  
   $("questionNumber").textContent="Question "+(currentQuestion+1)+" / "+currentQuestions.length;
   $("questionText").textContent=q.questionText||"";
-  $("explanationCard").classList.add("hidden");
+  
+  if(answered && questionResults[currentQuestion]){
+    $("explanation").textContent=q.explanation || "";
+    if(q.explanation) $("explanationCard").classList.remove("hidden");
+    else $("explanationCard").classList.add("hidden");
+  } else {
+    $("explanationCard").classList.add("hidden");
+  }
+
   $("nextButton").textContent=currentQuestion===currentQuestions.length-1?"Finish ✓":"Next →";
 
   const options=$("options");
@@ -1196,6 +1225,13 @@ function displayQuestion(){
   [q.option0||"",q.option1||"",q.option2||"",q.option3||""].forEach((option,index)=>{
     const div=document.createElement("div");
     div.className="option";
+    
+    if(answered && questionResults[currentQuestion]){
+      const res = questionResults[currentQuestion];
+      if(index === res.correct) div.classList.add("correct");
+      else if(index === res.selected && !res.isCorrect) div.classList.add("wrong");
+    }
+
     div.textContent=option;
     div.addEventListener("click",()=>selectAnswer(index,div));
     options.appendChild(div);
@@ -1213,7 +1249,6 @@ function selectAnswer(index,element){
 
   if(isCorrect){
     element.classList.add("correct");
-    score++;
     correctCount++;
   }else{
     element.classList.add("wrong");
@@ -1238,8 +1273,24 @@ function selectAnswer(index,element){
 }
 
 function nextQuestion(){
-  if(!answered)return;
-  if(currentQuestion>=currentQuestions.length-1){finishQuiz();return;}
+  const q=currentQuestions[currentQuestion];
+  if(!answered && (!questionResults[currentQuestion])) {
+    alert("Please select an answer before proceeding.");
+    return;
+  }
+
+  if(currentQuestion>=currentQuestions.length-1){
+    const totalQ = currentQuestions.length;
+    const answeredQ = questionResults.filter(r => r !== null && r !== undefined).length;
+    
+    if(answeredQ < totalQ){
+      alert("You must answer all " + totalQ + " questions before finishing the test! You have answered " + answeredQ + " so far.");
+      return;
+    }
+    
+    finishQuiz();
+    return;
+  }
   currentQuestion++;
   displayQuestion();
 }
@@ -1278,51 +1329,73 @@ function finishQuiz(timeExpired=false){
   const total=currentQuestions.length;
   if(!total)return;
 
-  if(currentQuestion<total&&!answered){
-    unansweredCount++;
-    const q=currentQuestions[currentQuestion];
-    questionResults[currentQuestion]={
-      question:q.questionText||"",
-      selected:null,
-      correct:Number(q.correctOptionIndex),
-      isCorrect:false,
-      unanswered:true,
-      explanation:q.explanation||"",
-      selectedText:"Not answered",
-      correctText:[q.option0,q.option1,q.option2,q.option3][Number(q.correctOptionIndex)]||""
-    };
+  const answeredQ = questionResults.filter(r => r !== null && r !== undefined).length;
+  if(answeredQ < total && !timeExpired) {
+    alert("Cannot submit incomplete test. Please complete all questions.");
+    return;
+  }
+
+  for(let i=0; i<total; i++){
+    if(!questionResults[i]){
+      const q = currentQuestions[i];
+      questionResults[i] = {
+        question: q.questionText || "",
+        selected: null,
+        correct: Number(q.correctOptionIndex),
+        isCorrect: false,
+        unanswered: true,
+        explanation: q.explanation || "",
+        selectedText: "Not started",
+        correctText: [q.option0, q.option1, q.option2, q.option3][Number(q.correctOptionIndex)] || ""
+      };
+      wrongCount++;
+    }
   }
 
   const accuracyPct = (correctCount / total) * 100;
 
+  let starsEarned = 0;
+  if(accuracyPct >= 90){
+    starsEarned = 3;
+  }else if(accuracyPct >= 60){
+    starsEarned = 2;
+  }else if(accuracyPct >= 40){
+    starsEarned = 1;
+  }
+
   const userStats = loadUserStats();
   const testId = selectedTest ? (selectedTest.id || "default") : "default";
 
-  const existingAttempt = userStats.attempts.find(a => a.testId === testId);
-  const isFirstAttempt = !existingAttempt;
+  const alreadyCompleted = userStats.bestScores && userStats.bestScores[testId];
 
-  if(isFirstAttempt){
-    userStats.attempts.push({
-      testId,
+  if(!alreadyCompleted){
+    if(!userStats.bestScores) userStats.bestScores = {};
+    if(!userStats.bestStars) userStats.bestStars = {};
+
+    userStats.bestScores[testId] = {
       correctCount,
       totalQuestions: total,
       accuracyPct,
+      starsEarned,
       timestamp: Date.now()
-    });
+    };
+    userStats.bestStars[testId] = starsEarned;
+    saveUserStats(userStats);
   }
 
-  saveUserStats(userStats);
+  const totals = computeUserTotals();
+  const starIcons = starsEarned === 3 ? "⭐⭐⭐" : starsEarned === 2 ? "⭐⭐" : starsEarned === 1 ? "⭐" : "❌";
 
   $("scoreText").textContent = correctCount + " / " + total;
-  $("gradeText").textContent = isFirstAttempt ? "Completed ✓" : "Practice Attempt";
+  $("gradeText").textContent = totals.badgeTitle + " " + starIcons;
   $("correctStat").textContent = correctCount;
   $("wrongStat").textContent = wrongCount;
+  $("pointsStat").textContent = totals.totalPoints;
   $("accuracyStat").textContent = Math.round(accuracyPct) + "%";
 
   $("performanceText").innerHTML =
     "<b>" + Math.round(accuracyPct) + "% accuracy</b> • " +
-    (timeExpired ? "Time limit reached" : "Completed") +
-    (!isFirstAttempt ? "<br><span style='color:#e45769;font-size:12px;'>Note: Re-attempts are for practice; your initial attempt score is locked.</span>" : "");
+    (alreadyCompleted ? "Re-attempt (Score locked to initial completion)" : "Completed for the first time");
 
   renderReview();
   hidePages();
@@ -1367,20 +1440,29 @@ async function loadVisitorCount(){
   }
 }
 
+// Modal Toggle Handlers for Instructions Icon
+$("infoModalBtn").addEventListener("click",()=>{
+  $("instructionsModal").classList.remove("hidden");
+});
+$("modalCloseBtn").addEventListener("click",()=>{
+  $("instructionsModal").classList.add("hidden");
+});
+$("instructionsModal").addEventListener("click",(e)=>{
+  if(e.target === $("instructionsModal")){
+    $("instructionsModal").classList.add("hidden");
+  }
+});
+
 $("googleButton").addEventListener("click",googleLogin);
 
 $("homeNav").addEventListener("click",showHome);
 $("topProfileChip").addEventListener("click",showProfile);
 $("quizBack").addEventListener("click",()=>{
-  if(confirm("Exit this quiz?")){
-    window.history.pushState({}, "", "/quiz");
+  if(confirm("Exit this quiz? Your progress will be lost.")){
     showHome();
   }
 });
-$("resultHome").addEventListener("click",()=>{
-  window.history.pushState({}, "", "/quiz");
-  showHome();
-});
+$("resultHome").addEventListener("click",showHome);
 $("nextButton").addEventListener("click",nextQuestion);
 
 $("profileThemeToggle").addEventListener("click",()=>{
@@ -1524,27 +1606,48 @@ def quiz_questions(test_id):
     try:
         db = get_firestore()
         questions = []
-        docs = db.collection("custom_questions").where("testId", "==", test_id).stream()
-        for doc in docs:
-            data = doc.to_dict()
-            questions.append({
-                "id": data.get("id") or doc.id,
-                "testId": data.get("testId") or "",
-                "topicId": data.get("topicId") or "",
-                "questionText": data.get("questionText") or "",
-                "option0": data.get("option0") or "",
-                "option1": data.get("option1") or "",
-                "option2": data.get("option2") or "",
-                "option3": data.get("option3") or "",
-                "correctOptionIndex": data.get("correctOptionIndex", 0),
-                "explanation": data.get("explanation") or "",
-                "hint": data.get("hint") or "",
-            })
+        
+        if "weekly" in str(test_id).lower():
+            all_q_docs = db.collection("custom_questions").stream()
+            for doc in all_q_docs:
+                data = doc.to_dict()
+                questions.append({
+                    "id": data.get("id") or doc.id,
+                    "testId": data.get("testId") or "",
+                    "topicId": data.get("topicId") or "",
+                    "questionText": data.get("questionText") or "",
+                    "option0": data.get("option0") or "",
+                    "option1": data.get("option1") or "",
+                    "option2": data.get("option2") or "",
+                    "option3": data.get("option3") or "",
+                    "correctOptionIndex": data.get("correctOptionIndex", 0),
+                    "explanation": data.get("explanation") or "",
+                    "hint": data.get("hint") or "",
+                })
+            random.shuffle(questions)
+            questions = questions[:10]
+        else:
+            docs = db.collection("custom_questions").where("testId", "==", test_id).stream()
+            for doc in docs:
+                data = doc.to_dict()
+                questions.append({
+                    "id": data.get("id") or doc.id,
+                    "testId": data.get("testId") or "",
+                    "topicId": data.get("topicId") or "",
+                    "questionText": data.get("questionText") or "",
+                    "option0": data.get("option0") or "",
+                    "option1": data.get("option1") or "",
+                    "option2": data.get("option2") or "",
+                    "option3": data.get("option3") or "",
+                    "correctOptionIndex": data.get("correctOptionIndex", 0),
+                    "explanation": data.get("explanation") or "",
+                    "hint": data.get("hint") or "",
+                })
         return jsonify(questions)
     except Exception as e:
         print("[Quiz Firestore questions error]", e)
+        print("[Quiz Firestore questions error]", e)
         return jsonify({"error": str(e)}), 500
-
 
 # ============================================================
 # RUN (Koyeb Port Configured)
