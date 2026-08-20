@@ -855,6 +855,11 @@ let elapsedSeconds = 0;
 let timerInterval = null;
 let currentTab = 'daily';
 
+function getUrlParameter(name){
+  const params = new URLSearchParams(window.location.search);
+  return params.get(name);
+}
+
 function getUserStorageKey(){
   const user = firebase.auth().currentUser;
   return user ? "ca_stats_" + user.uid : "ca_stats_guest";
@@ -978,12 +983,13 @@ function updateUserUI(user){
   }
 }
 
-function showApp(){
+async function showApp(){
   $("loginPage").classList.add("hidden");
   $("appPage").classList.remove("hidden");
-  showHome();
-  loadData();
+  showHome(false);
+  await loadData();
   loadVisitorCount();
+  checkDirectTestLink();
 }
 
 function showLogin(){
@@ -1088,13 +1094,16 @@ function renderTests(tests){
       startBtn.addEventListener("click",()=>startQuiz(test));
     }
 
-    card.querySelector(".shareBtn").addEventListener("click",()=>{
-      const shareText = `Check out this quiz: ${title} - ${description} on CA Blockbuster!`;
+    card.querySelector(".shareBtn").addEventListener("click",(e)=>{
+      e.stopPropagation();
+      const testUrl = `${window.location.origin}${window.location.pathname}?testId=${encodeURIComponent(test.id)}`;
+      const shareText = `Check out this quiz: ${title} on CA Blockbuster!`;
+
       if(navigator.share){
-        navigator.share({title: title, text: shareText, url: window.location.href}).catch(()=>{});
+        navigator.share({title: title, text: shareText, url: testUrl}).catch(()=>{});
       }else{
-        navigator.clipboard.writeText(window.location.href);
-        alert("Quiz link copied to clipboard!");
+        navigator.clipboard.writeText(testUrl);
+        alert("Unique quiz link copied to clipboard!");
       }
     });
 
@@ -1126,11 +1135,15 @@ function hidePages(){
   $("homeNav").classList.remove("active");
 }
 
-function showHome(){
+function showHome(updateHistory=true){
   clearInterval(timerInterval);
   hidePages();
   $("homePage").classList.remove("hidden");
   $("homeNav").classList.add("active");
+  if(updateHistory){
+    const cleanUrl = `${window.location.origin}${window.location.pathname}`;
+    window.history.pushState({}, "", cleanUrl);
+  }
   switchTab(currentTab);
 }
 
@@ -1171,13 +1184,33 @@ function switchTab(tabKey){
   }
 }
 
-async function startQuiz(test){
+async function checkDirectTestLink(){
+  const directTestId = getUrlParameter("testId");
+  if(!directTestId) return;
+
+  try{
+    let targetTest = allTests.find(t => String(t.id) === String(directTestId));
+    if(!targetTest){
+      targetTest = { id: directTestId, title: "Custom Practice Test" };
+    }
+    await startQuiz(targetTest, false);
+  }catch(err){
+    console.error("Failed to auto-start quiz:", err);
+  }
+}
+
+async function startQuiz(test, updateHistory=true){
   selectedTest=test;
   hidePages();
   $("quizPage").classList.remove("hidden");
   $("testTitle").textContent=test.title||test.id;
   $("questionText").textContent="Loading questions...";
   $("options").innerHTML="";
+
+  if(updateHistory){
+    const newUrl = `${window.location.origin}${window.location.pathname}?testId=${encodeURIComponent(test.id)}`;
+    window.history.pushState({ testId: test.id }, "", newUrl);
+  }
 
   try{
     currentQuestions=await apiGet("/quiz/api/questions/"+encodeURIComponent(test.id));
@@ -1454,15 +1487,25 @@ $("instructionsModal").addEventListener("click",(e)=>{
 
 $("googleButton").addEventListener("click",googleLogin);
 
-$("homeNav").addEventListener("click",showHome);
+$("homeNav").addEventListener("click",()=>showHome(true));
 $("topProfileChip").addEventListener("click",showProfile);
 $("quizBack").addEventListener("click",()=>{
   if(confirm("Exit this quiz? Your progress will be lost.")){
-    showHome();
+    showHome(true);
   }
 });
-$("resultHome").addEventListener("click",showHome);
+$("resultHome").addEventListener("click",()=>showHome(true));
 $("nextButton").addEventListener("click",nextQuestion);
+
+window.addEventListener("popstate",()=>{
+  const testId = getUrlParameter("testId");
+  if(testId){
+    const targetTest = allTests.find(t => String(t.id) === String(testId)) || { id: testId };
+    startQuiz(targetTest, false);
+  }else{
+    showHome(false);
+  }
+});
 
 $("profileThemeToggle").addEventListener("click",()=>{
   document.body.classList.toggle("dark");
@@ -1644,7 +1687,6 @@ def quiz_questions(test_id):
                 })
         return jsonify(questions)
     except Exception as e:
-        print("[Quiz Firestore questions error]", e)
         print("[Quiz Firestore questions error]", e)
         return jsonify({"error": str(e)}), 500
 
