@@ -1120,7 +1120,7 @@ function switchTab(tabKey){
       { id: "weekly_aug_w1", topicId: "weekly", title: "August 2026 - Week 1 Revision", subtitle: "Shuffled weekly review test (10 Questions)", difficulty: "Medium", durationMinutes: 5, questionCount: 10, dateMillis: new Date("2026-08-01").getTime() },
       { id: "weekly_aug_w2", topicId: "weekly", title: "August 2026 - Week 2 Revision", subtitle: "Shuffled weekly review test (10 Questions)", difficulty: "Medium", durationMinutes: 5, questionCount: 10, dateMillis: new Date("2026-08-08").getTime() }
     ];
-    weeklyTests.sort((a, b) => int(b.dateMillis || 0) - int(a.dateMillis || 0));
+    weeklyTests.sort((a, b) => Number(b.dateMillis || 0) - Number(a.dateMillis || 0));
     renderTests(weeklyTests);
   } else if(tabKey === 'monthly'){
     buttons[2].classList.add('active');
@@ -1527,7 +1527,8 @@ def quiz_tests():
                 "subtitle": data.get("subtitle") or "",
                 "durationMinutes": data.get("durationMinutes") or 0,
                 "difficulty": data.get("difficulty") or "",
-                "dateMillis": data.get("dateMillis") or data.get("timestamp") or 0,
+                # Strictly parse dateMillis/timestamp as integer for numeric sorting
+                "dateMillis": int(data.get("dateMillis") or data.get("timestamp") or 0),
                 "questionCount": 0,
             })
         question_counts = {}
@@ -1539,8 +1540,8 @@ def quiz_tests():
         for test in tests:
             test["questionCount"] = question_counts.get(test["id"], 0)
 
-        # Sort strictly with the latest dates on top (descending order)
-        tests.sort(key=lambda t: int(t.get("dateMillis") or 0), reverse=True)
+        # STRICT NUMERIC SORT: Latest dates (highest millisecond values) always on top
+        tests.sort(key=lambda t: t.get("dateMillis", 0), reverse=True)
 
         return jsonify(tests)
     except Exception as e:
