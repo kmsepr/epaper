@@ -364,7 +364,6 @@ button{cursor:pointer}
 }
 .navBtn:hover,.navBtn.active{background:var(--soft);color:var(--purple);border-color:#ded3ff}
 
-/* Info / Instructions Top Bar Icon Button */
 .infoIconBtn{
   border:1px solid var(--line);background:var(--panel);color:var(--purple);
   width:38px;height:38px;border-radius:50%;font-size:16px;font-weight:800;
@@ -373,7 +372,6 @@ button{cursor:pointer}
 }
 .infoIconBtn:hover{background:var(--soft);border-color:#ded3ff}
 
-/* Small Profile Chip Icon on Top Bar */
 .userChip{
   display:flex;align-items:center;gap:8px;
   background:var(--soft);border:1px solid #ded3ff;
@@ -390,19 +388,28 @@ button{cursor:pointer}
 .userAvatar img{width:100%;height:100%;object-fit:cover}
 
 .page{padding:28px 6px}
-.topLine{display:flex;align-items:center;justify-content:space-between;gap:15px;margin-bottom:20px}
+.topLine{display:flex;align-items:center;justify-content:space-between;gap:15px;margin-bottom:20px;flex-wrap:wrap}
 .search{
-  max-width:420px;flex:1;position:relative;
+  max-width:320px;flex:1;position:relative;
 }
 .search input{
   width:100%;border:1px solid var(--line);background:var(--panel);
-  color:var(--text);border-radius:16px;padding:14px 16px 14px 42px;
+  color:var(--text);border-radius:16px;padding:12px 16px 12px 42px;
   outline:none;box-shadow:var(--shadow);
 }
-.search span{position:absolute;left:15px;top:12px;color:#999;font-size:20px}
+.search span{position:absolute;left:15px;top:10px;color:#999;font-size:20px}
+
+.datePickerWrapper{
+  display:flex;align-items:center;gap:8px;background:var(--panel);
+  border:1px solid var(--line);padding:6px 12px;border-radius:16px;box-shadow:var(--shadow);
+}
+.datePickerWrapper label{font-size:13px;font-weight:700;color:var(--muted)}
+.datePickerWrapper input[type="date"]{
+  border:0;background:transparent;color:var(--text);outline:none;font-weight:600;
+}
+
 .quizCount{color:var(--muted);font-size:14px;white-space:nowrap}
 
-/* Instructions Modal Overlay */
 .modalOverlay{
   position:fixed;top:0;left:0;width:100%;height:100%;
   background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;
@@ -481,7 +488,6 @@ body.dark .quizMeta{color:#c0bdce}
 .shareBtn:hover{background:var(--soft);color:var(--purple);border-color:#ded3ff}
 .empty{padding:30px;text-align:center;background:var(--panel);border-radius:18px;color:var(--muted)}
 
-/* Tabs Navigation Style */
 .tabsContainer{
   display:flex;
   gap:8px;
@@ -523,7 +529,6 @@ body.dark .quizMeta{color:#c0bdce}
   gap:8px;
 }
 
-/* Profile Tab Design */
 .profileScreen{max-width:800px;margin:auto;padding:24px 0}
 .profileCard{
   background:var(--panel);
@@ -721,7 +726,6 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
       </div>
     </header>
 
-    <!-- Instructions Modal Popup -->
     <div id="instructionsModal" class="modalOverlay hidden">
       <div class="modalBox">
         <div class="modalHeader">
@@ -740,19 +744,21 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
     </div>
 
     <main id="homePage" class="page">
-      <!-- Tabs Navigation Bar -->
       <div class="tabsContainer">
         <button class="tabBtn active" onclick="switchTab('daily')">⚡ Daily</button>
         <button class="tabBtn" onclick="switchTab('weekly')">📆 Weekly</button>
         <button class="tabBtn" onclick="switchTab('monthly')">📅 Monthly</button>
       </div>
 
-      <!-- Quizzes List Header -->
       <div class="sectionHeading" id="quizListHeading">⚡ Daily CA Quizzes</div>
       <div class="topLine">
         <div class="search">
           <span>⌕</span>
           <input id="searchInput" type="search" placeholder="Search quizzes...">
+        </div>
+        <div class="datePickerWrapper" id="datePickerContainer">
+          <label for="quizDateSelect">📅 Date:</label>
+          <input type="date" id="quizDateSelect">
         </div>
         <div class="quizCount" id="quizCount">0 quizzes</div>
       </div>
@@ -764,7 +770,6 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
       <div class="visitor" id="visitorCount">👥 Today: <b>0</b> visitors</div>
     </main>
 
-    <!-- Profile Tab Screen -->
     <section id="profilePage" class="profileScreen hidden">
       <div class="profileCard">
         <div class="profileHeaderInfo">
@@ -855,6 +860,10 @@ let timerSeconds = 0;
 let elapsedSeconds = 0;
 let timerInterval = null;
 let currentTab = 'daily';
+
+// Initialize date picker with today's date in YYYY-MM-DD format
+const todayStr = new Date().toISOString().slice(0, 10);
+$("quizDateSelect").value = todayStr;
 
 function getUserStorageKey(){
   const user = firebase.auth().currentUser;
@@ -979,7 +988,7 @@ function renderTests(tests){
   $("quizCount").textContent=tests.length+" quizzes";
 
   if(!tests.length){
-    $("quizList").innerHTML='<div class="empty">No quizzes found for this tab.</div>';
+    $("quizList").innerHTML='<div class="empty">No quizzes found for this selection.</div>';
     return;
   }
 
@@ -1060,20 +1069,48 @@ function renderTests(tests){
   });
 }
 
-$("searchInput").addEventListener("input",()=>{
-  const q=$("searchInput").value.trim().toLowerCase();
-  const filtered=filteredTests.filter(t=>
+$("searchInput").addEventListener("input",applyFilters);
+$("quizDateSelect").addEventListener("change",applyFilters);
+
+function applyFilters(){
+  const q = $("searchInput").value.trim().toLowerCase();
+  const selectedDate = $("quizDateSelect").value; // YYYY-MM-DD format
+
+  let baseTests = [];
+  if(currentTab === 'daily'){
+    baseTests = allTests.filter(t => !String(t.topicId||"").toLowerCase().includes('weekly') && !String(t.topicId||"").toLowerCase().includes('monthly'));
+    
+    // Filter strictly by date selected on calendar if user picks a date
+    if(selectedDate){
+      baseTests = baseTests.filter(t => {
+        const millis = Number(t.dateMillis || 0);
+        if(!millis) return false;
+        const testDateStr = new Date(millis).toISOString().slice(0, 10);
+        return testDateStr === selectedDate;
+      });
+    }
+  } else if(currentTab === 'weekly'){
+    baseTests = [
+      { id: "weekly_aug_w1", topicId: "weekly", title: "August 2026 - Week 1 Revision", subtitle: "Shuffled weekly review test (10 Questions)", difficulty: "Medium", durationMinutes: 5, questionCount: 10, dateMillis: new Date("2026-08-01").getTime() },
+      { id: "weekly_aug_w2", topicId: "weekly", title: "August 2026 - Week 2 Revision", subtitle: "Shuffled weekly review test (10 Questions)", difficulty: "Medium", durationMinutes: 5, questionCount: 10, dateMillis: new Date("2026-08-08").getTime() }
+    ];
+  } else if(currentTab === 'monthly'){
+    baseTests = allTests.filter(t => {
+      const tid = String(t.topicId || "").toLowerCase();
+      const ttl = String(t.title || "").toLowerCase();
+      const sub = String(t.subtitle || "").toLowerCase();
+      return tid.includes('monthly') || ttl.includes('monthly') || sub.includes('monthly');
+    });
+  }
+
+  const filtered = baseTests.filter(t =>
     String(t.title||"").toLowerCase().includes(q) ||
     String(t.subtitle||"").toLowerCase().includes(q) ||
     String(t.topicId||"").toLowerCase().includes(q)
   );
-  $("quizCount").textContent=filtered.length+" quizzes";
-  if(!filtered.length){
-    $("quizList").innerHTML='<div class="empty">No matching quizzes found.</div>';
-  }else{
-    renderTests(filtered);
-  }
-});
+
+  renderTests(filtered);
+}
 
 function hidePages(){
   $("homePage").classList.add("hidden");
@@ -1104,29 +1141,23 @@ function switchTab(tabKey){
   const buttons = document.querySelectorAll('.tabsContainer .tabBtn');
   buttons.forEach(btn => btn.classList.remove('active'));
   
+  const datePickerWrapper = $("datePickerContainer");
+  
   if(tabKey === 'daily'){
     buttons[0].classList.add('active');
     $("quizListHeading").textContent = "⚡ Daily CA Quizzes";
-    renderTests(allTests.filter(t => !String(t.topicId||"").toLowerCase().includes('weekly') && !String(t.topicId||"").toLowerCase().includes('monthly')));
+    datePickerWrapper.style.display = "flex";
   } else if(tabKey === 'weekly'){
     buttons[1].classList.add('active');
     $("quizListHeading").textContent = "📆 Weekly Revision Quizzes";
-    const weeklyTests = [
-      { id: "weekly_aug_w1", topicId: "weekly", title: "August 2026 - Week 1 Revision", subtitle: "Shuffled weekly review test (10 Questions)", difficulty: "Medium", durationMinutes: 5, questionCount: 10 },
-      { id: "weekly_aug_w2", topicId: "weekly", title: "August 2026 - Week 2 Revision", subtitle: "Shuffled weekly review test (10 Questions)", difficulty: "Medium", durationMinutes: 5, questionCount: 10 }
-    ];
-    renderTests(weeklyTests);
+    datePickerWrapper.style.display = "none";
   } else if(tabKey === 'monthly'){
     buttons[2].classList.add('active');
     $("quizListHeading").textContent = "📅 Monthly Wise Quizzes";
-    const monthlyTests = allTests.filter(t => {
-      const tid = String(t.topicId || "").toLowerCase();
-      const ttl = String(t.title || "").toLowerCase();
-      const sub = String(t.subtitle || "").toLowerCase();
-      return tid.includes('monthly') || ttl.includes('monthly') || sub.includes('monthly');
-    });
-    renderTests(monthlyTests);
+    datePickerWrapper.style.display = "none";
   }
+  
+  applyFilters();
 }
 
 async function startQuiz(test){
@@ -1394,7 +1425,6 @@ async function loadVisitorCount(){
   }
 }
 
-// Modal Toggle Handlers for Instructions Icon
 $("infoModalBtn").addEventListener("click",()=>{
   $("instructionsModal").classList.remove("hidden");
 });
@@ -1443,7 +1473,6 @@ if(localStorage.getItem("ca_theme")==="dark"){
 
     html = html.replace("__FIREBASE_CONFIG__", config_json)
     return html
-
 
 # ============================================================
 # DAILY VISITOR COUNTER
@@ -1516,7 +1545,6 @@ def quiz_tests():
         tests = []
         for doc in db.collection("custom_tests").stream():
             data = doc.to_dict()
-            # If timestamp field in Firestore is used, we can read it directly
             tests.append({
                 "id": data.get("id") or doc.id,
                 "topicId": data.get("topicId") or "",
@@ -1536,9 +1564,8 @@ def quiz_tests():
         for test in tests:
             test["questionCount"] = question_counts.get(test["id"], 0)
 
-        # Sort strictly using the numeric value of timestamp (or dateMillis) in ascending order:
-        # Aug 4 (1786962194141) -> Aug 5 (1786962194268) -> Aug 6 (1786962194440)
-        tests.sort(key=lambda t: int(t.get("dateMillis") or 0), reverse=False)
+        # Sort strictly with the latest dates on top (descending order)
+        tests.sort(key=lambda t: int(t.get("dateMillis") or 0), reverse=True)
 
         return jsonify(tests)
     except Exception as e:
