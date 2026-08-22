@@ -736,7 +736,6 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
     <main id="homePage" class="page">
       <div class="tabsContainer">
         <button class="tabBtn active" onclick="switchTab('daily')">⚡ Daily</button>
-        <button class="tabBtn" onclick="switchTab('weekly')">📆 Weekly</button>
         <button class="tabBtn" onclick="switchTab('monthly')">📅 Monthly</button>
       </div>
 
@@ -1056,12 +1055,7 @@ $("searchInput").addEventListener("input",()=>{
   
   let baseTests = [];
   if(currentTab === 'daily'){
-    baseTests = allTests.filter(t => !String(t.topicId||"").toLowerCase().includes('weekly') && !String(t.topicId||"").toLowerCase().includes('monthly'));
-  } else if(currentTab === 'weekly'){
-    baseTests = [
-      { id: "weekly_aug_w1", topicId: "weekly", title: "August 2026 - Week 1 Revision", subtitle: "Shuffled weekly review test (10 Questions)", difficulty: "Medium", durationMinutes: 5, questionCount: 10, dateMillis: new Date("2026-08-01").getTime() },
-      { id: "weekly_aug_w2", topicId: "weekly", title: "August 2026 - Week 2 Revision", subtitle: "Shuffled weekly review test (10 Questions)", difficulty: "Medium", durationMinutes: 5, questionCount: 10, dateMillis: new Date("2026-08-08").getTime() }
-    ];
+    baseTests = allTests.filter(t => !String(t.topicId||"").toLowerCase().includes('monthly'));
   } else if(currentTab === 'monthly'){
     baseTests = allTests.filter(t => {
       const tid = String(t.topicId || "").toLowerCase();
@@ -1112,18 +1106,9 @@ function switchTab(tabKey){
   if(tabKey === 'daily'){
     buttons[0].classList.add('active');
     $("quizListHeading").textContent = "⚡ Daily CA Quizzes";
-    renderTests(allTests.filter(t => !String(t.topicId||"").toLowerCase().includes('weekly') && !String(t.topicId||"").toLowerCase().includes('monthly')));
-  } else if(tabKey === 'weekly'){
-    buttons[1].classList.add('active');
-    $("quizListHeading").textContent = "📆 Weekly Revision Quizzes";
-    const weeklyTests = [
-      { id: "weekly_aug_w1", topicId: "weekly", title: "August 2026 - Week 1 Revision", subtitle: "Shuffled weekly review test (10 Questions)", difficulty: "Medium", durationMinutes: 5, questionCount: 10, dateMillis: new Date("2026-08-01").getTime() },
-      { id: "weekly_aug_w2", topicId: "weekly", title: "August 2026 - Week 2 Revision", subtitle: "Shuffled weekly review test (10 Questions)", difficulty: "Medium", durationMinutes: 5, questionCount: 10, dateMillis: new Date("2026-08-08").getTime() }
-    ];
-    weeklyTests.sort((a, b) => Number(b.dateMillis || 0) - Number(a.dateMillis || 0));
-    renderTests(weeklyTests);
+    renderTests(allTests.filter(t => !String(t.topicId||"").toLowerCase().includes('monthly')));
   } else if(tabKey === 'monthly'){
-    buttons[2].classList.add('active');
+    buttons[1].classList.add('active');
     $("quizListHeading").textContent = "📅 Monthly Wise Quizzes";
     const monthlyTests = allTests.filter(t => {
       const tid = String(t.topicId || "").toLowerCase();
@@ -1520,6 +1505,7 @@ def quiz_tests():
         tests = []
         for doc in db.collection("custom_tests").stream():
             data = doc.to_dict()
+            raw_millis = data.get("dateMillis") or data.get("timestamp") or 0
             tests.append({
                 "id": data.get("id") or doc.id,
                 "topicId": data.get("topicId") or "",
@@ -1527,10 +1513,10 @@ def quiz_tests():
                 "subtitle": data.get("subtitle") or "",
                 "durationMinutes": data.get("durationMinutes") or 0,
                 "difficulty": data.get("difficulty") or "",
-                # Strictly parse dateMillis/timestamp as integer for numeric sorting
-                "dateMillis": int(data.get("dateMillis") or data.get("timestamp") or 0),
+                "dateMillis": int(raw_millis),
                 "questionCount": 0,
             })
+            
         question_counts = {}
         for doc in db.collection("custom_questions").stream():
             data = doc.to_dict()
@@ -1540,7 +1526,7 @@ def quiz_tests():
         for test in tests:
             test["questionCount"] = question_counts.get(test["id"], 0)
 
-        # STRICT NUMERIC SORT: Latest dates (highest millisecond values) always on top
+        # STRICT NUMERIC SORTING: Latest dates (highest millisecond values) always come first
         tests.sort(key=lambda t: t.get("dateMillis", 0), reverse=True)
 
         return jsonify(tests)
@@ -1553,43 +1539,22 @@ def quiz_questions(test_id):
     try:
         db = get_firestore()
         questions = []
-        
-        if "weekly" in str(test_id).lower():
-            all_q_docs = db.collection("custom_questions").stream()
-            for doc in all_q_docs:
-                data = doc.to_dict()
-                questions.append({
-                    "id": data.get("id") or doc.id,
-                    "testId": data.get("testId") or "",
-                    "topicId": data.get("topicId") or "",
-                    "questionText": data.get("questionText") or "",
-                    "option0": data.get("option0") or "",
-                    "option1": data.get("option1") or "",
-                    "option2": data.get("option2") or "",
-                    "option3": data.get("option3") or "",
-                    "correctOptionIndex": data.get("correctOptionIndex", 0),
-                    "explanation": data.get("explanation") or "",
-                    "hint": data.get("hint") or "",
-                })
-            random.shuffle(questions)
-            questions = questions[:10]
-        else:
-            docs = db.collection("custom_questions").where("testId", "==", test_id).stream()
-            for doc in docs:
-                data = doc.to_dict()
-                questions.append({
-                    "id": data.get("id") or doc.id,
-                    "testId": data.get("testId") or "",
-                    "topicId": data.get("topicId") or "",
-                    "questionText": data.get("questionText") or "",
-                    "option0": data.get("option0") or "",
-                    "option1": data.get("option1") or "",
-                    "option2": data.get("option2") or "",
-                    "option3": data.get("option3") or "",
-                    "correctOptionIndex": data.get("correctOptionIndex", 0),
-                    "explanation": data.get("explanation") or "",
-                    "hint": data.get("hint") or "",
-                })
+        docs = db.collection("custom_questions").where("testId", "==", test_id).stream()
+        for doc in docs:
+            data = doc.to_dict()
+            questions.append({
+                "id": data.get("id") or doc.id,
+                "testId": data.get("testId") or "",
+                "topicId": data.get("topicId") or "",
+                "questionText": data.get("questionText") or "",
+                "option0": data.get("option0") or "",
+                "option1": data.get("option1") or "",
+                "option2": data.get("option2") or "",
+                "option3": data.get("option3") or "",
+                "correctOptionIndex": data.get("correctOptionIndex", 0),
+                "explanation": data.get("explanation") or "",
+                "hint": data.get("hint") or "",
+            })
         return jsonify(questions)
     except Exception as e:
         print("[Quiz Firestore questions error]", e)
