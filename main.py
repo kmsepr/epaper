@@ -733,6 +733,7 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
             <li>All questions must be answered completely before submitting the quiz.</li>
             <li>Quizzes are timed at <b>30 seconds per question</b> (e.g., 5 minutes for 10 questions).</li>
             <li>Quizzes marked as <b>"Preparing"</b> are currently being updated by the admin and will unlock once fully compiled.</li>
+            <li>Scores and points are added <b>only from fresh attempts on uncompleted tests ("Not started")</b>. Once marked as <b>"Completed"</b>, re-attempting practices questions without adding extra points.</li>
           </ul>
         </div>
       </div>
@@ -855,11 +856,6 @@ let elapsedSeconds = 0;
 let timerInterval = null;
 let currentTab = 'daily';
 
-function getUrlParameter(name){
-  const params = new URLSearchParams(window.location.search);
-  return params.get(name);
-}
-
 function getUserStorageKey(){
   const user = firebase.auth().currentUser;
   return user ? "ca_stats_" + user.uid : "ca_stats_guest";
@@ -877,49 +873,6 @@ function saveUserStats(stats){
   try{
     localStorage.setItem(getUserStorageKey(), JSON.stringify(stats));
   }catch(e){}
-}
-
-function computeUserTotals(){
-  const stats = loadUserStats();
-  const BASE_POINTS = 420;
-
-  let totalCorrect = 0;
-  let totalAccuracySum = 0;
-  let countAttempts = 0;
-
-  if(stats.bestScores){
-    Object.values(stats.bestScores).forEach(best => {
-      totalCorrect += Number(best.correctCount || 0);
-      totalAccuracySum += Number(best.accuracyPct || 0);
-      countAttempts++;
-    });
-  }
-
-  let totalStars = 0;
-  Object.values(stats.bestStars || {}).forEach(s => {
-    totalStars += Number(s || 0);
-  });
-
-  const totalPoints = BASE_POINTS + (totalCorrect * 10) + (totalStars * 40);
-
-  const overallAccuracy = countAttempts > 0
-    ? totalAccuracySum / countAttempts
-    : 75;
-
-  let badgeTitle = "🎯 Rising Scholar";
-  if(totalPoints >= 1000){
-    badgeTitle = "🏆 Master";
-  }else if(totalPoints >= 650){
-    badgeTitle = "🌟 CA Top Aspirant";
-  }
-
-  return {
-    totalPoints,
-    totalStars,
-    overallAccuracy: Math.round(overallAccuracy),
-    badgeTitle,
-    testsCompleted: countAttempts
-  };
 }
 
 function esc(value){
@@ -983,13 +936,12 @@ function updateUserUI(user){
   }
 }
 
-async function showApp(){
+function showApp(){
   $("loginPage").classList.add("hidden");
   $("appPage").classList.remove("hidden");
-  showHome(false);
-  await loadData();
+  showHome();
+  loadData();
   loadVisitorCount();
-  checkDirectTestLink();
 }
 
 function showLogin(){
@@ -1094,16 +1046,13 @@ function renderTests(tests){
       startBtn.addEventListener("click",()=>startQuiz(test));
     }
 
-    card.querySelector(".shareBtn").addEventListener("click",(e)=>{
-      e.stopPropagation();
-      const testUrl = `${window.location.origin}${window.location.pathname}?testId=${encodeURIComponent(test.id)}`;
-      const shareText = `Check out this quiz: ${title} on CA Blockbuster!`;
-
+    card.querySelector(".shareBtn").addEventListener("click",()=>{
+      const shareText = `Check out this quiz: ${title} - ${description} on CA Blockbuster!`;
       if(navigator.share){
-        navigator.share({title: title, text: shareText, url: testUrl}).catch(()=>{});
+        navigator.share({title: title, text: shareText, url: window.location.href}).catch(()=>{});
       }else{
-        navigator.clipboard.writeText(testUrl);
-        alert("Unique quiz link copied to clipboard!");
+        navigator.clipboard.writeText(window.location.href);
+        alert("Quiz link copied to clipboard!");
       }
     });
 
@@ -1135,15 +1084,11 @@ function hidePages(){
   $("homeNav").classList.remove("active");
 }
 
-function showHome(updateHistory=true){
+function showHome(){
   clearInterval(timerInterval);
   hidePages();
   $("homePage").classList.remove("hidden");
   $("homeNav").classList.add("active");
-  if(updateHistory){
-    const cleanUrl = `${window.location.origin}${window.location.pathname}`;
-    window.history.pushState({}, "", cleanUrl);
-  }
   switchTab(currentTab);
 }
 
@@ -1184,33 +1129,13 @@ function switchTab(tabKey){
   }
 }
 
-async function checkDirectTestLink(){
-  const directTestId = getUrlParameter("testId");
-  if(!directTestId) return;
-
-  try{
-    let targetTest = allTests.find(t => String(t.id) === String(directTestId));
-    if(!targetTest){
-      targetTest = { id: directTestId, title: "Custom Practice Test" };
-    }
-    await startQuiz(targetTest, false);
-  }catch(err){
-    console.error("Failed to auto-start quiz:", err);
-  }
-}
-
-async function startQuiz(test, updateHistory=true){
+async function startQuiz(test){
   selectedTest=test;
   hidePages();
   $("quizPage").classList.remove("hidden");
   $("testTitle").textContent=test.title||test.id;
   $("questionText").textContent="Loading questions...";
   $("options").innerHTML="";
-
-  if(updateHistory){
-    const newUrl = `${window.location.origin}${window.location.pathname}?testId=${encodeURIComponent(test.id)}`;
-    window.history.pushState({ testId: test.id }, "", newUrl);
-  }
 
   try{
     currentQuestions=await apiGet("/quiz/api/questions/"+encodeURIComponent(test.id));
@@ -1415,14 +1340,11 @@ function finishQuiz(timeExpired=false){
     saveUserStats(userStats);
   }
 
-  const totals = computeUserTotals();
-  const starIcons = starsEarned === 3 ? "⭐⭐⭐" : starsEarned === 2 ? "⭐⭐" : starsEarned === 1 ? "⭐" : "❌";
-
   $("scoreText").textContent = correctCount + " / " + total;
-  $("gradeText").textContent = totals.badgeTitle + " " + starIcons;
+  $("gradeText").textContent = starsEarned === 3 ? "⭐⭐⭐" : starsEarned === 2 ? "⭐⭐" : starsEarned === 1 ? "⭐" : "❌";
   $("correctStat").textContent = correctCount;
   $("wrongStat").textContent = wrongCount;
-  $("pointsStat").textContent = totals.totalPoints;
+  $("pointsStat").textContent = correctCount * 10;
   $("accuracyStat").textContent = Math.round(accuracyPct) + "%";
 
   $("performanceText").innerHTML =
@@ -1487,25 +1409,15 @@ $("instructionsModal").addEventListener("click",(e)=>{
 
 $("googleButton").addEventListener("click",googleLogin);
 
-$("homeNav").addEventListener("click",()=>showHome(true));
+$("homeNav").addEventListener("click",showHome);
 $("topProfileChip").addEventListener("click",showProfile);
 $("quizBack").addEventListener("click",()=>{
   if(confirm("Exit this quiz? Your progress will be lost.")){
-    showHome(true);
+    showHome();
   }
 });
-$("resultHome").addEventListener("click",()=>showHome(true));
+$("resultHome").addEventListener("click",showHome);
 $("nextButton").addEventListener("click",nextQuestion);
-
-window.addEventListener("popstate",()=>{
-  const testId = getUrlParameter("testId");
-  if(testId){
-    const targetTest = allTests.find(t => String(t.id) === String(testId)) || { id: testId };
-    startQuiz(targetTest, false);
-  }else{
-    showHome(false);
-  }
-});
 
 $("profileThemeToggle").addEventListener("click",()=>{
   document.body.classList.toggle("dark");
@@ -1604,6 +1516,7 @@ def quiz_tests():
         tests = []
         for doc in db.collection("custom_tests").stream():
             data = doc.to_dict()
+            # If timestamp field in Firestore is used, we can read it directly
             tests.append({
                 "id": data.get("id") or doc.id,
                 "topicId": data.get("topicId") or "",
@@ -1611,7 +1524,7 @@ def quiz_tests():
                 "subtitle": data.get("subtitle") or "",
                 "durationMinutes": data.get("durationMinutes") or 0,
                 "difficulty": data.get("difficulty") or "",
-                "dateMillis": data.get("dateMillis"),
+                "dateMillis": data.get("dateMillis") or data.get("timestamp") or 0,
                 "questionCount": 0,
             })
         question_counts = {}
@@ -1623,20 +1536,9 @@ def quiz_tests():
         for test in tests:
             test["questionCount"] = question_counts.get(test["id"], 0)
 
-        def safe_sort_key(t):
-            val = t.get("dateMillis")
-            try:
-                if val is not None:
-                    return int(val)
-            except (ValueError, TypeError):
-                pass
-            
-            match = re.search(r'\d+', str(t.get("title") or ""))
-            if match:
-                return int(match.group())
-            return 0
-
-        tests.sort(key=safe_sort_key, reverse=True)
+        # Sort strictly using the numeric value of timestamp (or dateMillis) in ascending order:
+        # Aug 4 (1786962194141) -> Aug 5 (1786962194268) -> Aug 6 (1786962194440)
+        tests.sort(key=lambda t: int(t.get("dateMillis") or 0), reverse=False)
 
         return jsonify(tests)
     except Exception as e:
