@@ -388,26 +388,16 @@ button{cursor:pointer}
 .userAvatar img{width:100%;height:100%;object-fit:cover}
 
 .page{padding:28px 6px}
-.topLine{display:flex;align-items:center;justify-content:space-between;gap:15px;margin-bottom:20px;flex-wrap:wrap}
+.topLine{display:flex;align-items:center;justify-content:space-between;gap:15px;margin-bottom:20px}
 .search{
-  max-width:320px;flex:1;position:relative;
+  max-width:420px;flex:1;position:relative;
 }
 .search input{
   width:100%;border:1px solid var(--line);background:var(--panel);
-  color:var(--text);border-radius:16px;padding:12px 16px 12px 42px;
+  color:var(--text);border-radius:16px;padding:14px 16px 14px 42px;
   outline:none;box-shadow:var(--shadow);
 }
-.search span{position:absolute;left:15px;top:10px;color:#999;font-size:20px}
-
-.datePickerWrapper{
-  display:flex;align-items:center;gap:8px;background:var(--panel);
-  border:1px solid var(--line);padding:6px 12px;border-radius:16px;box-shadow:var(--shadow);
-}
-.datePickerWrapper label{font-size:13px;font-weight:700;color:var(--muted)}
-.datePickerWrapper input[type="date"]{
-  border:0;background:transparent;color:var(--text);outline:none;font-weight:600;
-}
-
+.search span{position:absolute;left:15px;top:12px;color:#999;font-size:20px}
 .quizCount{color:var(--muted);font-size:14px;white-space:nowrap}
 
 .modalOverlay{
@@ -756,10 +746,6 @@ body.dark .option.wrong{background:#45262c;color:#ffabb5}
           <span>⌕</span>
           <input id="searchInput" type="search" placeholder="Search quizzes...">
         </div>
-        <div class="datePickerWrapper" id="datePickerContainer">
-          <label for="quizDateSelect">📅 Date:</label>
-          <input type="date" id="quizDateSelect">
-        </div>
         <div class="quizCount" id="quizCount">0 quizzes</div>
       </div>
 
@@ -860,10 +846,6 @@ let timerSeconds = 0;
 let elapsedSeconds = 0;
 let timerInterval = null;
 let currentTab = 'daily';
-
-// Initialize date picker with today's date in YYYY-MM-DD format
-const todayStr = new Date().toISOString().slice(0, 10);
-$("quizDateSelect").value = todayStr;
 
 function getUserStorageKey(){
   const user = firebase.auth().currentUser;
@@ -988,7 +970,7 @@ function renderTests(tests){
   $("quizCount").textContent=tests.length+" quizzes";
 
   if(!tests.length){
-    $("quizList").innerHTML='<div class="empty">No quizzes found for this selection.</div>';
+    $("quizList").innerHTML='<div class="empty">No quizzes found for this tab.</div>';
     return;
   }
 
@@ -1069,26 +1051,12 @@ function renderTests(tests){
   });
 }
 
-$("searchInput").addEventListener("input",applyFilters);
-$("quizDateSelect").addEventListener("change",applyFilters);
-
-function applyFilters(){
-  const q = $("searchInput").value.trim().toLowerCase();
-  const selectedDate = $("quizDateSelect").value; // YYYY-MM-DD format
-
+$("searchInput").addEventListener("input",()=>{
+  const q=$("searchInput").value.trim().toLowerCase();
+  
   let baseTests = [];
   if(currentTab === 'daily'){
     baseTests = allTests.filter(t => !String(t.topicId||"").toLowerCase().includes('weekly') && !String(t.topicId||"").toLowerCase().includes('monthly'));
-    
-    // Filter strictly by date selected on calendar if user picks a date
-    if(selectedDate){
-      baseTests = baseTests.filter(t => {
-        const millis = Number(t.dateMillis || 0);
-        if(!millis) return false;
-        const testDateStr = new Date(millis).toISOString().slice(0, 10);
-        return testDateStr === selectedDate;
-      });
-    }
   } else if(currentTab === 'weekly'){
     baseTests = [
       { id: "weekly_aug_w1", topicId: "weekly", title: "August 2026 - Week 1 Revision", subtitle: "Shuffled weekly review test (10 Questions)", difficulty: "Medium", durationMinutes: 5, questionCount: 10, dateMillis: new Date("2026-08-01").getTime() },
@@ -1103,14 +1071,14 @@ function applyFilters(){
     });
   }
 
-  const filtered = baseTests.filter(t =>
+  const filtered=baseTests.filter(t=>
     String(t.title||"").toLowerCase().includes(q) ||
     String(t.subtitle||"").toLowerCase().includes(q) ||
     String(t.topicId||"").toLowerCase().includes(q)
   );
-
+  
   renderTests(filtered);
-}
+});
 
 function hidePages(){
   $("homePage").classList.add("hidden");
@@ -1141,23 +1109,30 @@ function switchTab(tabKey){
   const buttons = document.querySelectorAll('.tabsContainer .tabBtn');
   buttons.forEach(btn => btn.classList.remove('active'));
   
-  const datePickerWrapper = $("datePickerContainer");
-  
   if(tabKey === 'daily'){
     buttons[0].classList.add('active');
     $("quizListHeading").textContent = "⚡ Daily CA Quizzes";
-    datePickerWrapper.style.display = "flex";
+    renderTests(allTests.filter(t => !String(t.topicId||"").toLowerCase().includes('weekly') && !String(t.topicId||"").toLowerCase().includes('monthly')));
   } else if(tabKey === 'weekly'){
     buttons[1].classList.add('active');
     $("quizListHeading").textContent = "📆 Weekly Revision Quizzes";
-    datePickerWrapper.style.display = "none";
+    const weeklyTests = [
+      { id: "weekly_aug_w1", topicId: "weekly", title: "August 2026 - Week 1 Revision", subtitle: "Shuffled weekly review test (10 Questions)", difficulty: "Medium", durationMinutes: 5, questionCount: 10, dateMillis: new Date("2026-08-01").getTime() },
+      { id: "weekly_aug_w2", topicId: "weekly", title: "August 2026 - Week 2 Revision", subtitle: "Shuffled weekly review test (10 Questions)", difficulty: "Medium", durationMinutes: 5, questionCount: 10, dateMillis: new Date("2026-08-08").getTime() }
+    ];
+    weeklyTests.sort((a, b) => int(b.dateMillis || 0) - int(a.dateMillis || 0));
+    renderTests(weeklyTests);
   } else if(tabKey === 'monthly'){
     buttons[2].classList.add('active');
     $("quizListHeading").textContent = "📅 Monthly Wise Quizzes";
-    datePickerWrapper.style.display = "none";
+    const monthlyTests = allTests.filter(t => {
+      const tid = String(t.topicId || "").toLowerCase();
+      const ttl = String(t.title || "").toLowerCase();
+      const sub = String(t.subtitle || "").toLowerCase();
+      return tid.includes('monthly') || ttl.includes('monthly') || sub.includes('monthly');
+    });
+    renderTests(monthlyTests);
   }
-  
-  applyFilters();
 }
 
 async function startQuiz(test){
