@@ -270,10 +270,12 @@ h1{color:white;font-size:28px;margin-bottom:20px}
 """
 
 # ============================================================
-# QUIZ PAGE - ATTRACTIVE UI
+# QUIZ ROUTES & APP
 # ============================================================
+
 @app.route("/quiz")
-def quiz_app():
+@app.route("/quiz/test/<path:test_id>")
+def quiz_app(test_id=None):
     firebase_web_config = {
         "apiKey": os.environ.get("FIREBASE_WEB_API_KEY", ""),
         "authDomain": os.environ.get("FIREBASE_WEB_AUTH_DOMAIN", ""),
@@ -926,12 +928,32 @@ function updateUserUI(user){
   }
 }
 
-function showApp(){
+async function showApp(){
   $("loginPage").classList.add("hidden");
   $("appPage").classList.remove("hidden");
-  showHome();
-  loadData();
   loadVisitorCount();
+  
+  try{
+    allTests = await apiGet("/quiz/api/tests");
+    if(!Array.isArray(allTests)) throw new Error("Invalid test data.");
+    
+    // Check if the URL path contains a specific test ID (e.g. /quiz/test/some_id)
+    const pathSegments = window.location.pathname.split('/');
+    const directTestId = pathSegments[pathSegments.length - 2] === 'test' ? decodeURIComponent(pathSegments[pathSegments.length - 1]) : null;
+    
+    if(directTestId){
+      const targetTest = allTests.find(t => t.id === directTestId);
+      if(targetTest){
+        startQuiz(targetTest);
+        return;
+      }
+    }
+    
+    showHome();
+    switchTab(currentTab);
+  }catch(error){
+    $("quizList").innerHTML='<div class="empty">'+esc(error.message)+'</div>';
+  }
 }
 
 function showLogin(){
@@ -951,17 +973,6 @@ if(firebaseReady){
 }else{
   showLogin();
   showError("Firebase Authentication is not configured. Add the Firebase Web environment variables in Koyeb.");
-}
-
-async function loadData(){
-  $("quizList").innerHTML='<div class="loading">Loading quizzes...</div>';
-  try{
-    allTests=await apiGet("/quiz/api/tests");
-    if(!Array.isArray(allTests))throw new Error("Invalid test data.");
-    switchTab(currentTab);
-  }catch(error){
-    $("quizList").innerHTML='<div class="empty">'+esc(error.message)+'</div>';
-  }
 }
 
 function renderTests(tests){
@@ -1036,13 +1047,14 @@ function renderTests(tests){
       startBtn.addEventListener("click",()=>startQuiz(test));
     }
 
+    const uniqueTestUrl = window.location.origin + "/quiz/test/" + encodeURIComponent(test.id);
     card.querySelector(".shareBtn").addEventListener("click",()=>{
       const shareText = `Check out this quiz: ${title} - ${description} on CA Blockbuster!`;
       if(navigator.share){
-        navigator.share({title: title, text: shareText, url: window.location.href}).catch(()=>{});
+        navigator.share({title: title, text: shareText, url: uniqueTestUrl}).catch(()=>{});
       }else{
-        navigator.clipboard.writeText(window.location.href);
-        alert("Quiz link copied to clipboard!");
+        navigator.clipboard.writeText(uniqueTestUrl);
+        alert("Unique quiz link copied to clipboard!");
       }
     });
 
@@ -1540,7 +1552,7 @@ def quiz_tests():
         for test in tests:
             test["questionCount"] = question_counts.get(test["id"], 0)
 
-        # STRICT LOGICAL SORTING: Automatically sort latest dates (highest timestamp) on top
+        # STRICT LOGICAL SORTING: Automatically sort latest dates on top
         tests.sort(key=lambda t: t.get("dateMillis", 0), reverse=True)
 
         return jsonify(tests)
