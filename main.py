@@ -1505,15 +1505,34 @@ def quiz_tests():
         tests = []
         for doc in db.collection("custom_tests").stream():
             data = doc.to_dict()
-            raw_millis = data.get("dateMillis") or data.get("timestamp") or 0
+            doc_id = doc.id
+            title = data.get("title") or ""
+            
+            # Extract date logic automatically from title or ID if dateMillis isn't present
+            parsed_millis = 0
+            # Search for patterns like "Aug 17", "2026 Aug 6", etc. in title or ID
+            combined_str = f"{doc_id} {title}"
+            match = re.search(r'(?:20\d{2})?[^\w]?([a-zA-Z]{3,9})\s+(\d{1,2})', combined_str)
+            if match:
+                try:
+                    month_str, day_str = match.groups()
+                    # Assume current year 2026 or parse it
+                    date_obj = datetime.strptime(f"2026 {month_str} {day_str}", "%Y %b %d")
+                    parsed_millis = int(date_obj.timestamp() * 1000)
+                except:
+                    pass
+            
+            # Fallback to explicit fields if available
+            final_millis = data.get("dateMillis") or data.get("timestamp") or parsed_millis or 0
+
             tests.append({
-                "id": data.get("id") or doc.id,
+                "id": data.get("id") or doc_id,
                 "topicId": data.get("topicId") or "",
-                "title": data.get("title") or "",
+                "title": title,
                 "subtitle": data.get("subtitle") or "",
                 "durationMinutes": data.get("durationMinutes") or 0,
                 "difficulty": data.get("difficulty") or "",
-                "dateMillis": int(raw_millis),
+                "dateMillis": int(final_millis),
                 "questionCount": 0,
             })
             
@@ -1526,7 +1545,7 @@ def quiz_tests():
         for test in tests:
             test["questionCount"] = question_counts.get(test["id"], 0)
 
-        # STRICT NUMERIC SORTING: Latest dates (highest millisecond values) always come first
+        # STRICT LOGICAL SORTING: Automatically sort latest dates/highest millis on top
         tests.sort(key=lambda t: t.get("dateMillis", 0), reverse=True)
 
         return jsonify(tests)
